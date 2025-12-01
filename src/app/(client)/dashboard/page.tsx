@@ -18,6 +18,11 @@ import {
   Legend,
 } from "recharts";
 
+interface ClientInfo {
+  name: string;
+  companyName: string | null;
+}
+
 interface Stats {
   totalCalls: number;
   todayCalls: number;
@@ -35,6 +40,7 @@ const SENTIMENT_COLORS = {
 };
 
 export default function DashboardPage() {
+  const [clientInfo, setClientInfo] = useState<ClientInfo | null>(null);
   const [stats, setStats] = useState<Stats>({
     totalCalls: 0,
     todayCalls: 0,
@@ -58,11 +64,17 @@ export default function DashboardPage() {
         // Get client
         const { data: client } = await supabase
           .from("clients")
-          .select("id")
+          .select("id, name, company_name")
           .eq("email", user.email)
           .single();
 
         if (!client) return;
+
+        // Set client info for welcome message
+        setClientInfo({
+          name: client.name,
+          companyName: client.company_name,
+        });
 
         // Get campaigns for this client
         const { data: campaigns } = await supabase
@@ -202,10 +214,23 @@ export default function DashboardPage() {
     );
   }
 
+  // Get the display name (first name or company name)
+  const getWelcomeName = () => {
+    if (!clientInfo) return "";
+    // Try to get first name from full name
+    const firstName = clientInfo.name?.split(" ")[0];
+    if (firstName) return firstName;
+    // Fall back to company name
+    if (clientInfo.companyName) return clientInfo.companyName;
+    return "";
+  };
+
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+        <h1 className="text-3xl font-bold tracking-tight">
+          Welcome{getWelcomeName() ? `, ${getWelcomeName()}` : ""}!
+        </h1>
         <p className="text-muted-foreground">
           Overview of your call analytics
         </p>
