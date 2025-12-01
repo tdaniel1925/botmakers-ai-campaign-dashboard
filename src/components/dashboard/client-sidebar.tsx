@@ -9,72 +9,36 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import {
   LayoutDashboard,
-  Users,
-  Megaphone,
-  Webhook,
-  Settings,
-  Image,
+  Phone,
+  FileBarChart,
   LogOut,
-  Mail,
-  FileText,
-  Key,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { ViewAsClientButton } from "@/components/admin/view-as-client";
 
 const sidebarItems = [
   {
     title: "Dashboard",
-    href: "/admin",
+    href: "/dashboard",
     icon: LayoutDashboard,
   },
   {
-    title: "Clients",
-    href: "/admin/clients",
-    icon: Users,
+    title: "Calls",
+    href: "/dashboard/calls",
+    icon: Phone,
   },
   {
-    title: "Campaigns",
-    href: "/admin/campaigns",
-    icon: Megaphone,
-  },
-  {
-    title: "Webhook Logs",
-    href: "/admin/webhook-logs",
-    icon: Webhook,
-  },
-  {
-    title: "Email Templates",
-    href: "/admin/email-templates",
-    icon: Mail,
-  },
-  {
-    title: "Email Logs",
-    href: "/admin/email-logs",
-    icon: FileText,
+    title: "Reports",
+    href: "/dashboard/reports",
+    icon: FileBarChart,
   },
 ];
 
-const settingsItems = [
-  {
-    title: "API Keys",
-    href: "/admin/settings/api-keys",
-    icon: Key,
-  },
-  {
-    title: "Logo Upload",
-    href: "/admin/settings/logo",
-    icon: Image,
-  },
-  {
-    title: "Account",
-    href: "/admin/settings/account",
-    icon: Settings,
-  },
-];
+interface ClientSidebarProps {
+  userName?: string;
+}
 
-export function AdminSidebar() {
+export function ClientSidebar({ userName = "User" }: ClientSidebarProps) {
   const pathname = usePathname();
   const supabase = createClient();
 
@@ -82,6 +46,13 @@ export function AdminSidebar() {
     await supabase.auth.signOut();
     window.location.href = "/login";
   };
+
+  const initials = userName
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
 
   return (
     <div className="flex h-screen w-64 flex-col border-r bg-background">
@@ -94,32 +65,9 @@ export function AdminSidebar() {
       <ScrollArea className="flex-1 px-3 py-4">
         <nav className="space-y-1">
           {sidebarItems.map((item) => {
-            const isActive = item.href === "/admin"
-              ? pathname === "/admin"
+            const isActive = item.href === "/dashboard"
+              ? pathname === "/dashboard"
               : pathname.startsWith(item.href);
-            return (
-              <Link key={item.href} href={item.href}>
-                <Button
-                  variant={isActive ? "secondary" : "ghost"}
-                  className={cn(
-                    "w-full justify-start",
-                    isActive && "bg-secondary"
-                  )}
-                >
-                  <item.icon className="mr-2 h-4 w-4" />
-                  {item.title}
-                </Button>
-              </Link>
-            );
-          })}
-        </nav>
-        <Separator className="my-4" />
-        <div className="mb-2 px-2 text-xs font-semibold text-muted-foreground">
-          Settings
-        </div>
-        <nav className="space-y-1">
-          {settingsItems.map((item) => {
-            const isActive = pathname.startsWith(item.href);
             return (
               <Link key={item.href} href={item.href}>
                 <Button
@@ -138,9 +86,15 @@ export function AdminSidebar() {
         </nav>
       </ScrollArea>
       <Separator />
-      <div className="p-4 space-y-2">
-        <ViewAsClientButton />
-        <Separator className="my-2" />
+      <div className="p-4 space-y-3">
+        {/* User info */}
+        <div className="flex items-center space-x-3 px-2">
+          <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-sm font-medium">
+            {initials}
+          </div>
+          <span className="text-sm font-medium truncate">{userName}</span>
+        </div>
+        <Separator />
         <div className="flex items-center justify-between px-2">
           <span className="text-sm text-muted-foreground">Theme</span>
           <ThemeToggle />

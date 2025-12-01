@@ -65,18 +65,21 @@ export function DashboardHeader({
         <div className="flex items-center space-x-6">
           <Logo maxHeight={32} />
           <nav className="hidden md:flex items-center space-x-1">
-            {navItems.map((item) => (
-              <Link key={item.href} href={item.href}>
-                <Button
-                  variant="ghost"
-                  className={cn(
-                    pathname === item.href && "bg-secondary"
-                  )}
-                >
-                  {item.title}
-                </Button>
-              </Link>
-            ))}
+            {navItems.map((item) => {
+              const isActive = item.href === "/dashboard"
+                ? pathname === "/dashboard"
+                : pathname.startsWith(item.href);
+              return (
+                <Link key={item.href} href={item.href}>
+                  <Button
+                    variant="ghost"
+                    className={cn(isActive && "bg-secondary")}
+                  >
+                    {item.title}
+                  </Button>
+                </Link>
+              );
+            })}
           </nav>
         </div>
 

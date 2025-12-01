@@ -9,10 +9,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Copy } from "lucide-react";
+import { Plus } from "lucide-react";
 import Link from "next/link";
 import { format } from "date-fns";
 import { CampaignActions } from "./campaign-actions";
+import { CopyWebhookButton } from "./copy-webhook-button";
 
 export default async function CampaignsPage() {
   const supabase = await createClient();
@@ -80,18 +81,7 @@ export default async function CampaignsPage() {
                     <code className="text-xs bg-muted px-2 py-1 rounded">
                       {campaign.webhook_token.substring(0, 12)}...
                     </code>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 ml-1"
-                      onClick={() =>
-                        navigator.clipboard.writeText(
-                          `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/${campaign.webhook_token}`
-                        )
-                      }
-                    >
-                      <Copy className="h-3 w-3" />
-                    </Button>
+                    <CopyWebhookButton webhookToken={campaign.webhook_token} />
                   </TableCell>
                   <TableCell>
                     {campaign.is_active ? (

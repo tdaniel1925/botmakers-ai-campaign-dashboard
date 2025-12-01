@@ -1,29 +1,24 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { DashboardHeader } from "@/components/dashboard/dashboard-header";
+import { ClientSidebar } from "@/components/dashboard/client-sidebar";
 import { createClient } from "@/lib/supabase/client";
-import type { Campaign } from "@/lib/db/schema";
 
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [selectedCampaign, setSelectedCampaign] = useState<string>("all");
   const [userName, setUserName] = useState<string>("User");
   const supabase = createClient();
 
   useEffect(() => {
     async function fetchData() {
-      // Get current user
       const {
         data: { user },
       } = await supabase.auth.getUser();
 
       if (user?.email) {
-        // Get client info
         const { data: client } = await supabase
           .from("clients")
           .select("id, name")
@@ -32,18 +27,6 @@ export default function DashboardLayout({
 
         if (client) {
           setUserName(client.name);
-
-          // Get campaigns for this client
-          const { data: campaignsData } = await supabase
-            .from("campaigns")
-            .select("*")
-            .eq("client_id", client.id)
-            .eq("is_active", true)
-            .order("name");
-
-          if (campaignsData) {
-            setCampaigns(campaignsData);
-          }
         }
       }
     }
@@ -52,14 +35,11 @@ export default function DashboardLayout({
   }, [supabase]);
 
   return (
-    <div className="min-h-screen bg-background">
-      <DashboardHeader
-        campaigns={campaigns}
-        selectedCampaign={selectedCampaign}
-        onCampaignChange={setSelectedCampaign}
-        userName={userName}
-      />
-      <main className="container mx-auto py-6 px-4">{children}</main>
+    <div className="flex h-screen">
+      <ClientSidebar userName={userName} />
+      <main className="flex-1 overflow-y-auto bg-gray-50 dark:bg-background">
+        <div className="container mx-auto py-6 px-4">{children}</div>
+      </main>
     </div>
   );
 }

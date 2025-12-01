@@ -36,7 +36,7 @@ export async function updateSession(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
   // Public routes that don't require authentication
-  const publicRoutes = ["/login", "/accept-invite", "/api/webhooks", "/api/setup", "/api/admin/clients/accept-invite"];
+  const publicRoutes = ["/login", "/accept-invite", "/api/webhooks", "/api/setup", "/api/admin/clients/accept-invite", "/api/admin/seed-demo"];
   const isPublicRoute = publicRoutes.some((route) =>
     pathname.startsWith(route)
   );
@@ -76,6 +76,13 @@ export async function updateSession(request: NextRequest) {
 
     // Protect admin routes
     if (pathname.startsWith("/admin") && !isAdmin) {
+      const url = request.nextUrl.clone();
+      url.pathname = isClient ? "/dashboard" : "/login";
+      return NextResponse.redirect(url);
+    }
+
+    // Protect preview-client routes (admin only)
+    if (pathname.startsWith("/preview-client") && !isAdmin) {
       const url = request.nextUrl.clone();
       url.pathname = isClient ? "/dashboard" : "/login";
       return NextResponse.redirect(url);
