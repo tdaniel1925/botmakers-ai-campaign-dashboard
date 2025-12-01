@@ -1,14 +1,7 @@
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import { Resend } from "resend";
-
-// Lazy init to avoid build-time errors when env var isn't available
-function getResendClient() {
-  if (!process.env.RESEND_API_KEY) {
-    return null;
-  }
-  return new Resend(process.env.RESEND_API_KEY);
-}
+import { generateUsername, generateTempPassword } from "@/lib/credentials";
+import { sendWelcomeEmail } from "@/lib/emails";
 
 export async function GET() {
   try {
@@ -36,7 +29,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { name, email, company_name, send_invite } = body;
+    const { name, email, company_name, send_invite, save_as_draft } = body;
 
     if (!name || !email) {
       return NextResponse.json(
@@ -62,13 +55,36 @@ export async function POST(request: Request) {
       );
     }
 
-    // Create client
+    // Get existing usernames to avoid duplicates
+    const { data: existingClients } = await supabase
+      .from("clients")
+      .select("username");
+    const existingUsernames = (existingClients || [])
+      .map((c) => c.username)
+      .filter(Boolean) as string[];
+
+    // Generate credentials
+    const username = generateUsername(name, existingUsernames);
+    const tempPassword = generateTempPassword();
+
+    // Determine invite status
+    let inviteStatus = "draft";
+    if (send_invite) {
+      inviteStatus = "sent";
+    } else if (!save_as_draft) {
+      inviteStatus = "pending";
+    }
+
+    // Create client with credentials
     const { data: client, error: clientError } = await supabase
       .from("clients")
       .insert({
         name,
         email,
         company_name,
+        username,
+        temp_password: tempPassword,
+        invite_status: inviteStatus,
         invited_at: send_invite ? new Date().toISOString() : null,
       })
       .select()
@@ -78,45 +94,57 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: clientError.message }, { status: 500 });
     }
 
-    // Send invitation if requested
+    // Create auth user if sending invite
     if (send_invite) {
-      // Create auth user with magic link
-      const { error: authError } = await serviceClient.auth.admin.inviteUserByEmail(
+      // Create user in Supabase Auth with the temp password
+      const { data: authUser, error: authError } = await serviceClient.auth.admin.createUser({
         email,
-        {
-          redirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/accept-invite?email=${encodeURIComponent(email)}`,
-        }
-      );
+        password: tempPassword,
+        email_confirm: true,
+        user_metadata: {
+          name,
+          client_id: client.id,
+          must_change_password: true,
+        },
+      });
 
       if (authError) {
         console.error("Auth error:", authError);
-        // Still return success but note the invite failed
-      }
+        // Update invite status to reflect the failure
+        await supabase
+          .from("clients")
+          .update({ invite_status: "pending" })
+          .eq("id", client.id);
+      } else {
+        // Send welcome email with credentials
+        const emailResult = await sendWelcomeEmail({
+          clientId: client.id,
+          recipientName: name,
+          username,
+          tempPassword,
+          loginUrl: `${process.env.NEXT_PUBLIC_APP_URL}/login`,
+          companyName: "BotMakers",
+        });
 
-      // Also send a custom email via Resend if configured
-      const resend = getResendClient();
-      if (resend) {
-        try {
-          await resend.emails.send({
-            from: "BotMakers <noreply@botmakers.io>",
-            to: email,
-            subject: "You've been invited to BotMakers Call Analytics",
-            html: `
-              <h1>Welcome to BotMakers!</h1>
-              <p>Hi ${name},</p>
-              <p>You've been invited to access the BotMakers Call Analytics platform.</p>
-              <p>Click the link in the separate email to set up your account, or use this link:</p>
-              <p><a href="${process.env.NEXT_PUBLIC_APP_URL}/login">Sign in to BotMakers</a></p>
-              <p>Best regards,<br>The BotMakers Team</p>
-            `,
-          });
-        } catch (emailError) {
-          console.error("Email error:", emailError);
+        if (!emailResult.success) {
+          console.error("Email error:", emailResult.error);
+        }
+
+        // Link the auth user ID to the client
+        if (authUser?.user) {
+          await supabase
+            .from("clients")
+            .update({ id: authUser.user.id })
+            .eq("id", client.id);
         }
       }
     }
 
-    return NextResponse.json(client, { status: 201 });
+    return NextResponse.json({
+      ...client,
+      username,
+      temp_password: tempPassword,
+    }, { status: 201 });
   } catch (error) {
     console.error("Error creating client:", error);
     return NextResponse.json(

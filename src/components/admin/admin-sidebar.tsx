@@ -15,6 +15,9 @@ import {
   Settings,
   Image,
   LogOut,
+  Mail,
+  FileText,
+  Key,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -40,9 +43,24 @@ const sidebarItems = [
     href: "/admin/webhook-logs",
     icon: Webhook,
   },
+  {
+    title: "Email Templates",
+    href: "/admin/email-templates",
+    icon: Mail,
+  },
+  {
+    title: "Email Logs",
+    href: "/admin/email-logs",
+    icon: FileText,
+  },
 ];
 
 const settingsItems = [
+  {
+    title: "API Keys",
+    href: "/admin/settings/api-keys",
+    icon: Key,
+  },
   {
     title: "Logo Upload",
     href: "/admin/settings/logo",

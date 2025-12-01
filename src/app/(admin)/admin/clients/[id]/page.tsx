@@ -13,23 +13,85 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, ArrowLeft } from "lucide-react";
+import {
+  Loader2,
+  ArrowLeft,
+  Send,
+  RefreshCw,
+  KeyRound,
+  Copy,
+  Check,
+  Eye,
+  Mail,
+} from "lucide-react";
 import Link from "next/link";
 import { format } from "date-fns";
-import type { DbClient } from "@/types";
+
+interface Client {
+  id: string;
+  name: string;
+  email: string;
+  company_name: string | null;
+  username: string | null;
+  temp_password: string | null;
+  is_active: boolean;
+  invite_status: string;
+  invited_at: string | null;
+  accepted_at: string | null;
+  created_at: string;
+  report_frequency: string;
+  report_day_of_week: number;
+  report_hour: number;
+}
 
 export default function EditClientPage() {
   const params = useParams();
-  const [client, setClient] = useState<DbClient | null>(null);
+  const [client, setClient] = useState<Client | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [companyName, setCompanyName] = useState("");
   const [isActive, setIsActive] = useState(true);
+  const [reportFrequency, setReportFrequency] = useState("weekly");
+  const [reportDayOfWeek, setReportDayOfWeek] = useState("1");
+  const [reportHour, setReportHour] = useState("9");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSendingInvite, setIsSendingInvite] = useState(false);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewHtml, setPreviewHtml] = useState("");
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
   const router = useRouter();
   const { toast } = useToast();
 
@@ -46,6 +108,9 @@ export default function EditClientPage() {
         setEmail(data.email);
         setCompanyName(data.company_name || "");
         setIsActive(data.is_active);
+        setReportFrequency(data.report_frequency || "weekly");
+        setReportDayOfWeek(String(data.report_day_of_week || 1));
+        setReportHour(String(data.report_hour || 9));
       } catch {
         toast({
           title: "Error",
@@ -74,6 +139,9 @@ export default function EditClientPage() {
           email,
           company_name: companyName || null,
           is_active: isActive,
+          report_frequency: reportFrequency,
+          report_day_of_week: parseInt(reportDayOfWeek),
+          report_hour: parseInt(reportHour),
         }),
       });
 
@@ -87,7 +155,6 @@ export default function EditClientPage() {
         description: "Client details have been saved successfully.",
       });
 
-      router.push("/admin/clients");
       router.refresh();
     } catch (error) {
       toast({
@@ -98,6 +165,135 @@ export default function EditClientPage() {
       });
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleSendInvite = async (isResend = false) => {
+    setIsSendingInvite(true);
+    try {
+      const response = await fetch(`/api/admin/clients/${params.id}/send-invite`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isResend }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to send invite");
+      }
+
+      toast({
+        title: isResend ? "Re-invite sent" : "Invite sent",
+        description: `Invitation email has been sent to ${client?.email}`,
+      });
+
+      // Refresh client data
+      const clientResponse = await fetch(`/api/admin/clients/${params.id}`);
+      if (clientResponse.ok) {
+        const data = await clientResponse.json();
+        setClient(data);
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description:
+          error instanceof Error ? error.message : "Failed to send invite",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSendingInvite(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    setIsResettingPassword(true);
+    try {
+      const response = await fetch(`/api/admin/clients/${params.id}/reset-password`, {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to reset password");
+      }
+
+      toast({
+        title: "Password reset",
+        description: `A new password has been sent to ${client?.email}`,
+      });
+
+      // Refresh client data
+      const clientResponse = await fetch(`/api/admin/clients/${params.id}`);
+      if (clientResponse.ok) {
+        const data = await clientResponse.json();
+        setClient(data);
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description:
+          error instanceof Error ? error.message : "Failed to reset password",
+        variant: "destructive",
+      });
+    } finally {
+      setIsResettingPassword(false);
+    }
+  };
+
+  const loadEmailPreview = async () => {
+    setPreviewLoading(true);
+    try {
+      const templateType =
+        client?.invite_status === "sent" ? "re_invite" : "welcome";
+      const response = await fetch("/api/admin/email/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          templateType,
+          props: {
+            recipientName: client?.name,
+            username: client?.username,
+            tempPassword: "************",
+            companyName: "BotMakers",
+          },
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setPreviewHtml(data.html);
+      }
+    } catch (error) {
+      console.error("Failed to load preview:", error);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const copyToClipboard = async (text: string, field: string) => {
+    await navigator.clipboard.writeText(text);
+    setCopied(field);
+    setTimeout(() => setCopied(null), 2000);
+  };
+
+  const getInviteStatusBadge = () => {
+    if (!client) return null;
+
+    switch (client.invite_status) {
+      case "draft":
+        return <Badge variant="secondary">Draft</Badge>;
+      case "pending":
+        return <Badge variant="outline">Pending</Badge>;
+      case "sent":
+        return client.accepted_at ? (
+          <Badge variant="default" className="bg-green-600">Active</Badge>
+        ) : (
+          <Badge variant="default" className="bg-yellow-600">Invite Sent</Badge>
+        );
+      case "accepted":
+        return <Badge variant="default" className="bg-green-600">Active</Badge>;
+      default:
+        return <Badge variant="secondary">{client.invite_status}</Badge>;
     }
   };
 
@@ -117,15 +313,15 @@ export default function EditClientPage() {
             <ArrowLeft className="h-4 w-4" />
           </Button>
         </Link>
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Edit Client</h1>
-          <p className="text-muted-foreground">
-            Update client information and settings
-          </p>
+        <div className="flex-1">
+          <h1 className="text-3xl font-bold tracking-tight">{client?.name}</h1>
+          <p className="text-muted-foreground">{client?.email}</p>
         </div>
+        {getInviteStatusBadge()}
       </div>
 
       <div className="grid gap-6 md:grid-cols-3">
+        {/* Main Edit Form */}
         <Card className="md:col-span-2">
           <form onSubmit={handleSubmit}>
             <CardHeader>
@@ -188,51 +384,281 @@ export default function EditClientPage() {
           </form>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Client Status</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <Label className="text-muted-foreground">Status</Label>
-              <div className="mt-1">
-                {client?.is_active ? (
-                  client?.accepted_at ? (
-                    <Badge variant="success">Active</Badge>
-                  ) : (
-                    <Badge variant="warning">Pending Invite</Badge>
-                  )
-                ) : (
-                  <Badge variant="secondary">Inactive</Badge>
+        {/* Sidebar Cards */}
+        <div className="space-y-6">
+          {/* Credentials Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <KeyRound className="mr-2 h-5 w-5" />
+                Credentials
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {client?.username && (
+                <div className="space-y-1">
+                  <Label className="text-muted-foreground text-xs">Username</Label>
+                  <div className="flex items-center space-x-2">
+                    <code className="flex-1 bg-muted p-2 rounded text-sm font-mono">
+                      {client.username}
+                    </code>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => copyToClipboard(client.username!, "username")}
+                    >
+                      {copied === "username" ? (
+                        <Check className="h-4 w-4 text-green-500" />
+                      ) : (
+                        <Copy className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="outline" className="w-full">
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    Reset Password
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Reset Password?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will generate a new temporary password and send it to{" "}
+                      {client?.email}. The client will need to use this new
+                      password to log in.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={handleResetPassword}
+                      disabled={isResettingPassword}
+                    >
+                      {isResettingPassword && (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      )}
+                      Reset Password
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </CardContent>
+          </Card>
+
+          {/* Invite Actions Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <Mail className="mr-2 h-5 w-5" />
+                Invitation
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2 text-sm">
+                {client?.invited_at && (
+                  <div>
+                    <span className="text-muted-foreground">Last invited:</span>
+                    <p>
+                      {format(
+                        new Date(client.invited_at),
+                        "MMM d, yyyy 'at' h:mm a"
+                      )}
+                    </p>
+                  </div>
+                )}
+                {client?.accepted_at && (
+                  <div>
+                    <span className="text-muted-foreground">Accepted:</span>
+                    <p>
+                      {format(
+                        new Date(client.accepted_at),
+                        "MMM d, yyyy 'at' h:mm a"
+                      )}
+                    </p>
+                  </div>
                 )}
               </div>
-            </div>
-            {client?.invited_at && (
-              <div>
-                <Label className="text-muted-foreground">Invited</Label>
-                <p className="text-sm">
-                  {format(new Date(client.invited_at), "MMM d, yyyy 'at' h:mm a")}
-                </p>
+
+              <div className="space-y-2">
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    loadEmailPreview();
+                    setShowPreview(true);
+                  }}
+                >
+                  <Eye className="mr-2 h-4 w-4" />
+                  Preview Email
+                </Button>
+
+                {client?.invite_status === "draft" ||
+                client?.invite_status === "pending" ? (
+                  <Button
+                    className="w-full"
+                    onClick={() => handleSendInvite(false)}
+                    disabled={isSendingInvite}
+                  >
+                    {isSendingInvite ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Send className="mr-2 h-4 w-4" />
+                    )}
+                    Send Invite
+                  </Button>
+                ) : (
+                  <Button
+                    variant="secondary"
+                    className="w-full"
+                    onClick={() => handleSendInvite(true)}
+                    disabled={isSendingInvite}
+                  >
+                    {isSendingInvite ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                    )}
+                    Resend Invite
+                  </Button>
+                )}
               </div>
-            )}
-            {client?.accepted_at && (
-              <div>
-                <Label className="text-muted-foreground">Accepted</Label>
-                <p className="text-sm">
-                  {format(new Date(client.accepted_at), "MMM d, yyyy 'at' h:mm a")}
-                </p>
+            </CardContent>
+          </Card>
+
+          {/* Report Preferences Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Report Preferences</CardTitle>
+              <CardDescription>
+                Configure how often this client receives reports
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label>Frequency</Label>
+                <Select value={reportFrequency} onValueChange={setReportFrequency}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No reports</SelectItem>
+                    <SelectItem value="daily">Daily</SelectItem>
+                    <SelectItem value="weekly">Weekly</SelectItem>
+                    <SelectItem value="monthly">Monthly</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-            )}
-            <div>
-              <Label className="text-muted-foreground">Created</Label>
-              <p className="text-sm">
-                {client?.created_at &&
-                  format(new Date(client.created_at), "MMM d, yyyy 'at' h:mm a")}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+
+              {reportFrequency === "weekly" && (
+                <div className="space-y-2">
+                  <Label>Day of Week</Label>
+                  <Select value={reportDayOfWeek} onValueChange={setReportDayOfWeek}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0">Sunday</SelectItem>
+                      <SelectItem value="1">Monday</SelectItem>
+                      <SelectItem value="2">Tuesday</SelectItem>
+                      <SelectItem value="3">Wednesday</SelectItem>
+                      <SelectItem value="4">Thursday</SelectItem>
+                      <SelectItem value="5">Friday</SelectItem>
+                      <SelectItem value="6">Saturday</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {reportFrequency !== "none" && (
+                <div className="space-y-2">
+                  <Label>Time</Label>
+                  <Select value={reportHour} onValueChange={setReportHour}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 24 }, (_, i) => (
+                        <SelectItem key={i} value={String(i)}>
+                          {i === 0
+                            ? "12:00 AM"
+                            : i < 12
+                            ? `${i}:00 AM`
+                            : i === 12
+                            ? "12:00 PM"
+                            : `${i - 12}:00 PM`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </div>
+
+      {/* Email Preview Dialog */}
+      <Dialog open={showPreview} onOpenChange={setShowPreview}>
+        <DialogContent className="max-w-4xl max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle>Email Preview</DialogTitle>
+            <DialogDescription>
+              This is how the email will appear to {client?.name}
+            </DialogDescription>
+          </DialogHeader>
+          <Tabs defaultValue="preview" className="w-full">
+            <TabsList>
+              <TabsTrigger value="preview">Preview</TabsTrigger>
+              <TabsTrigger value="html">HTML Source</TabsTrigger>
+            </TabsList>
+            <TabsContent value="preview" className="mt-4">
+              {previewLoading ? (
+                <div className="flex items-center justify-center h-96">
+                  <Loader2 className="h-8 w-8 animate-spin" />
+                </div>
+              ) : (
+                <div className="border rounded-lg overflow-hidden bg-white">
+                  <iframe
+                    srcDoc={previewHtml}
+                    className="w-full h-[500px]"
+                    title="Email Preview"
+                  />
+                </div>
+              )}
+            </TabsContent>
+            <TabsContent value="html" className="mt-4">
+              <pre className="bg-muted p-4 rounded-lg overflow-auto max-h-[500px] text-xs">
+                {previewHtml}
+              </pre>
+            </TabsContent>
+          </Tabs>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowPreview(false)}>
+              Close
+            </Button>
+            <Button
+              onClick={() => {
+                setShowPreview(false);
+                handleSendInvite(client?.invite_status === "sent");
+              }}
+              disabled={isSendingInvite}
+            >
+              {isSendingInvite ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="mr-2 h-4 w-4" />
+              )}
+              {client?.invite_status === "sent" ? "Resend Invite" : "Send Invite"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
