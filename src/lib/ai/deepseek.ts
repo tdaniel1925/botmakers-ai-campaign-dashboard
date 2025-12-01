@@ -1,9 +1,33 @@
 import OpenAI from "openai";
 
-const deepseek = new OpenAI({
-  apiKey: process.env.DEEPSEEK_API_KEY || "placeholder",
-  baseURL: process.env.DEEPSEEK_API_URL || "https://api.deepseek.com/v1",
-});
+// AI Provider configuration - supports both OpenAI and DeepSeek
+type AIProvider = "openai" | "deepseek";
+
+function getAIProvider(): AIProvider {
+  if (process.env.OPENAI_API_KEY) return "openai";
+  if (process.env.DEEPSEEK_API_KEY) return "deepseek";
+  return "openai"; // Default to OpenAI
+}
+
+function getAIClient(): OpenAI {
+  const provider = getAIProvider();
+
+  if (provider === "openai") {
+    return new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY || "placeholder",
+    });
+  }
+
+  return new OpenAI({
+    apiKey: process.env.DEEPSEEK_API_KEY || "placeholder",
+    baseURL: process.env.DEEPSEEK_API_URL || "https://api.deepseek.com/v1",
+  });
+}
+
+function getModelName(): string {
+  const provider = getAIProvider();
+  return provider === "openai" ? "gpt-4o-mini" : "deepseek-chat";
+}
 
 export interface SummarizationResult {
   summary: string;
@@ -18,10 +42,13 @@ export async function summarizeCall(
   transcript: string,
   outcomeTags: string[]
 ): Promise<SummarizationResult> {
-  if (!process.env.DEEPSEEK_API_KEY) {
-    // Return placeholder result if no API key
+  const hasOpenAI = !!process.env.OPENAI_API_KEY;
+  const hasDeepSeek = !!process.env.DEEPSEEK_API_KEY;
+
+  if (!hasOpenAI && !hasDeepSeek) {
+    // Return placeholder result if no API key configured
     return {
-      summary: "AI summarization not configured. Please add DEEPSEEK_API_KEY to environment variables.",
+      summary: "AI summarization not configured. Please add OPENAI_API_KEY or DEEPSEEK_API_KEY to environment variables.",
       outcome: outcomeTags[0] || "Unknown",
       sentiment: "neutral",
       keyPoints: ["AI summarization pending configuration"],
@@ -30,8 +57,11 @@ export async function summarizeCall(
     };
   }
 
-  const response = await deepseek.chat.completions.create({
-    model: "deepseek-chat",
+  const client = getAIClient();
+  const model = getModelName();
+
+  const response = await client.chat.completions.create({
+    model,
     messages: [
       {
         role: "system",
@@ -83,4 +113,5 @@ Respond ONLY with a JSON object:
   };
 }
 
-export default deepseek;
+// Export functions for external use
+export { getAIClient, getAIProvider, getModelName };

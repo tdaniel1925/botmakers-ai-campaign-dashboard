@@ -1,10 +1,5 @@
 import { NextResponse } from "next/server";
-import OpenAI from "openai";
-
-const deepseek = new OpenAI({
-  apiKey: process.env.DEEPSEEK_API_KEY || "placeholder",
-  baseURL: process.env.DEEPSEEK_API_URL || "https://api.deepseek.com/v1",
-});
+import { getAIClient, getModelName } from "@/lib/ai/deepseek";
 
 export async function POST(request: Request) {
   try {
@@ -18,15 +13,19 @@ export async function POST(request: Request) {
       );
     }
 
-    // If no DeepSeek API key, try to infer mappings automatically
-    if (!process.env.DEEPSEEK_API_KEY) {
+    // If no AI API key configured, try to infer mappings automatically
+    const hasAIKey = !!process.env.OPENAI_API_KEY || !!process.env.DEEPSEEK_API_KEY;
+    if (!hasAIKey) {
       const parsedPayload = JSON.parse(payload);
       const mapping = inferMappings(parsedPayload);
       return NextResponse.json({ mapping });
     }
 
-    const response = await deepseek.chat.completions.create({
-      model: "deepseek-chat",
+    const aiClient = getAIClient();
+    const model = getModelName();
+
+    const response = await aiClient.chat.completions.create({
+      model,
       messages: [
         {
           role: "system",
