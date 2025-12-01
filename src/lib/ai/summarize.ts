@@ -1,12 +1,16 @@
 import { summarizeCall, SummarizationResult } from "./deepseek";
 import { createClient } from "@supabase/supabase-js";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+// Lazy init to avoid build-time errors when env vars aren't available
+function getSupabaseClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
 export async function processCallWithAI(callId: string): Promise<void> {
+  const supabase = getSupabaseClient();
   try {
     // Fetch the call record
     const { data: call, error: callError } = await supabase
@@ -100,6 +104,7 @@ async function updateCallStatus(
   status: string,
   errorMessage?: string
 ): Promise<void> {
+  const supabase = getSupabaseClient();
   await supabase
     .from("calls")
     .update({

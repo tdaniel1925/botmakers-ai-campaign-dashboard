@@ -1,14 +1,17 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-// Use service role key to bypass RLS
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+// Lazy init to avoid build-time errors when env vars aren't available
+function getSupabaseClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
 export async function POST(request: Request) {
   try {
+    const supabase = getSupabaseClient();
     const formData = await request.formData();
     const file = formData.get("file") as File;
     const aspectRatio = formData.get("aspectRatio") as string;
@@ -85,6 +88,7 @@ export async function POST(request: Request) {
 
 export async function DELETE() {
   try {
+    const supabase = getSupabaseClient();
     await supabase
       .from("platform_settings")
       .update({

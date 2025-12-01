@@ -4,10 +4,13 @@ import { getNestedValue } from "@/lib/utils";
 import { processCallWithAI } from "@/lib/ai/summarize";
 import { campaignRateLimiter, ipRateLimiter, aiQueue } from "@/lib/rate-limiter";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+// Lazy init to avoid build-time errors when env vars aren't available
+function getSupabaseClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
 function getClientIP(request: Request): string {
   const forwarded = request.headers.get("x-forwarded-for");
@@ -35,6 +38,7 @@ export async function POST(
   { params }: { params: Promise<{ token: string }> }
 ) {
   try {
+    const supabase = getSupabaseClient();
     const { token } = await params;
     const clientIP = getClientIP(request);
 
@@ -209,6 +213,7 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ token: string }> }
 ) {
+  const supabase = getSupabaseClient();
   const { token } = await params;
 
   // Verify the token exists
