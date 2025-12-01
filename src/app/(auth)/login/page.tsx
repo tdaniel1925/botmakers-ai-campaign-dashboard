@@ -15,6 +15,8 @@ import {
 } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { Logo } from "@/components/shared/logo";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -90,13 +92,14 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex items-center justify-center bg-background py-12 px-4 sm:px-6 lg:px-8 relative">
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
+      </div>
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
           <div className="flex justify-center mb-4">
-            <div className="h-12 w-auto text-2xl font-bold text-primary">
-              BotMakers
-            </div>
+            <Logo maxHeight={48} />
           </div>
           <CardTitle className="text-2xl text-center">Welcome back</CardTitle>
           <CardDescription className="text-center">

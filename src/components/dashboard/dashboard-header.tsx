@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { LogOut, User } from "lucide-react";
 import type { Campaign } from "@/lib/db/schema";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 interface DashboardHeaderProps {
   campaigns: Campaign[];
@@ -80,6 +81,7 @@ export function DashboardHeader({
         </div>
 
         <div className="flex items-center space-x-4">
+          <ThemeToggle />
           {campaigns.length > 0 && (
             <Select value={selectedCampaign} onValueChange={onCampaignChange}>
               <SelectTrigger className="w-[200px]">

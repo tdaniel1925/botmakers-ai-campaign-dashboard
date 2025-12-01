@@ -17,6 +17,7 @@ import {
   LogOut,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const sidebarItems = [
   {
@@ -65,8 +66,10 @@ export function AdminSidebar() {
 
   return (
     <div className="flex h-screen w-64 flex-col border-r bg-background">
-      <div className="p-6">
-        <Logo maxHeight={40} />
+      <div className="p-4 flex justify-center">
+        <div className="w-[90%]">
+          <Logo fillWidth={true} />
+        </div>
       </div>
       <Separator />
       <ScrollArea className="flex-1 px-3 py-4">
@@ -108,10 +111,14 @@ export function AdminSidebar() {
         </nav>
       </ScrollArea>
       <Separator />
-      <div className="p-4">
+      <div className="p-4 space-y-2">
+        <div className="flex items-center justify-between px-2">
+          <span className="text-sm text-muted-foreground">Theme</span>
+          <ThemeToggle />
+        </div>
         <Button
           variant="ghost"
-          className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50"
+          className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
           onClick={handleSignOut}
         >
           <LogOut className="mr-2 h-4 w-4" />

@@ -57,6 +57,34 @@
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
   }
+
+  /* Relaxed theme - soft eggshell bg with pastel green accents */
+  .relaxed {
+    --background: 40 33% 96%;
+    --foreground: 150 10% 25%;
+    --card: 40 30% 98%;
+    --card-foreground: 150 10% 25%;
+    --popover: 40 30% 98%;
+    --popover-foreground: 150 10% 25%;
+    --primary: 152 45% 45%;
+    --primary-foreground: 40 33% 98%;
+    --secondary: 150 20% 90%;
+    --secondary-foreground: 150 15% 30%;
+    --muted: 150 15% 92%;
+    --muted-foreground: 150 10% 45%;
+    --accent: 152 35% 85%;
+    --accent-foreground: 150 20% 25%;
+    --destructive: 0 60% 50%;
+    --destructive-foreground: 40 33% 98%;
+    --border: 150 15% 85%;
+    --input: 150 15% 88%;
+    --ring: 152 45% 45%;
+    --chart-1: 152 45% 45%;
+    --chart-2: 170 40% 50%;
+    --chart-3: 140 35% 40%;
+    --chart-4: 45 60% 55%;
+    --chart-5: 180 30% 45%;
+  }
 }
 
 @layer base {

@@ -2,11 +2,24 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getNestedValue } from "@/lib/utils";
 import { processCallWithAI } from "@/lib/ai/summarize";
+import { campaignRateLimiter, ipRateLimiter, aiQueue } from "@/lib/rate-limiter";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
+
+function getClientIP(request: Request): string {
+  const forwarded = request.headers.get("x-forwarded-for");
+  if (forwarded) {
+    return forwarded.split(",")[0].trim();
+  }
+  const realIP = request.headers.get("x-real-ip");
+  if (realIP) {
+    return realIP;
+  }
+  return "unknown";
+}
 
 interface PayloadMapping {
   transcript?: string;
@@ -23,6 +36,38 @@ export async function POST(
 ) {
   try {
     const { token } = await params;
+    const clientIP = getClientIP(request);
+
+    // Check IP rate limit first (500 req/min across all campaigns)
+    const ipLimit = ipRateLimiter.isRateLimited(clientIP);
+    if (ipLimit.limited) {
+      return NextResponse.json(
+        { error: "Rate limit exceeded. Try again later.", resetIn: ipLimit.resetIn },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": Math.ceil(ipLimit.resetIn / 1000).toString(),
+            "X-RateLimit-Remaining": "0",
+          }
+        }
+      );
+    }
+
+    // Check campaign rate limit (200 req/min per campaign)
+    const campaignLimit = campaignRateLimiter.isRateLimited(token);
+    if (campaignLimit.limited) {
+      return NextResponse.json(
+        { error: "Campaign rate limit exceeded. Try again later.", resetIn: campaignLimit.resetIn },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": Math.ceil(campaignLimit.resetIn / 1000).toString(),
+            "X-RateLimit-Remaining": "0",
+          }
+        }
+      );
+    }
+
     const payload = await request.json();
 
     // Find campaign by webhook token
@@ -141,16 +186,14 @@ export async function POST(
       .order("created_at", { ascending: false })
       .limit(1);
 
-    // Process with AI asynchronously
-    // In production, you might want to use a proper job queue
-    processCallWithAI(call.id).catch((error) => {
-      console.error("Background AI processing failed:", error);
-    });
+    // Queue AI processing with rate limiting (max 10 concurrent)
+    aiQueue.add(call.id, () => processCallWithAI(call.id));
 
     return NextResponse.json({
       success: true,
       callId: call.id,
       message: "Call received and queued for processing",
+      queuePosition: aiQueue.getQueueLength(),
     });
   } catch (error) {
     console.error("Webhook error:", error);

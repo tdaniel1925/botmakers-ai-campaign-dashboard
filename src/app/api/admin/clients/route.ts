@@ -2,7 +2,13 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Lazy init to avoid build-time errors when env var isn't available
+function getResendClient() {
+  if (!process.env.RESEND_API_KEY) {
+    return null;
+  }
+  return new Resend(process.env.RESEND_API_KEY);
+}
 
 export async function GET() {
   try {
@@ -87,23 +93,26 @@ export async function POST(request: Request) {
         // Still return success but note the invite failed
       }
 
-      // Also send a custom email via Resend
-      try {
-        await resend.emails.send({
-          from: "BotMakers <noreply@botmakers.io>",
-          to: email,
-          subject: "You've been invited to BotMakers Call Analytics",
-          html: `
-            <h1>Welcome to BotMakers!</h1>
-            <p>Hi ${name},</p>
-            <p>You've been invited to access the BotMakers Call Analytics platform.</p>
-            <p>Click the link in the separate email to set up your account, or use this link:</p>
-            <p><a href="${process.env.NEXT_PUBLIC_APP_URL}/login">Sign in to BotMakers</a></p>
-            <p>Best regards,<br>The BotMakers Team</p>
-          `,
-        });
-      } catch (emailError) {
-        console.error("Email error:", emailError);
+      // Also send a custom email via Resend if configured
+      const resend = getResendClient();
+      if (resend) {
+        try {
+          await resend.emails.send({
+            from: "BotMakers <noreply@botmakers.io>",
+            to: email,
+            subject: "You've been invited to BotMakers Call Analytics",
+            html: `
+              <h1>Welcome to BotMakers!</h1>
+              <p>Hi ${name},</p>
+              <p>You've been invited to access the BotMakers Call Analytics platform.</p>
+              <p>Click the link in the separate email to set up your account, or use this link:</p>
+              <p><a href="${process.env.NEXT_PUBLIC_APP_URL}/login">Sign in to BotMakers</a></p>
+              <p>Best regards,<br>The BotMakers Team</p>
+            `,
+          });
+        } catch (emailError) {
+          console.error("Email error:", emailError);
+        }
       }
     }
 

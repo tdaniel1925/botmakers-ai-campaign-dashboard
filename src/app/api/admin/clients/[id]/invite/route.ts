@@ -2,7 +2,13 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Lazy init to avoid build-time errors when env var isn't available
+function getResendClient() {
+  if (!process.env.RESEND_API_KEY) {
+    return null;
+  }
+  return new Resend(process.env.RESEND_API_KEY);
+}
 
 export async function POST(
   request: Request,
@@ -36,23 +42,26 @@ export async function POST(
       console.error("Auth error:", authError);
     }
 
-    // Send custom email
-    try {
-      await resend.emails.send({
-        from: "BotMakers <noreply@botmakers.io>",
-        to: client.email,
-        subject: "You've been invited to BotMakers Call Analytics",
-        html: `
-          <h1>Welcome to BotMakers!</h1>
-          <p>Hi ${client.name},</p>
-          <p>You've been invited to access the BotMakers Call Analytics platform.</p>
-          <p>Click the link in the separate email to set up your account, or use this link:</p>
-          <p><a href="${process.env.NEXT_PUBLIC_APP_URL}/login">Sign in to BotMakers</a></p>
-          <p>Best regards,<br>The BotMakers Team</p>
-        `,
-      });
-    } catch (emailError) {
-      console.error("Email error:", emailError);
+    // Send custom email if Resend is configured
+    const resend = getResendClient();
+    if (resend) {
+      try {
+        await resend.emails.send({
+          from: "BotMakers <noreply@botmakers.io>",
+          to: client.email,
+          subject: "You've been invited to BotMakers Call Analytics",
+          html: `
+            <h1>Welcome to BotMakers!</h1>
+            <p>Hi ${client.name},</p>
+            <p>You've been invited to access the BotMakers Call Analytics platform.</p>
+            <p>Click the link in the separate email to set up your account, or use this link:</p>
+            <p><a href="${process.env.NEXT_PUBLIC_APP_URL}/login">Sign in to BotMakers</a></p>
+            <p>Best regards,<br>The BotMakers Team</p>
+          `,
+        });
+      } catch (emailError) {
+        console.error("Email error:", emailError);
+      }
     }
 
     // Update invited_at timestamp

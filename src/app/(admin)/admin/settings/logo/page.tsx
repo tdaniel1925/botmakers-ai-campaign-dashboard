@@ -22,6 +22,8 @@ export default function LogoSettingsPage() {
   const [aspectRatio, setAspectRatio] = useState<number>(1);
   const [isUploading, setIsUploading] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const { toast } = useToast();
   const supabase = createClient();
 
@@ -41,7 +43,7 @@ export default function LogoSettingsPage() {
     fetchLogo();
   }, [supabase]);
 
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -66,74 +68,65 @@ export default function LogoSettingsPage() {
       return;
     }
 
+    // Create preview URL
+    const objectUrl = URL.createObjectURL(file);
+    setPreviewUrl(objectUrl);
+    setSelectedFile(file);
+  };
+
+  const handleUpload = async () => {
+    if (!selectedFile) return;
+
     setIsUploading(true);
 
     try {
       // Get image dimensions
       const img = document.createElement("img");
-      const objectUrl = URL.createObjectURL(file);
+      let calculatedRatio = 1;
 
       await new Promise<void>((resolve) => {
         img.onload = () => {
-          const ratio = img.width / img.height;
-          setAspectRatio(ratio);
+          calculatedRatio = img.width / img.height;
+          setAspectRatio(calculatedRatio);
           resolve();
         };
-        img.src = objectUrl;
+        img.src = previewUrl!;
       });
 
-      // Upload to Supabase Storage
-      const fileName = `platform-logo-${Date.now()}.${file.name.split(".").pop()}`;
-      const { error: uploadError } = await supabase.storage
-        .from("logos")
-        .upload(fileName, file, { upsert: true });
+      // Upload via API endpoint (bypasses RLS)
+      const formData = new FormData();
+      formData.append("file", selectedFile);
+      formData.append("aspectRatio", calculatedRatio.toString());
 
-      if (uploadError) {
-        throw uploadError;
+      const response = await fetch("/api/admin/logo", {
+        method: "POST",
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Upload failed");
       }
 
-      // Get public URL
-      const { data: urlData } = supabase.storage
-        .from("logos")
-        .getPublicUrl(fileName);
-
-      const newLogoUrl = urlData.publicUrl;
-
-      // Update platform settings
-      const { data: existing } = await supabase
-        .from("platform_settings")
-        .select("id")
-        .single();
-
-      if (existing) {
-        await supabase
-          .from("platform_settings")
-          .update({
-            logo_url: newLogoUrl,
-            logo_aspect_ratio: aspectRatio,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", existing.id);
-      } else {
-        await supabase.from("platform_settings").insert({
-          logo_url: newLogoUrl,
-          logo_aspect_ratio: aspectRatio,
-        });
-      }
-
-      setLogoUrl(newLogoUrl);
+      setLogoUrl(result.logoUrl);
 
       toast({
         title: "Logo uploaded",
         description: "Your logo has been updated successfully",
       });
 
-      URL.revokeObjectURL(objectUrl);
+      // Clear selection
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+      setPreviewUrl(null);
+      setSelectedFile(null);
     } catch (error) {
       console.error("Upload error:", error);
       toast({
         title: "Upload failed",
-        description: "Failed to upload logo",
+        description: error instanceof Error ? error.message : "Failed to upload logo",
         variant: "destructive",
       });
     } finally {
@@ -141,18 +134,26 @@ export default function LogoSettingsPage() {
     }
   };
 
+  const handleCancelSelection = () => {
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+    }
+    setPreviewUrl(null);
+    setSelectedFile(null);
+  };
+
   const handleDelete = async () => {
     setIsDeleting(true);
 
     try {
-      await supabase
-        .from("platform_settings")
-        .update({
-          logo_url: null,
-          logo_aspect_ratio: null,
-          updated_at: new Date().toISOString(),
-        })
-        .not("id", "is", null);
+      const response = await fetch("/api/admin/logo", {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        const result = await response.json();
+        throw new Error(result.error || "Delete failed");
+      }
 
       setLogoUrl(null);
 
@@ -164,7 +165,7 @@ export default function LogoSettingsPage() {
       console.error("Delete error:", error);
       toast({
         title: "Delete failed",
-        description: "Failed to remove logo",
+        description: error instanceof Error ? error.message : "Failed to remove logo",
         variant: "destructive",
       });
     } finally {
@@ -239,22 +240,53 @@ export default function LogoSettingsPage() {
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="logo">Select File</Label>
-              <div className="flex items-center space-x-2">
-                <Input
-                  id="logo"
-                  type="file"
-                  accept="image/png,image/jpeg,image/svg+xml,image/webp"
-                  onChange={handleUpload}
-                  disabled={isUploading}
-                  className="flex-1"
-                />
-              </div>
+              <Input
+                id="logo"
+                type="file"
+                accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                onChange={handleFileSelect}
+                disabled={isUploading}
+              />
             </div>
 
-            {isUploading && (
-              <div className="flex items-center space-x-2 text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span>Uploading...</span>
+            {previewUrl && (
+              <div className="space-y-4">
+                <div className="p-4 border rounded-lg bg-muted">
+                  <p className="text-sm text-muted-foreground mb-2">Preview:</p>
+                  <div className="flex items-center justify-center h-24">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={previewUrl}
+                      alt="Logo Preview"
+                      style={{
+                        maxHeight: "80px",
+                        maxWidth: "200px",
+                        objectFit: "contain",
+                      }}
+                    />
+                  </div>
+                </div>
+                <div className="flex space-x-2">
+                  <Button
+                    onClick={handleUpload}
+                    disabled={isUploading}
+                    className="flex-1"
+                  >
+                    {isUploading ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Upload className="mr-2 h-4 w-4" />
+                    )}
+                    {isUploading ? "Uploading..." : "Upload Logo"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={handleCancelSelection}
+                    disabled={isUploading}
+                  >
+                    Cancel
+                  </Button>
+                </div>
               </div>
             )}
 
