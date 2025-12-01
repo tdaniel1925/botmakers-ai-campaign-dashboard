@@ -255,7 +255,7 @@ export default function CallsPage() {
       {/* Call Detail Modal */}
       {selectedCall && (
         <CallDetail
-          call={selectedCall}
+          call={selectedCall as CallWithTag & Record<string, unknown>}
           open={isDetailOpen}
           onOpenChange={setIsDetailOpen}
         />

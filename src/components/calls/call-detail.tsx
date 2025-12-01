@@ -52,8 +52,8 @@ interface CallData {
   ai_sentiment?: string | null;
   aiSummary?: string | null;
   ai_summary?: string | null;
-  aiKeyPoints?: string[] | null;
-  ai_key_points?: string[] | null;
+  aiKeyPoints?: unknown;
+  ai_key_points?: unknown;
   aiCallerIntent?: string | null;
   ai_caller_intent?: string | null;
   aiResolution?: string | null;
@@ -66,7 +66,7 @@ interface CallData {
 }
 
 interface CallDetailProps {
-  call: CallData;
+  call: CallData & Record<string, unknown>;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
