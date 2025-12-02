@@ -187,11 +187,13 @@ export async function POST(
     const payload = await request.json();
 
     // Find campaign by webhook token
-    const { data: campaign, error: campaignError } = await supabase
+    const { data: campaigns, error: campaignError } = await supabase
       .from("campaigns")
       .select("id, is_active")
       .eq("webhook_token", token)
-      .single();
+      .limit(1);
+
+    const campaign = campaigns?.[0];
 
     if (campaignError || !campaign) {
       return NextResponse.json(
