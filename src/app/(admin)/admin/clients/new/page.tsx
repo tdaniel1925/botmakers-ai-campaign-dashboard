@@ -388,40 +388,45 @@ export default function NewClientPage() {
 
       {/* Email Preview Dialog */}
       <Dialog open={showPreview} onOpenChange={setShowPreview}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-          <DialogHeader>
+        <DialogContent className="max-w-3xl w-[90vw] p-0 gap-0">
+          <DialogHeader className="p-6 pb-4">
             <DialogTitle>Email Preview</DialogTitle>
             <DialogDescription>
               This is how the welcome email will appear to {name || "the client"}
             </DialogDescription>
           </DialogHeader>
-          <Tabs defaultValue="preview" className="w-full flex-1 overflow-hidden flex flex-col">
-            <TabsList>
-              <TabsTrigger value="preview">Preview</TabsTrigger>
-              <TabsTrigger value="html">HTML Source</TabsTrigger>
-            </TabsList>
-            <TabsContent value="preview" className="mt-4 flex-1 overflow-auto">
+          <Tabs defaultValue="preview" className="w-full">
+            <div className="px-6">
+              <TabsList>
+                <TabsTrigger value="preview">Preview</TabsTrigger>
+                <TabsTrigger value="html">HTML Source</TabsTrigger>
+              </TabsList>
+            </div>
+            <TabsContent value="preview" className="mt-0 p-6 pt-4">
               {previewLoading ? (
-                <div className="flex items-center justify-center h-96">
+                <div className="flex items-center justify-center h-[500px]">
                   <Loader2 className="h-8 w-8 animate-spin" />
                 </div>
               ) : (
-                <div className="border rounded-lg overflow-hidden bg-white">
+                <div className="border rounded-lg overflow-hidden bg-white h-[500px]">
                   <iframe
                     srcDoc={previewHtml}
-                    className="w-full h-[400px]"
+                    className="w-full h-full"
                     title="Email Preview"
+                    style={{ border: "none", display: "block" }}
                   />
                 </div>
               )}
             </TabsContent>
-            <TabsContent value="html" className="mt-4 flex-1 overflow-auto">
-              <pre className="bg-muted p-4 rounded-lg text-xs whitespace-pre-wrap break-all">
-                {previewHtml}
-              </pre>
+            <TabsContent value="html" className="mt-0 p-6 pt-4">
+              <div className="h-[500px] overflow-auto rounded-lg bg-muted">
+                <pre className="p-4 text-xs overflow-x-hidden" style={{ whiteSpace: "pre-wrap", wordBreak: "break-all", overflowWrap: "anywhere" }}>
+                  {previewHtml}
+                </pre>
+              </div>
             </TabsContent>
           </Tabs>
-          <DialogFooter>
+          <DialogFooter className="p-6 pt-4 border-t">
             <Button variant="outline" onClick={() => setShowPreview(false)}>
               Close
             </Button>
