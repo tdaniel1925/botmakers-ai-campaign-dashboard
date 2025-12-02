@@ -23,7 +23,14 @@ import {
   Wand2,
   Check,
   AlertCircle,
+  ChevronRight,
+  ChevronDown,
 } from "lucide-react";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import Link from "next/link";
 import type { Campaign } from "@/lib/db/schema";
 
@@ -36,15 +43,141 @@ interface PayloadMapping {
   recording_id?: string;
 }
 
+// Component to render JSON structure with clickable paths
+function JsonExplorer({
+  data,
+  path = "",
+  onPathClick,
+}: {
+  data: unknown;
+  path?: string;
+  onPathClick: (path: string, value: unknown) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(true);
+
+  if (data === null || data === undefined) {
+    return <span className="text-muted-foreground">null</span>;
+  }
+
+  if (typeof data !== "object") {
+    const displayValue = typeof data === "string"
+      ? data.length > 50 ? `"${data.substring(0, 50)}..."` : `"${data}"`
+      : String(data);
+
+    return (
+      <button
+        type="button"
+        onClick={() => onPathClick(path, data)}
+        className="text-blue-600 hover:underline text-left"
+        title={`Click to use path: ${path}`}
+      >
+        {displayValue}
+      </button>
+    );
+  }
+
+  if (Array.isArray(data)) {
+    if (data.length === 0) {
+      return <span className="text-muted-foreground">[]</span>;
+    }
+    return (
+      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+        <CollapsibleTrigger className="flex items-center gap-1 hover:bg-muted px-1 rounded">
+          {isOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+          <span className="text-muted-foreground">[{data.length}]</span>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="ml-4 border-l pl-2 space-y-1">
+            {data.slice(0, 5).map((item, index) => (
+              <div key={index} className="flex items-start gap-1">
+                <span className="text-muted-foreground text-xs">{index}:</span>
+                <JsonExplorer
+                  data={item}
+                  path={`${path}[${index}]`}
+                  onPathClick={onPathClick}
+                />
+              </div>
+            ))}
+            {data.length > 5 && (
+              <span className="text-muted-foreground text-xs">... and {data.length - 5} more</span>
+            )}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+    );
+  }
+
+  const entries = Object.entries(data as Record<string, unknown>);
+  if (entries.length === 0) {
+    return <span className="text-muted-foreground">{"{}"}</span>;
+  }
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <CollapsibleTrigger className="flex items-center gap-1 hover:bg-muted px-1 rounded">
+        {isOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+        <span className="text-muted-foreground">{"{"}{entries.length}{"}"}</span>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="ml-4 border-l pl-2 space-y-1">
+          {entries.map(([key, value]) => (
+            <div key={key} className="flex items-start gap-1">
+              <span className="text-green-600 font-medium text-sm">{key}:</span>
+              <JsonExplorer
+                data={value}
+                path={path ? `${path}.${key}` : key}
+                onPathClick={onPathClick}
+              />
+            </div>
+          ))}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
 export default function WebhookConfigPage() {
   const params = useParams();
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [samplePayload, setSamplePayload] = useState("");
+  const [parsedPayload, setParsedPayload] = useState<Record<string, unknown> | null>(null);
   const [mapping, setMapping] = useState<PayloadMapping>({});
+  const [activeField, setActiveField] = useState<keyof PayloadMapping | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const { toast } = useToast();
+
+  // Parse payload when it changes
+  useEffect(() => {
+    if (samplePayload.trim()) {
+      try {
+        const parsed = JSON.parse(samplePayload);
+        setParsedPayload(parsed);
+      } catch {
+        setParsedPayload(null);
+      }
+    } else {
+      setParsedPayload(null);
+    }
+  }, [samplePayload]);
+
+  // Handle path selection from explorer
+  const handlePathClick = (path: string, _value: unknown) => {
+    if (activeField) {
+      setMapping({ ...mapping, [activeField]: path });
+      toast({
+        title: "Path selected",
+        description: `Mapped "${path}" to ${activeField.replace(/_/g, " ")}`,
+      });
+    } else {
+      navigator.clipboard.writeText(path);
+      toast({
+        title: "Path copied",
+        description: `"${path}" copied to clipboard. Click a field to map directly.`,
+      });
+    }
+  };
 
   const webhookUrl = campaign
     ? `${process.env.NEXT_PUBLIC_APP_URL || window.location.origin}/api/webhooks/${campaign.webhookToken}`
@@ -264,7 +397,7 @@ export default function WebhookConfigPage() {
 }`}
                 value={samplePayload}
                 onChange={(e) => setSamplePayload(e.target.value)}
-                rows={10}
+                rows={8}
                 className="font-mono text-sm"
               />
               <div className="flex space-x-2">
@@ -289,6 +422,32 @@ export default function WebhookConfigPage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* JSON Explorer */}
+          {parsedPayload && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Payload Explorer</CardTitle>
+                <CardDescription>
+                  {activeField ? (
+                    <span className="text-primary">
+                      Click a value below to map it to <strong>{activeField.replace(/_/g, " ")}</strong>
+                    </span>
+                  ) : (
+                    "Click a field on the right, then click a value here to map it"
+                  )}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="font-mono text-sm max-h-64 overflow-y-auto p-3 bg-muted rounded-md">
+                  <JsonExplorer
+                    data={parsedPayload}
+                    onPathClick={handlePathClick}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         <Card>
@@ -300,6 +459,12 @@ export default function WebhookConfigPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {parsedPayload && activeField && (
+              <div className="text-sm text-primary bg-primary/10 p-2 rounded">
+                Click a value in the Payload Explorer to map it
+              </div>
+            )}
+
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label htmlFor="transcript">Transcript *</Label>
@@ -316,6 +481,8 @@ export default function WebhookConfigPage() {
                 onChange={(e) =>
                   setMapping({ ...mapping, transcript: e.target.value })
                 }
+                onFocus={() => setActiveField("transcript")}
+                className={activeField === "transcript" ? "ring-2 ring-primary" : ""}
               />
             </div>
 
@@ -335,6 +502,8 @@ export default function WebhookConfigPage() {
                 onChange={(e) =>
                   setMapping({ ...mapping, audio_url: e.target.value })
                 }
+                onFocus={() => setActiveField("audio_url")}
+                className={activeField === "audio_url" ? "ring-2 ring-primary" : ""}
               />
             </div>
 
@@ -354,6 +523,8 @@ export default function WebhookConfigPage() {
                 onChange={(e) =>
                   setMapping({ ...mapping, caller_phone: e.target.value })
                 }
+                onFocus={() => setActiveField("caller_phone")}
+                className={activeField === "caller_phone" ? "ring-2 ring-primary" : ""}
               />
             </div>
 
@@ -373,6 +544,8 @@ export default function WebhookConfigPage() {
                 onChange={(e) =>
                   setMapping({ ...mapping, call_duration: e.target.value })
                 }
+                onFocus={() => setActiveField("call_duration")}
+                className={activeField === "call_duration" ? "ring-2 ring-primary" : ""}
               />
             </div>
 
@@ -392,6 +565,8 @@ export default function WebhookConfigPage() {
                 onChange={(e) =>
                   setMapping({ ...mapping, timestamp: e.target.value })
                 }
+                onFocus={() => setActiveField("timestamp")}
+                className={activeField === "timestamp" ? "ring-2 ring-primary" : ""}
               />
             </div>
 
@@ -411,6 +586,8 @@ export default function WebhookConfigPage() {
                 onChange={(e) =>
                   setMapping({ ...mapping, recording_id: e.target.value })
                 }
+                onFocus={() => setActiveField("recording_id")}
+                className={activeField === "recording_id" ? "ring-2 ring-primary" : ""}
               />
             </div>
 

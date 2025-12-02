@@ -17,7 +17,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, ArrowLeft, Copy, ExternalLink } from "lucide-react";
+import { Loader2, ArrowLeft, Copy, ExternalLink, BarChart3 } from "lucide-react";
 import Link from "next/link";
 import { format } from "date-fns";
 import type { Campaign } from "@/lib/db/schema";
@@ -266,6 +266,12 @@ export default function EditCampaignPage() {
               <CardTitle>Quick Actions</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
+              <Link href={`/admin/campaigns/${params.id}/analytics`}>
+                <Button variant="outline" className="w-full justify-start">
+                  <BarChart3 className="mr-2 h-4 w-4" />
+                  View Analytics
+                </Button>
+              </Link>
               <Link href={`/admin/campaigns/${params.id}/outcome-tags`}>
                 <Button variant="outline" className="w-full justify-start">
                   Manage Outcome Tags

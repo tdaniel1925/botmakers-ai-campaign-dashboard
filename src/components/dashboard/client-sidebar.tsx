@@ -12,9 +12,11 @@ import {
   Phone,
   FileBarChart,
   LogOut,
+  CreditCard,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 
 const sidebarItems = [
   {
@@ -31,6 +33,11 @@ const sidebarItems = [
     title: "Reports",
     href: "/dashboard/reports",
     icon: FileBarChart,
+  },
+  {
+    title: "Billing",
+    href: "/dashboard/billing",
+    icon: CreditCard,
   },
 ];
 
@@ -97,7 +104,10 @@ export function ClientSidebar({ userName = "User" }: ClientSidebarProps) {
         <Separator />
         <div className="flex items-center justify-between px-2">
           <span className="text-sm text-muted-foreground">Theme</span>
-          <ThemeToggle />
+          <div className="flex items-center gap-2">
+            <NotificationBell />
+            <ThemeToggle />
+          </div>
         </div>
         <Button
           variant="ghost"

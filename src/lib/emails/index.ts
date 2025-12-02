@@ -315,6 +315,51 @@ export async function sendReInviteEmail(
 }
 
 /**
+ * Generic email sender interface for cron jobs
+ */
+export interface SendEmailParams {
+  to: string;
+  templateSlug: EmailTemplateType;
+  data: Record<string, unknown>;
+  clientId?: string;
+}
+
+export async function sendEmail(params: SendEmailParams): Promise<EmailSendResult> {
+  switch (params.templateSlug) {
+    case "campaign_report":
+      // Map cron data to expected email template props
+      const totalCalls = params.data.totalCalls as number || 0;
+      const positiveCalls = params.data.positiveCalls as number || 0;
+      const positiveRate = totalCalls > 0 ? Math.round((positiveCalls / totalCalls) * 100) : 0;
+
+      return sendCampaignReportEmail({
+        recipientEmail: params.to,
+        recipientName: params.data.clientName as string,
+        reportPeriod: params.data.periodLabel as string,
+        totalCalls: totalCalls,
+        totalCampaigns: (params.data.campaignCount as number) || 1,
+        overallPositiveRate: positiveRate,
+        dashboardUrl: params.data.dashboardUrl as string,
+        campaigns: [], // Simplified - no detailed campaign breakdown in scheduled reports
+        clientId: params.clientId,
+      });
+
+    case "password_reset":
+      return sendPasswordResetEmail({
+        recipientEmail: params.to,
+        recipientName: params.data.recipientName as string,
+        username: params.data.username as string,
+        newTempPassword: params.data.newTempPassword as string,
+        loginUrl: params.data.loginUrl as string,
+        clientId: params.clientId,
+      });
+
+    default:
+      return { success: false, error: `Unknown template: ${params.templateSlug}` };
+  }
+}
+
+/**
  * Preview email HTML without sending
  */
 export async function previewEmail(

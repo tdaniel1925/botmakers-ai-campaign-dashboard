@@ -1,5 +1,6 @@
 import { summarizeCall, SummarizationResult } from "./deepseek";
 import { createClient } from "@supabase/supabase-js";
+import { trackCallUsage } from "@/lib/billing/usage-tracker";
 
 // Lazy init to avoid build-time errors when env vars aren't available
 function getSupabaseClient() {
@@ -12,7 +13,7 @@ function getSupabaseClient() {
 export async function processCallWithAI(callId: string): Promise<void> {
   const supabase = getSupabaseClient();
   try {
-    // Fetch the call record
+    // Fetch the call record with campaign and client info
     const { data: call, error: callError } = await supabase
       .from("calls")
       .select(
@@ -20,6 +21,7 @@ export async function processCallWithAI(callId: string): Promise<void> {
         *,
         campaigns (
           id,
+          client_id,
           campaign_outcome_tags (
             id,
             tag_name
@@ -88,6 +90,22 @@ export async function processCallWithAI(callId: string): Promise<void> {
     if (updateError) {
       console.error("Failed to update call with AI results:", updateError);
       await updateCallStatus(callId, "failed", "Failed to save AI results");
+    } else {
+      // Track usage for billing after successful processing
+      const clientId = call.campaigns?.client_id;
+      if (clientId) {
+        // Convert call duration from seconds to minutes
+        const durationMinutes = call.call_duration
+          ? Math.ceil(call.call_duration / 60)
+          : 1; // Minimum 1 minute charge
+
+        try {
+          await trackCallUsage(clientId, callId, durationMinutes);
+        } catch (billingError) {
+          // Log but don't fail the call processing
+          console.error("Failed to track usage:", billingError);
+        }
+      }
     }
   } catch (error) {
     console.error("Error processing call with AI:", error);

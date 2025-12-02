@@ -13,8 +13,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { Search, ChevronLeft, ChevronRight, ArrowLeft } from "lucide-react";
 import type { Call } from "@/lib/db/schema";
+import type { DateRange } from "react-day-picker";
 
 type CallWithTag = Call & {
   campaign_outcome_tags?: {
@@ -29,6 +31,7 @@ export default function PreviewCallsPage() {
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [sentimentFilter, setSentimentFilter] = useState<string>("all");
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [sortBy, setSortBy] = useState<string>("date_desc");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -84,6 +87,16 @@ export default function PreviewCallsPage() {
           query = query.eq("ai_sentiment", sentimentFilter);
         }
 
+        // Apply date range filter
+        if (dateRange?.from) {
+          query = query.gte("created_at", dateRange.from.toISOString());
+        }
+        if (dateRange?.to) {
+          const endDate = new Date(dateRange.to);
+          endDate.setDate(endDate.getDate() + 1);
+          query = query.lt("created_at", endDate.toISOString());
+        }
+
         // Apply search
         if (searchQuery) {
           query = query.or(
@@ -128,7 +141,7 @@ export default function PreviewCallsPage() {
     }
 
     fetchCalls();
-  }, [supabase, page, sentimentFilter, sortBy, searchQuery]);
+  }, [supabase, page, sentimentFilter, dateRange, sortBy, searchQuery]);
 
   const handleCallClick = (call: CallWithTag) => {
     setSelectedCall(call);
@@ -175,6 +188,13 @@ export default function PreviewCallsPage() {
             className="pl-10"
           />
         </div>
+        <DateRangePicker
+          dateRange={dateRange}
+          onDateRangeChange={(range) => {
+            setDateRange(range);
+            setPage(1);
+          }}
+        />
         <Select
           value={sentimentFilter}
           onValueChange={(value) => {
@@ -258,7 +278,7 @@ export default function PreviewCallsPage() {
       ) : (
         <div className="text-center py-12">
           <p className="text-muted-foreground">
-            {searchQuery || sentimentFilter !== "all"
+            {searchQuery || sentimentFilter !== "all" || dateRange
               ? "No calls found matching your criteria"
               : "No calls recorded yet. Calls will appear here once received via webhook."}
           </p>

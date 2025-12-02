@@ -19,6 +19,7 @@ import {
   BarChart3,
   TrendingUp,
   Loader2,
+  FileText,
 } from "lucide-react";
 import {
   LineChart,
@@ -46,6 +47,8 @@ export default function ReportsPage() {
   const [dailyData, setDailyData] = useState<DailyData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
+  const [isExportingPDF, setIsExportingPDF] = useState(false);
+  const [clientId, setClientId] = useState<string | null>(null);
   const supabase = createClient();
   const { toast } = useToast();
 
@@ -66,6 +69,7 @@ export default function ReportsPage() {
           .single();
 
         if (!client) return;
+        setClientId(client.id);
 
         // Get campaigns for this client
         const { data: campaigns } = await supabase
@@ -192,6 +196,51 @@ export default function ReportsPage() {
     }
   };
 
+  const handleExportPDF = async () => {
+    if (!clientId) return;
+    setIsExportingPDF(true);
+    try {
+      // Map dateRange to period parameter
+      const periodMap: Record<string, string> = {
+        "7": "7d",
+        "14": "14d",
+        "30": "30d",
+        "90": "90d",
+      };
+      const period = periodMap[dateRange] || "30d";
+
+      const response = await fetch(
+        `/api/reports/export-pdf?clientId=${clientId}&period=${period}`
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to generate PDF");
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `campaign-report-${format(new Date(), "yyyy-MM-dd")}.pdf`;
+      link.click();
+      window.URL.revokeObjectURL(url);
+
+      toast({
+        title: "PDF Generated",
+        description: "Your report has been downloaded",
+      });
+    } catch (error) {
+      console.error("PDF export error:", error);
+      toast({
+        title: "Export failed",
+        description: "Failed to generate PDF report",
+        variant: "destructive",
+      });
+    } finally {
+      setIsExportingPDF(false);
+    }
+  };
+
   const totalCalls = calls.length;
   const positiveCalls = calls.filter((c) => c.aiSentiment === "positive").length;
   const negativeCalls = calls.filter((c) => c.aiSentiment === "negative").length;
@@ -241,6 +290,18 @@ export default function ReportsPage() {
               <Download className="mr-2 h-4 w-4" />
             )}
             Export CSV
+          </Button>
+          <Button
+            variant="outline"
+            onClick={handleExportPDF}
+            disabled={isExportingPDF || calls.length === 0}
+          >
+            {isExportingPDF ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <FileText className="mr-2 h-4 w-4" />
+            )}
+            Export PDF
           </Button>
         </div>
       </div>
@@ -380,6 +441,18 @@ export default function ReportsPage() {
                   <FileSpreadsheet className="mr-2 h-4 w-4" />
                 )}
                 Download CSV ({calls.length} calls)
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleExportPDF}
+                disabled={isExportingPDF || calls.length === 0}
+              >
+                {isExportingPDF ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <FileText className="mr-2 h-4 w-4" />
+                )}
+                Download PDF Report
               </Button>
             </div>
           </div>
