@@ -223,28 +223,26 @@ export async function POST(
       hasCallId: !!detected.externalCallId,
     });
 
-    // Validate - we need at least a transcript for AI analysis
+    // If no transcript, treat as a ping/test request - acknowledge and return success
     if (!detected.transcript || typeof detected.transcript !== "string") {
       await supabase.from("webhook_logs").insert({
         campaign_id: campaign.id,
         payload,
-        status: "failed",
-        error_message: "Could not find transcript in payload",
+        status: "success",
+        error_message: "Ping received (no transcript)",
       });
 
-      return NextResponse.json(
-        {
-          error: "Could not find transcript in payload",
-          hint: "Ensure your voice AI platform includes the call transcript",
-          detected: {
-            transcript: null,
-            audioUrl: detected.audioUrl ? "found" : null,
-            phone: detected.callerPhone ? "found" : null,
-            duration: detected.callDuration ? "found" : null,
-          }
-        },
-        { status: 400 }
-      );
+      return NextResponse.json({
+        success: true,
+        message: "Webhook connected successfully. Ready to receive calls with transcripts.",
+        type: "ping",
+        detected: {
+          transcript: null,
+          audioUrl: detected.audioUrl ? "found" : null,
+          phone: detected.callerPhone ? "found" : null,
+          duration: detected.callDuration ? "found" : null,
+        }
+      });
     }
 
     // Parse duration
