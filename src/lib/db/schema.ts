@@ -14,6 +14,7 @@ import { relations } from "drizzle-orm";
 export const platformSettings = pgTable("platform_settings", {
   id: uuid("id").primaryKey().defaultRandom(),
   logoUrl: text("logo_url"),
+  logoUrlDark: text("logo_url_dark"), // Logo for dark mode
   logoAspectRatio: decimal("logo_aspect_ratio", { precision: 5, scale: 2 }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

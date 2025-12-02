@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { useTheme } from "next-themes";
 
 interface LogoProps {
   className?: string;
@@ -11,24 +12,39 @@ interface LogoProps {
 
 export function Logo({ className, maxHeight = 48, fillWidth = false }: LogoProps) {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [logoUrlDark, setLogoUrlDark] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+  const { resolvedTheme } = useTheme();
   const supabase = createClient();
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     async function fetchLogo() {
       const { data } = await supabase
         .from("platform_settings")
-        .select("logo_url, logo_aspect_ratio")
+        .select("logo_url, logo_url_dark, logo_aspect_ratio")
         .single();
 
       if (data?.logo_url) {
         setLogoUrl(data.logo_url);
+      }
+      if (data?.logo_url_dark) {
+        setLogoUrlDark(data.logo_url_dark);
       }
     }
 
     fetchLogo();
   }, [supabase]);
 
-  if (!logoUrl) {
+  // Determine which logo to show based on theme
+  const currentLogo = mounted && resolvedTheme === "dark" && logoUrlDark
+    ? logoUrlDark
+    : logoUrl;
+
+  if (!currentLogo) {
     return (
       <div className={`font-bold text-xl text-primary ${className}`}>
         BotMakers
@@ -40,7 +56,7 @@ export function Logo({ className, maxHeight = 48, fillWidth = false }: LogoProps
     <div className={className} style={fillWidth ? { width: '100%' } : undefined}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={logoUrl}
+        src={currentLogo}
         alt="Logo"
         style={{
           maxHeight: fillWidth ? undefined : `${maxHeight}px`,

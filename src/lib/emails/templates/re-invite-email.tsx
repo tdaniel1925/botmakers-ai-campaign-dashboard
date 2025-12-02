@@ -168,6 +168,7 @@ const container = {
   maxWidth: "600px",
   borderRadius: "8px",
   boxShadow: "0 2px 8px rgba(0, 0, 0, 0.05)",
+  overflow: "hidden" as const,
 };
 
 const headerSection = {
@@ -203,6 +204,8 @@ const paragraph = {
   fontSize: "16px",
   lineHeight: "24px",
   margin: "16px 0",
+  wordBreak: "break-word" as const,
+  overflowWrap: "break-word" as const,
 };
 
 const credentialsBox = {

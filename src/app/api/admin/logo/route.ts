@@ -15,6 +15,7 @@ export async function POST(request: Request) {
     const formData = await request.formData();
     const file = formData.get("file") as File;
     const aspectRatio = formData.get("aspectRatio") as string;
+    const logoType = (formData.get("logoType") as string) || "light";
 
     if (!file) {
       return NextResponse.json(
@@ -28,7 +29,7 @@ export async function POST(request: Request) {
     const buffer = Buffer.from(arrayBuffer);
 
     // Upload to Supabase Storage
-    const fileName = `platform-logo-${Date.now()}.${file.name.split(".").pop()}`;
+    const fileName = `platform-logo-${logoType}-${Date.now()}.${file.name.split(".").pop()}`;
     const { error: uploadError } = await supabase.storage
       .from("logos")
       .upload(fileName, buffer, {
@@ -51,6 +52,9 @@ export async function POST(request: Request) {
 
     const newLogoUrl = urlData.publicUrl;
 
+    // Determine which field to update
+    const updateField = logoType === "dark" ? "logo_url_dark" : "logo_url";
+
     // Update platform settings
     const { data: existing } = await supabase
       .from("platform_settings")
@@ -61,15 +65,15 @@ export async function POST(request: Request) {
       await supabase
         .from("platform_settings")
         .update({
-          logo_url: newLogoUrl,
-          logo_aspect_ratio: parseFloat(aspectRatio) || 1,
+          [updateField]: newLogoUrl,
+          ...(logoType === "light" ? { logo_aspect_ratio: parseFloat(aspectRatio) || 1 } : {}),
           updated_at: new Date().toISOString(),
         })
         .eq("id", existing.id);
     } else {
       await supabase.from("platform_settings").insert({
-        logo_url: newLogoUrl,
-        logo_aspect_ratio: parseFloat(aspectRatio) || 1,
+        [updateField]: newLogoUrl,
+        ...(logoType === "light" ? { logo_aspect_ratio: parseFloat(aspectRatio) || 1 } : {}),
       });
     }
 
@@ -86,14 +90,20 @@ export async function POST(request: Request) {
   }
 }
 
-export async function DELETE() {
+export async function DELETE(request: Request) {
   try {
     const supabase = getSupabaseClient();
+    const { searchParams } = new URL(request.url);
+    const logoType = searchParams.get("logoType") || "light";
+
+    // Determine which field to clear
+    const updateField = logoType === "dark" ? "logo_url_dark" : "logo_url";
+
     await supabase
       .from("platform_settings")
       .update({
-        logo_url: null,
-        logo_aspect_ratio: null,
+        [updateField]: null,
+        ...(logoType === "light" ? { logo_aspect_ratio: null } : {}),
         updated_at: new Date().toISOString(),
       })
       .not("id", "is", null);

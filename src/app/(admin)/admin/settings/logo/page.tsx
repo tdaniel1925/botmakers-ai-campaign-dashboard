@@ -13,37 +13,41 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Upload, Trash2, Image as ImageIcon } from "lucide-react";
+import { Loader2, Upload, Trash2, Image as ImageIcon, Sun, Moon } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import Image from "next/image";
 
+type LogoType = "light" | "dark";
+
 export default function LogoSettingsPage() {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
-  const [aspectRatio, setAspectRatio] = useState<number>(1);
-  const [isUploading, setIsUploading] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [logoUrlDark, setLogoUrlDark] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState<LogoType | null>(null);
+  const [isDeleting, setIsDeleting] = useState<LogoType | null>(null);
+  const [selectedFile, setSelectedFile] = useState<{ file: File; type: LogoType } | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const { toast } = useToast();
   const supabase = createClient();
 
   useEffect(() => {
-    async function fetchLogo() {
+    async function fetchLogos() {
       const { data } = await supabase
         .from("platform_settings")
-        .select("logo_url, logo_aspect_ratio")
+        .select("logo_url, logo_url_dark, logo_aspect_ratio")
         .single();
 
       if (data?.logo_url) {
         setLogoUrl(data.logo_url);
-        setAspectRatio(data.logo_aspect_ratio || 1);
+      }
+      if (data?.logo_url_dark) {
+        setLogoUrlDark(data.logo_url_dark);
       }
     }
 
-    fetchLogo();
+    fetchLogos();
   }, [supabase]);
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>, type: LogoType) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -71,13 +75,14 @@ export default function LogoSettingsPage() {
     // Create preview URL
     const objectUrl = URL.createObjectURL(file);
     setPreviewUrl(objectUrl);
-    setSelectedFile(file);
+    setSelectedFile({ file, type });
   };
 
   const handleUpload = async () => {
     if (!selectedFile) return;
 
-    setIsUploading(true);
+    const { file, type } = selectedFile;
+    setIsUploading(type);
 
     try {
       // Get image dimensions
@@ -87,7 +92,6 @@ export default function LogoSettingsPage() {
       await new Promise<void>((resolve) => {
         img.onload = () => {
           calculatedRatio = img.width / img.height;
-          setAspectRatio(calculatedRatio);
           resolve();
         };
         img.src = previewUrl!;
@@ -95,8 +99,9 @@ export default function LogoSettingsPage() {
 
       // Upload via API endpoint (bypasses RLS)
       const formData = new FormData();
-      formData.append("file", selectedFile);
+      formData.append("file", file);
       formData.append("aspectRatio", calculatedRatio.toString());
+      formData.append("logoType", type);
 
       const response = await fetch("/api/admin/logo", {
         method: "POST",
@@ -109,11 +114,15 @@ export default function LogoSettingsPage() {
         throw new Error(result.error || "Upload failed");
       }
 
-      setLogoUrl(result.logoUrl);
+      if (type === "light") {
+        setLogoUrl(result.logoUrl);
+      } else {
+        setLogoUrlDark(result.logoUrl);
+      }
 
       toast({
         title: "Logo uploaded",
-        description: "Your logo has been updated successfully",
+        description: `Your ${type} mode logo has been updated successfully`,
       });
 
       // Clear selection
@@ -130,7 +139,7 @@ export default function LogoSettingsPage() {
         variant: "destructive",
       });
     } finally {
-      setIsUploading(false);
+      setIsUploading(null);
     }
   };
 
@@ -142,11 +151,11 @@ export default function LogoSettingsPage() {
     setSelectedFile(null);
   };
 
-  const handleDelete = async () => {
-    setIsDeleting(true);
+  const handleDelete = async (type: LogoType) => {
+    setIsDeleting(type);
 
     try {
-      const response = await fetch("/api/admin/logo", {
+      const response = await fetch(`/api/admin/logo?logoType=${type}`, {
         method: "DELETE",
       });
 
@@ -155,11 +164,15 @@ export default function LogoSettingsPage() {
         throw new Error(result.error || "Delete failed");
       }
 
-      setLogoUrl(null);
+      if (type === "light") {
+        setLogoUrl(null);
+      } else {
+        setLogoUrlDark(null);
+      }
 
       toast({
         title: "Logo removed",
-        description: "Your logo has been removed",
+        description: `Your ${type} mode logo has been removed`,
       });
     } catch (error) {
       console.error("Delete error:", error);
@@ -169,139 +182,156 @@ export default function LogoSettingsPage() {
         variant: "destructive",
       });
     } finally {
-      setIsDeleting(false);
+      setIsDeleting(null);
     }
   };
+
+  const renderLogoCard = (type: LogoType, url: string | null, icon: React.ReactNode, title: string, description: string) => (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          {icon}
+          {title}
+        </CardTitle>
+        <CardDescription>{description}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className={`flex items-center justify-center h-32 rounded-lg ${type === "dark" ? "bg-slate-800" : "bg-muted"}`}>
+          {url ? (
+            <Image
+              src={url}
+              alt={`${title} Logo`}
+              width={200}
+              height={80}
+              style={{
+                maxHeight: "80px",
+                width: "auto",
+                objectFit: "contain",
+              }}
+            />
+          ) : (
+            <div className={`text-center ${type === "dark" ? "text-slate-400" : "text-muted-foreground"}`}>
+              <ImageIcon className="h-10 w-10 mx-auto mb-2" />
+              <p className="text-sm">No logo uploaded</p>
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor={`logo-${type}`}>Upload New Logo</Label>
+          <Input
+            id={`logo-${type}`}
+            type="file"
+            accept="image/png,image/jpeg,image/svg+xml,image/webp"
+            onChange={(e) => handleFileSelect(e, type)}
+            disabled={isUploading !== null}
+          />
+        </div>
+
+        {selectedFile?.type === type && previewUrl && (
+          <div className="space-y-3">
+            <div className={`p-3 border rounded-lg ${type === "dark" ? "bg-slate-800 border-slate-700" : "bg-muted"}`}>
+              <p className={`text-xs mb-2 ${type === "dark" ? "text-slate-400" : "text-muted-foreground"}`}>Preview:</p>
+              <div className="flex items-center justify-center h-16">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={previewUrl}
+                  alt="Logo Preview"
+                  style={{
+                    maxHeight: "60px",
+                    maxWidth: "180px",
+                    objectFit: "contain",
+                  }}
+                />
+              </div>
+            </div>
+            <div className="flex space-x-2">
+              <Button
+                onClick={handleUpload}
+                disabled={isUploading !== null}
+                className="flex-1"
+                size="sm"
+              >
+                {isUploading === type ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Upload className="mr-2 h-4 w-4" />
+                )}
+                Upload
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleCancelSelection}
+                disabled={isUploading !== null}
+                size="sm"
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+      </CardContent>
+      {url && (
+        <CardFooter>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={() => handleDelete(type)}
+            disabled={isDeleting !== null}
+          >
+            {isDeleting === type && (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            )}
+            <Trash2 className="mr-2 h-4 w-4" />
+            Remove Logo
+          </Button>
+        </CardFooter>
+      )}
+    </Card>
+  );
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Logo Settings</h1>
         <p className="text-muted-foreground">
-          Upload your platform logo to display across the application
+          Upload your platform logos for light and dark mode
         </p>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Current Logo</CardTitle>
-            <CardDescription>
-              This logo will appear on the login page, sidebar, and client
-              dashboard
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-center h-48 bg-muted rounded-lg">
-              {logoUrl ? (
-                <Image
-                  src={logoUrl}
-                  alt="Platform Logo"
-                  width={200}
-                  height={80}
-                  style={{
-                    maxHeight: "80px",
-                    width: "auto",
-                    objectFit: "contain",
-                  }}
-                />
-              ) : (
-                <div className="text-center text-muted-foreground">
-                  <ImageIcon className="h-12 w-12 mx-auto mb-2" />
-                  <p>No logo uploaded</p>
-                </div>
-              )}
-            </div>
-          </CardContent>
-          {logoUrl && (
-            <CardFooter>
-              <Button
-                variant="destructive"
-                onClick={handleDelete}
-                disabled={isDeleting}
-              >
-                {isDeleting && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
-                <Trash2 className="mr-2 h-4 w-4" />
-                Remove Logo
-              </Button>
-            </CardFooter>
-          )}
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Upload New Logo</CardTitle>
-            <CardDescription>
-              Supported formats: PNG, JPG, SVG, WebP (max 2MB)
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="logo">Select File</Label>
-              <Input
-                id="logo"
-                type="file"
-                accept="image/png,image/jpeg,image/svg+xml,image/webp"
-                onChange={handleFileSelect}
-                disabled={isUploading}
-              />
-            </div>
-
-            {previewUrl && (
-              <div className="space-y-4">
-                <div className="p-4 border rounded-lg bg-muted">
-                  <p className="text-sm text-muted-foreground mb-2">Preview:</p>
-                  <div className="flex items-center justify-center h-24">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={previewUrl}
-                      alt="Logo Preview"
-                      style={{
-                        maxHeight: "80px",
-                        maxWidth: "200px",
-                        objectFit: "contain",
-                      }}
-                    />
-                  </div>
-                </div>
-                <div className="flex space-x-2">
-                  <Button
-                    onClick={handleUpload}
-                    disabled={isUploading}
-                    className="flex-1"
-                  >
-                    {isUploading ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <Upload className="mr-2 h-4 w-4" />
-                    )}
-                    {isUploading ? "Uploading..." : "Upload Logo"}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={handleCancelSelection}
-                    disabled={isUploading}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            <div className="text-sm text-muted-foreground space-y-1">
-              <p>Tips for best results:</p>
-              <ul className="list-disc list-inside space-y-1">
-                <li>Use a transparent background (PNG or SVG)</li>
-                <li>Horizontal logos work best</li>
-                <li>Recommended height: 48-100px</li>
-                <li>Aspect ratio will be preserved automatically</li>
-              </ul>
-            </div>
-          </CardContent>
-        </Card>
+        {renderLogoCard(
+          "light",
+          logoUrl,
+          <Sun className="h-5 w-5" />,
+          "Light Mode Logo",
+          "Displayed when the app is in light mode"
+        )}
+        {renderLogoCard(
+          "dark",
+          logoUrlDark,
+          <Moon className="h-5 w-5" />,
+          "Dark Mode Logo",
+          "Displayed when the app is in dark mode"
+        )}
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Tips for Best Results</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
+            <li>Use a transparent background (PNG or SVG)</li>
+            <li>Horizontal logos work best</li>
+            <li>Recommended height: 48-100px</li>
+            <li>For dark mode, use a light-colored or white logo</li>
+            <li>For light mode, use a dark-colored or black logo</li>
+            <li>Maximum file size: 2MB</li>
+            <li>Supported formats: PNG, JPG, SVG, WebP</li>
+          </ul>
+        </CardContent>
+      </Card>
     </div>
   );
 }

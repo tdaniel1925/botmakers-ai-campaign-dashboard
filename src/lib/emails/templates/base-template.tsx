@@ -88,6 +88,7 @@ const container = {
   padding: "20px 0 48px",
   marginBottom: "64px",
   maxWidth: "600px",
+  overflow: "hidden" as const,
 };
 
 const headerSection = {
