@@ -284,6 +284,49 @@ export const auditLogs = pgTable("audit_logs", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// SMS Rules - Natural language trigger rules per campaign
+export const smsRules = pgTable("sms_rules", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  campaignId: uuid("campaign_id").references(() => campaigns.id, { onDelete: "cascade" }).notNull(),
+  name: text("name").notNull(), // e.g., "Send loan application link"
+  triggerCondition: text("trigger_condition").notNull(), // Natural language: "If caller wants to apply for a loan"
+  messageTemplate: text("message_template").notNull(), // SMS body text
+  isActive: boolean("is_active").default(true),
+  priority: integer("priority").default(0), // Higher priority rules evaluated first
+  // Stats
+  triggerCount: integer("trigger_count").default(0),
+  lastTriggeredAt: timestamp("last_triggered_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// SMS Logs - Track all sent SMS messages
+export const smsLogs = pgTable("sms_logs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  campaignId: uuid("campaign_id").references(() => campaigns.id, { onDelete: "set null" }),
+  callId: uuid("call_id").references(() => calls.id, { onDelete: "set null" }),
+  ruleId: uuid("rule_id").references(() => smsRules.id, { onDelete: "set null" }),
+  clientId: uuid("client_id").references(() => clients.id, { onDelete: "set null" }),
+  // Message details
+  recipientPhone: text("recipient_phone").notNull(),
+  messageBody: text("message_body").notNull(),
+  // Twilio tracking
+  twilioMessageSid: text("twilio_message_sid"),
+  twilioStatus: text("twilio_status"), // queued, sent, delivered, failed, undelivered
+  twilioErrorCode: text("twilio_error_code"),
+  twilioErrorMessage: text("twilio_error_message"),
+  // Status
+  status: text("status").notNull().default("pending"), // pending, sent, delivered, failed
+  // Cost tracking
+  segmentCount: integer("segment_count").default(1), // SMS segments used
+  cost: decimal("cost", { precision: 10, scale: 4 }), // Actual cost from Twilio
+  // Timestamps
+  sentAt: timestamp("sent_at"),
+  deliveredAt: timestamp("delivered_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Notifications
 export const notifications = pgTable("notifications", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -351,6 +394,35 @@ export const campaignsRelations = relations(campaigns, ({ one, many }) => ({
   outcomeTags: many(campaignOutcomeTags),
   calls: many(calls),
   webhookLogs: many(webhookLogs),
+  smsRules: many(smsRules),
+  smsLogs: many(smsLogs),
+}));
+
+export const smsRulesRelations = relations(smsRules, ({ one, many }) => ({
+  campaign: one(campaigns, {
+    fields: [smsRules.campaignId],
+    references: [campaigns.id],
+  }),
+  smsLogs: many(smsLogs),
+}));
+
+export const smsLogsRelations = relations(smsLogs, ({ one }) => ({
+  campaign: one(campaigns, {
+    fields: [smsLogs.campaignId],
+    references: [campaigns.id],
+  }),
+  call: one(calls, {
+    fields: [smsLogs.callId],
+    references: [calls.id],
+  }),
+  rule: one(smsRules, {
+    fields: [smsLogs.ruleId],
+    references: [smsRules.id],
+  }),
+  client: one(clients, {
+    fields: [smsLogs.clientId],
+    references: [clients.id],
+  }),
 }));
 
 export const campaignOutcomeTagsRelations = relations(
@@ -416,3 +488,7 @@ export type AuditLog = typeof auditLogs.$inferSelect;
 export type NewAuditLog = typeof auditLogs.$inferInsert;
 export type Notification = typeof notifications.$inferSelect;
 export type NewNotification = typeof notifications.$inferInsert;
+export type SmsRule = typeof smsRules.$inferSelect;
+export type NewSmsRule = typeof smsRules.$inferInsert;
+export type SmsLog = typeof smsLogs.$inferSelect;
+export type NewSmsLog = typeof smsLogs.$inferInsert;

@@ -110,14 +110,6 @@ export const WelcomeEmail: React.FC<WelcomeEmailProps> = ({
             </Text>
           </Section>
 
-          {/* Security Notice */}
-          <Section style={securitySection}>
-            <Text style={securityText}>
-              <strong>Security Tip:</strong> Never share your password with
-              anyone. {companyName} will never ask for your password via email.
-            </Text>
-          </Section>
-
           {/* Footer */}
           <Hr style={hr} />
           <Section style={footerSection}>
@@ -259,23 +251,6 @@ const button = {
   textAlign: "center" as const,
   display: "inline-block",
   padding: "14px 32px",
-};
-
-const securitySection = {
-  backgroundColor: "#fef3c7",
-  borderRadius: "6px",
-  margin: "24px 48px",
-  padding: "16px",
-  overflow: "hidden" as const,
-};
-
-const securityText = {
-  color: "#92400e",
-  fontSize: "13px",
-  lineHeight: "20px",
-  margin: "0",
-  wordBreak: "break-word" as const,
-  overflowWrap: "break-word" as const,
 };
 
 const hr = {

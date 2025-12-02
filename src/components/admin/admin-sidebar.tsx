@@ -19,6 +19,7 @@ import {
   FileText,
   Key,
   CreditCard,
+  MessageSquare,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -55,6 +56,11 @@ const sidebarItems = [
     title: "Email Logs",
     href: "/admin/email-logs",
     icon: FileText,
+  },
+  {
+    title: "SMS Logs",
+    href: "/admin/sms-logs",
+    icon: MessageSquare,
   },
   {
     title: "Billing & Plans",

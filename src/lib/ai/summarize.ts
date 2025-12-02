@@ -1,6 +1,7 @@
 import { summarizeCall, SummarizationResult } from "./deepseek";
 import { createClient } from "@supabase/supabase-js";
 import { trackCallUsage } from "@/lib/billing/usage-tracker";
+import { processCallForSms } from "@/lib/sms";
 
 // Lazy init to avoid build-time errors when env vars aren't available
 function getSupabaseClient() {
@@ -105,6 +106,17 @@ export async function processCallWithAI(callId: string): Promise<void> {
           // Log but don't fail the call processing
           console.error("Failed to track usage:", billingError);
         }
+      }
+
+      // Process SMS rules after successful AI analysis
+      try {
+        const smsResult = await processCallForSms(callId);
+        if (smsResult.sent) {
+          console.log(`SMS triggered for call ${callId}, log ID: ${smsResult.smsLogId}`);
+        }
+      } catch (smsError) {
+        // Log but don't fail the call processing
+        console.error("SMS processing error:", smsError);
       }
     }
   } catch (error) {
