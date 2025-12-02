@@ -13,24 +13,18 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Megaphone,
   Phone,
   ArrowRight,
   Search,
-  Loader2,
   TrendingUp,
-  TrendingDown,
+  CheckCircle2,
+  Clock,
 } from "lucide-react";
-import { format } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 
 interface Campaign {
   id: string;
@@ -42,6 +36,48 @@ interface Campaign {
   completed_calls: number;
   last_call_at: string | null;
   positive_outcomes: number;
+}
+
+function CampaignsSkeleton() {
+  return (
+    <div className="space-y-8">
+      <div className="space-y-2">
+        <Skeleton className="h-10 w-48" />
+        <Skeleton className="h-5 w-72" />
+      </div>
+      <div className="grid gap-4 md:grid-cols-3">
+        {[...Array(3)].map((_, i) => (
+          <Card key={i} className="relative overflow-hidden">
+            <CardHeader className="pb-2">
+              <Skeleton className="h-4 w-24" />
+            </CardHeader>
+            <CardContent>
+              <Skeleton className="h-9 w-16 mb-2" />
+              <Skeleton className="h-3 w-32" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div className="space-y-2">
+              <Skeleton className="h-6 w-40" />
+              <Skeleton className="h-4 w-56" />
+            </div>
+            <Skeleton className="h-10 w-64" />
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {[...Array(4)].map((_, i) => (
+              <Skeleton key={i} className="h-24 w-full" />
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
 }
 
 export default function CampaignsPage() {
@@ -60,7 +96,6 @@ export default function CampaignsPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user?.email) return;
 
-      // Get client
       const { data: client } = await supabase
         .from("clients")
         .select("id")
@@ -69,7 +104,6 @@ export default function CampaignsPage() {
 
       if (!client) return;
 
-      // Get campaigns with call stats
       const { data: campaignsData } = await supabase
         .from("campaigns")
         .select(`
@@ -141,18 +175,18 @@ export default function CampaignsPage() {
 
   const totalCalls = campaigns.reduce((sum, c) => sum + c.call_count, 0);
   const activeCampaigns = campaigns.filter((c) => c.is_active).length;
+  const totalPositive = campaigns.reduce((sum, c) => sum + c.positive_outcomes, 0);
+  const totalCompleted = campaigns.reduce((sum, c) => sum + c.completed_calls, 0);
+  const overallSuccessRate = totalCompleted > 0 ? Math.round((totalPositive / totalCompleted) * 100) : 0;
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    );
+    return <CampaignsSkeleton />;
   }
 
   return (
-    <div className="space-y-6">
-      <div>
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="flex flex-col gap-1">
         <h1 className="text-3xl font-bold tracking-tight">Campaigns</h1>
         <p className="text-muted-foreground">
           View your campaigns and their call analytics
@@ -161,62 +195,77 @@ export default function CampaignsPage() {
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2">
+        <Card className="relative overflow-hidden">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Total Campaigns
             </CardTitle>
+            <div className="rounded-full bg-violet-100 dark:bg-violet-900/20 p-2">
+              <Megaphone className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">{campaigns.length}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {activeCampaigns} active
-            </p>
+            <div className="flex items-center gap-2 mt-1">
+              <Badge variant="secondary" className="text-xs">
+                {activeCampaigns} active
+              </Badge>
+              <span className="text-xs text-muted-foreground">
+                {campaigns.length - activeCampaigns} inactive
+              </span>
+            </div>
           </CardContent>
+          <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-violet-500 to-violet-600" />
         </Card>
 
-        <Card>
-          <CardHeader className="pb-2">
+        <Card className="relative overflow-hidden">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Total Calls
             </CardTitle>
+            <div className="rounded-full bg-blue-100 dark:bg-blue-900/20 p-2">
+              <Phone className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{totalCalls}</div>
+            <div className="text-3xl font-bold">{totalCalls.toLocaleString()}</div>
             <p className="text-xs text-muted-foreground mt-1">
               Across all campaigns
             </p>
           </CardContent>
+          <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-blue-600" />
         </Card>
 
-        <Card>
-          <CardHeader className="pb-2">
+        <Card className="relative overflow-hidden">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Positive Outcomes
+              Success Rate
             </CardTitle>
+            <div className="rounded-full bg-emerald-100 dark:bg-emerald-900/20 p-2">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">
-              {campaigns.reduce((sum, c) => sum + c.positive_outcomes, 0)}
+            <div className="text-3xl font-bold">{overallSuccessRate}%</div>
+            <div className="mt-2">
+              <Progress value={overallSuccessRate} className="h-2" />
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Successful call outcomes
-            </p>
           </CardContent>
+          <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 to-emerald-600" />
         </Card>
       </div>
 
-      {/* Search and Campaigns List */}
+      {/* Campaigns List */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <CardTitle>Your Campaigns</CardTitle>
               <CardDescription>
-                Click on a campaign to view its calls
+                Click on a campaign to view its calls and analytics
               </CardDescription>
             </div>
-            <div className="relative w-64">
+            <div className="relative w-full sm:w-72">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search campaigns..."
@@ -229,100 +278,99 @@ export default function CampaignsPage() {
         </CardHeader>
         <CardContent>
           {filteredCampaigns.length === 0 ? (
-            <div className="text-center py-12">
-              <Megaphone className="mx-auto h-12 w-12 text-muted-foreground" />
-              <h3 className="mt-4 font-semibold">No campaigns found</h3>
-              <p className="text-sm text-muted-foreground mt-1">
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="rounded-full bg-muted p-4 mb-4">
+                <Megaphone className="h-10 w-10 text-muted-foreground" />
+              </div>
+              <h3 className="text-lg font-semibold">No campaigns found</h3>
+              <p className="text-sm text-muted-foreground mt-1 max-w-sm">
                 {searchQuery
-                  ? "Try adjusting your search"
-                  : "You don't have any campaigns yet"}
+                  ? "Try adjusting your search terms"
+                  : "You don't have any campaigns yet. Contact your administrator to set up campaigns."}
               </p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Campaign</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-center">Calls</TableHead>
-                  <TableHead className="text-center">Positive</TableHead>
-                  <TableHead>Last Call</TableHead>
-                  <TableHead className="text-right">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredCampaigns.map((campaign) => {
-                  const successRate = campaign.completed_calls > 0
-                    ? Math.round((campaign.positive_outcomes / campaign.completed_calls) * 100)
-                    : 0;
+            <div className="space-y-4">
+              {filteredCampaigns.map((campaign) => {
+                const successRate = campaign.completed_calls > 0
+                  ? Math.round((campaign.positive_outcomes / campaign.completed_calls) * 100)
+                  : 0;
 
-                  return (
-                    <TableRow key={campaign.id}>
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 bg-muted rounded-md">
-                            <Megaphone className="h-4 w-4" />
+                return (
+                  <Link
+                    key={campaign.id}
+                    href={`/dashboard/campaigns/${campaign.id}`}
+                    className="block"
+                  >
+                    <div className="group flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl border bg-card hover:bg-muted/50 hover:border-primary/20 transition-all duration-200">
+                      <div className="flex items-start sm:items-center gap-4 mb-4 sm:mb-0">
+                        <div className="rounded-xl bg-primary/10 p-3 group-hover:bg-primary/20 transition-colors">
+                          <Megaphone className="h-6 w-6 text-primary" />
+                        </div>
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-semibold text-base group-hover:text-primary transition-colors">
+                              {campaign.name}
+                            </h3>
+                            <Badge
+                              variant={campaign.is_active ? "default" : "secondary"}
+                              className="text-xs"
+                            >
+                              {campaign.is_active ? "Active" : "Inactive"}
+                            </Badge>
                           </div>
-                          <div>
-                            <p className="font-medium">{campaign.name}</p>
-                            {campaign.description && (
-                              <p className="text-sm text-muted-foreground truncate max-w-[200px]">
-                                {campaign.description}
-                              </p>
+                          {campaign.description && (
+                            <p className="text-sm text-muted-foreground line-clamp-1 max-w-md">
+                              {campaign.description}
+                            </p>
+                          )}
+                          <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                            <span className="flex items-center gap-1">
+                              <Clock className="h-3 w-3" />
+                              Created {format(new Date(campaign.created_at), "MMM d, yyyy")}
+                            </span>
+                            {campaign.last_call_at && (
+                              <span className="flex items-center gap-1">
+                                <Phone className="h-3 w-3" />
+                                Last call {formatDistanceToNow(new Date(campaign.last_call_at), { addSuffix: true })}
+                              </span>
                             )}
                           </div>
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={campaign.is_active ? "success" : "secondary"}>
-                          {campaign.is_active ? "Active" : "Inactive"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <Phone className="h-4 w-4 text-muted-foreground" />
-                          <span className="font-medium">{campaign.call_count}</span>
+                      </div>
+
+                      <div className="flex items-center justify-between sm:justify-end gap-6">
+                        <div className="flex items-center gap-6">
+                          <div className="text-center">
+                            <p className="text-2xl font-bold">{campaign.call_count}</p>
+                            <p className="text-xs text-muted-foreground">Calls</p>
+                          </div>
+                          <div className="text-center min-w-[80px]">
+                            <div className="flex items-center justify-center gap-1">
+                              {successRate >= 50 && (
+                                <TrendingUp className="h-4 w-4 text-emerald-500" />
+                              )}
+                              <p className={`text-2xl font-bold ${successRate >= 50 ? "text-emerald-600" : ""}`}>
+                                {successRate}%
+                              </p>
+                            </div>
+                            <p className="text-xs text-muted-foreground">Success</p>
+                          </div>
                         </div>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          {successRate >= 50 ? (
-                            <TrendingUp className="h-4 w-4 text-green-500" />
-                          ) : successRate > 0 ? (
-                            <TrendingDown className="h-4 w-4 text-red-500" />
-                          ) : null}
-                          <span className={successRate >= 50 ? "text-green-600" : ""}>
-                            {campaign.positive_outcomes}
-                          </span>
-                          {campaign.completed_calls > 0 && (
-                            <span className="text-muted-foreground text-xs">
-                              ({successRate}%)
-                            </span>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {campaign.last_call_at ? (
-                          <span className="text-sm text-muted-foreground">
-                            {format(new Date(campaign.last_call_at), "MMM d, h:mm a")}
-                          </span>
-                        ) : (
-                          <span className="text-sm text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button asChild size="sm" variant="outline">
-                          <Link href={`/dashboard/campaigns/${campaign.id}`}>
-                            View Calls
-                            <ArrowRight className="ml-2 h-4 w-4" />
-                          </Link>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="shrink-0 group-hover:bg-primary group-hover:text-primary-foreground transition-colors"
+                        >
+                          View
+                          <ArrowRight className="ml-2 h-4 w-4" />
                         </Button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
           )}
         </CardContent>
       </Card>
