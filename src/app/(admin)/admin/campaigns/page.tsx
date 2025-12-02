@@ -78,10 +78,16 @@ export default async function CampaignsPage() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <code className="text-xs bg-muted px-2 py-1 rounded">
-                      {campaign.webhook_token.substring(0, 12)}...
-                    </code>
-                    <CopyWebhookButton webhookToken={campaign.webhook_token} />
+                    {campaign.webhook_token ? (
+                      <>
+                        <code className="text-xs bg-muted px-2 py-1 rounded">
+                          {campaign.webhook_token.substring(0, 12)}...
+                        </code>
+                        <CopyWebhookButton webhookToken={campaign.webhook_token} />
+                      </>
+                    ) : (
+                      <span className="text-muted-foreground text-xs">Not set</span>
+                    )}
                   </TableCell>
                   <TableCell>
                     {campaign.is_active ? (

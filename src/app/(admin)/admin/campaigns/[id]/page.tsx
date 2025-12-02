@@ -20,15 +20,22 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, ArrowLeft, Copy, ExternalLink, BarChart3 } from "lucide-react";
 import Link from "next/link";
 import { format } from "date-fns";
-import type { Campaign } from "@/lib/db/schema";
-
-interface CampaignWithClient extends Campaign {
+interface CampaignData {
+  id: string;
+  name: string;
+  description: string | null;
+  client_id: string;
+  is_active: boolean;
+  webhook_token: string;
+  payload_mapping: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
   clients?: { name: string; company_name?: string };
 }
 
 export default function EditCampaignPage() {
   const params = useParams();
-  const [campaign, setCampaign] = useState<CampaignWithClient | null>(null);
+  const [campaign, setCampaign] = useState<CampaignData | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [isActive, setIsActive] = useState(true);
@@ -38,7 +45,7 @@ export default function EditCampaignPage() {
   const { toast } = useToast();
 
   const webhookUrl = campaign
-    ? `${process.env.NEXT_PUBLIC_APP_URL || window.location.origin}/api/webhooks/${campaign.webhookToken}`
+    ? `${process.env.NEXT_PUBLIC_APP_URL || window.location.origin}/api/webhooks/${campaign.webhook_token}`
     : "";
 
   useEffect(() => {
@@ -214,7 +221,7 @@ export default function EditCampaignPage() {
               <div>
                 <Label className="text-muted-foreground">Status</Label>
                 <div className="mt-1">
-                  {campaign?.isActive ? (
+                  {campaign?.is_active ? (
                     <Badge variant="success">Active</Badge>
                   ) : (
                     <Badge variant="secondary">Inactive</Badge>
@@ -224,9 +231,9 @@ export default function EditCampaignPage() {
               <div>
                 <Label className="text-muted-foreground">Created</Label>
                 <p className="text-sm">
-                  {campaign?.createdAt &&
+                  {campaign?.created_at &&
                     format(
-                      new Date(campaign.createdAt),
+                      new Date(campaign.created_at),
                       "MMM d, yyyy 'at' h:mm a"
                     )}
                 </p>
