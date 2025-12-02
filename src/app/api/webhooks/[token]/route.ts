@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getNestedValue } from "@/lib/utils";
 import { processCallWithAI } from "@/lib/ai/summarize";
 import { campaignRateLimiter, ipRateLimiter, aiQueue } from "@/lib/rate-limiter";
 
@@ -24,21 +23,134 @@ function getClientIP(request: Request): string {
   return "unknown";
 }
 
-interface PayloadMapping {
-  transcript?: string;
-  audio_url?: string;
-  caller_phone?: string;
-  call_duration?: string;
-  timestamp?: string;
-  recording_id?: string;
+// Auto-detect fields from common voice AI platforms (Vapi, AutoCalls.ai, etc.)
+function autoDetectFields(payload: Record<string, unknown>) {
+  // Helper to search for a value in nested objects
+  function findValue(obj: unknown, keys: string[]): unknown {
+    if (!obj || typeof obj !== "object") return undefined;
+
+    const record = obj as Record<string, unknown>;
+
+    // Check direct keys first
+    for (const key of keys) {
+      if (key in record && record[key] !== undefined && record[key] !== null && record[key] !== "") {
+        return record[key];
+      }
+    }
+
+    // Check nested paths (e.g., "message.transcript")
+    for (const key of keys) {
+      if (key.includes(".")) {
+        const parts = key.split(".");
+        let current: unknown = record;
+        for (const part of parts) {
+          if (current && typeof current === "object" && part in (current as Record<string, unknown>)) {
+            current = (current as Record<string, unknown>)[part];
+          } else {
+            current = undefined;
+            break;
+          }
+        }
+        if (current !== undefined && current !== null && current !== "") {
+          return current;
+        }
+      }
+    }
+
+    // Search in nested objects (but not arrays)
+    for (const value of Object.values(record)) {
+      if (value && typeof value === "object" && !Array.isArray(value)) {
+        const found = findValue(value, keys);
+        if (found !== undefined) return found;
+      }
+    }
+
+    return undefined;
+  }
+
+  // Common field names for each data type across platforms
+  const transcriptKeys = [
+    "transcript", "transcription", "text", "content", "message",
+    "call_transcript", "conversation", "dialog",
+    // Vapi specific
+    "artifact.transcript",
+    // AutoCalls specific
+    "recording_transcript", "call_recording_transcript"
+  ];
+
+  const audioUrlKeys = [
+    "recording_url", "recordingUrl", "audio_url", "audioUrl",
+    "audio", "recording", "media_url", "mediaUrl",
+    "stereo_recording_url", "stereoRecordingUrl",
+    // Vapi specific
+    "artifact.recordingUrl",
+    // AutoCalls specific
+    "call_recording_url", "recording_link"
+  ];
+
+  const phoneKeys = [
+    "from", "phone", "caller", "phone_number", "phoneNumber",
+    "caller_phone", "callerPhone", "customer_phone", "customerPhone",
+    "from_number", "fromNumber", "caller_id", "callerId",
+    // Vapi specific
+    "customer.number",
+    // AutoCalls specific
+    "contact_phone", "lead_phone"
+  ];
+
+  const durationKeys = [
+    "duration", "call_duration", "callDuration", "length",
+    "duration_seconds", "durationSeconds", "duration_ms", "durationMs",
+    "talk_time", "talkTime", "call_length", "callLength",
+    // Vapi specific
+    "artifact.duration",
+    // AutoCalls specific
+    "call_duration_seconds", "total_duration"
+  ];
+
+  const timestampKeys = [
+    "timestamp", "created_at", "createdAt", "start_time", "startTime",
+    "call_time", "callTime", "date", "datetime", "started_at", "startedAt",
+    // Vapi specific
+    "startedAt",
+    // AutoCalls specific
+    "call_start_time", "call_date"
+  ];
+
+  const callIdKeys = [
+    "id", "call_id", "callId", "external_id", "externalId",
+    "recording_id", "recordingId", "uuid", "call_uuid", "callUuid",
+    // AutoCalls specific
+    "call_reference", "unique_id"
+  ];
+
+  const statusKeys = [
+    "status", "call_status", "callStatus", "disposition",
+    "outcome", "result", "ended_reason", "endedReason",
+    // Vapi specific
+    "endedReason",
+    // AutoCalls specific
+    "call_outcome", "call_result"
+  ];
+
+  return {
+    transcript: findValue(payload, transcriptKeys) as string | undefined,
+    audioUrl: findValue(payload, audioUrlKeys) as string | undefined,
+    callerPhone: findValue(payload, phoneKeys) as string | undefined,
+    callDuration: findValue(payload, durationKeys) as number | string | undefined,
+    timestamp: findValue(payload, timestampKeys) as string | undefined,
+    externalCallId: findValue(payload, callIdKeys) as string | undefined,
+    callStatus: findValue(payload, statusKeys) as string | undefined,
+  };
 }
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ token: string }> }
 ) {
+  const supabase = getSupabaseClient();
+
   try {
-    const supabase = getSupabaseClient();
     const { token } = await params;
     const clientIP = getClientIP(request);
 
@@ -77,7 +189,7 @@ export async function POST(
     // Find campaign by webhook token
     const { data: campaign, error: campaignError } = await supabase
       .from("campaigns")
-      .select("id, is_active, payload_mapping")
+      .select("id, is_active")
       .eq("webhook_token", token)
       .single();
 
@@ -95,45 +207,51 @@ export async function POST(
       );
     }
 
-    // Log the webhook
-    await supabase.from("webhook_logs").insert({
-      campaign_id: campaign.id,
-      payload,
-      status: "processing",
+    // Auto-detect fields from payload (works with Vapi, AutoCalls.ai, etc.)
+    const detected = autoDetectFields(payload);
+
+    // Log what was detected for debugging
+    console.log("Webhook received for campaign:", campaign.id);
+    console.log("Auto-detected fields:", {
+      hasTranscript: !!detected.transcript,
+      hasAudio: !!detected.audioUrl,
+      hasPhone: !!detected.callerPhone,
+      hasDuration: !!detected.callDuration,
+      hasTimestamp: !!detected.timestamp,
+      hasCallId: !!detected.externalCallId,
     });
 
-    // Extract fields using payload mapping
-    const mapping = (campaign.payload_mapping as PayloadMapping) || {};
-
-    const transcript = getNestedValue(payload, mapping.transcript || "transcript");
-    const audioUrl = getNestedValue(payload, mapping.audio_url);
-    const callerPhone = getNestedValue(payload, mapping.caller_phone);
-    const callDuration = getNestedValue(payload, mapping.call_duration);
-    const timestamp = getNestedValue(payload, mapping.timestamp);
-    const externalCallId = getNestedValue(payload, mapping.recording_id);
-
-    // Validate transcript
-    if (!transcript || typeof transcript !== "string") {
+    // Validate - we need at least a transcript for AI analysis
+    if (!detected.transcript || typeof detected.transcript !== "string") {
       await supabase.from("webhook_logs").insert({
         campaign_id: campaign.id,
         payload,
         status: "failed",
-        error_message: "Missing or invalid transcript field",
+        error_message: "Could not find transcript in payload",
       });
 
       return NextResponse.json(
-        { error: "Transcript is required" },
+        {
+          error: "Could not find transcript in payload",
+          hint: "Ensure your voice AI platform includes the call transcript",
+          detected: {
+            transcript: null,
+            audioUrl: detected.audioUrl ? "found" : null,
+            phone: detected.callerPhone ? "found" : null,
+            duration: detected.callDuration ? "found" : null,
+          }
+        },
         { status: 400 }
       );
     }
 
-    // Parse duration if it's a string
+    // Parse duration
     let parsedDuration: number | null = null;
-    if (callDuration) {
-      if (typeof callDuration === "number") {
-        parsedDuration = callDuration;
-      } else if (typeof callDuration === "string") {
-        parsedDuration = parseInt(callDuration, 10);
+    if (detected.callDuration) {
+      if (typeof detected.callDuration === "number") {
+        parsedDuration = detected.callDuration;
+      } else if (typeof detected.callDuration === "string") {
+        parsedDuration = parseInt(detected.callDuration, 10);
         if (isNaN(parsedDuration)) {
           parsedDuration = null;
         }
@@ -142,24 +260,24 @@ export async function POST(
 
     // Parse timestamp
     let parsedTimestamp: string | null = null;
-    if (timestamp) {
+    if (detected.timestamp) {
       try {
-        parsedTimestamp = new Date(timestamp as string).toISOString();
+        parsedTimestamp = new Date(detected.timestamp).toISOString();
       } catch {
         parsedTimestamp = null;
       }
     }
 
-    // Create call record
+    // Create call record with all raw data
     const { data: call, error: callError } = await supabase
       .from("calls")
       .insert({
         campaign_id: campaign.id,
-        transcript: transcript as string,
-        audio_url: audioUrl as string | undefined,
-        caller_phone: callerPhone as string | undefined,
+        transcript: detected.transcript,
+        audio_url: detected.audioUrl,
+        caller_phone: detected.callerPhone,
         call_duration: parsedDuration,
-        external_call_id: externalCallId as string | undefined,
+        external_call_id: detected.externalCallId,
         raw_payload: payload,
         call_timestamp: parsedTimestamp,
         status: "processing",
@@ -181,23 +299,27 @@ export async function POST(
       );
     }
 
-    // Update webhook log to success
-    await supabase
-      .from("webhook_logs")
-      .update({ status: "success" })
-      .eq("campaign_id", campaign.id)
-      .eq("status", "processing")
-      .order("created_at", { ascending: false })
-      .limit(1);
+    // Log success
+    await supabase.from("webhook_logs").insert({
+      campaign_id: campaign.id,
+      payload,
+      status: "success",
+    });
 
-    // Queue AI processing with rate limiting (max 10 concurrent)
+    // Queue AI processing
     aiQueue.add(call.id, () => processCallWithAI(call.id));
 
     return NextResponse.json({
       success: true,
       callId: call.id,
-      message: "Call received and queued for processing",
-      queuePosition: aiQueue.getQueueLength(),
+      message: "Call received and queued for AI processing",
+      detected: {
+        transcript: "found",
+        audioUrl: detected.audioUrl ? "found" : null,
+        phone: detected.callerPhone || null,
+        duration: parsedDuration,
+        callId: detected.externalCallId || null,
+      }
     });
   } catch (error) {
     console.error("Webhook error:", error);
@@ -210,7 +332,7 @@ export async function POST(
 
 // Allow GET for webhook verification (some platforms require this)
 export async function GET(
-  request: Request,
+  _request: Request,
   { params }: { params: Promise<{ token: string }> }
 ) {
   const supabase = getSupabaseClient();
@@ -219,7 +341,7 @@ export async function GET(
   // Verify the token exists
   const { data: campaign } = await supabase
     .from("campaigns")
-    .select("id")
+    .select("id, name")
     .eq("webhook_token", token)
     .single();
 
@@ -229,6 +351,7 @@ export async function GET(
 
   return NextResponse.json({
     status: "active",
-    message: "Webhook endpoint is ready to receive calls",
+    campaign: campaign.name,
+    message: "Webhook is ready. Send POST requests with call data including a transcript field.",
   });
 }
