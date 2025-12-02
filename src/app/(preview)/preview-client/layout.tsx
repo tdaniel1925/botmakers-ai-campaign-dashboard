@@ -10,7 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import {
   LayoutDashboard,
-  Phone,
+  Megaphone,
   FileBarChart,
   ArrowLeft,
   User,
@@ -25,9 +25,9 @@ const sidebarItems = [
     icon: LayoutDashboard,
   },
   {
-    title: "Calls",
-    href: "/preview-client/calls",
-    icon: Phone,
+    title: "Campaigns",
+    href: "/preview-client/campaigns",
+    icon: Megaphone,
   },
   {
     title: "Reports",
