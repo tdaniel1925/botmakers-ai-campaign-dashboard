@@ -69,7 +69,9 @@ function autoDetectFields(payload: Record<string, unknown>) {
   }
 
   // Common field names for each data type across platforms
+  // AutoCalls.ai uses "formatted_transcript" (string) or "transcript" (array)
   const transcriptKeys = [
+    "formatted_transcript", // AutoCalls.ai - string format (preferred)
     "transcript", "transcription", "text", "content", "message",
     "call_transcript", "conversation", "dialog",
     // Vapi specific
@@ -133,8 +135,27 @@ function autoDetectFields(payload: Record<string, unknown>) {
     "call_outcome", "call_result"
   ];
 
+  // Get transcript - handle both string and array formats
+  // First try formatted_transcript (AutoCalls.ai string format)
+  let transcript: unknown = findValue(payload, ["formatted_transcript"]);
+
+  // If not found, try other transcript keys
+  if (!transcript) {
+    transcript = findValue(payload, transcriptKeys);
+  }
+
+  // If transcript is an array (AutoCalls.ai raw format), convert to string
+  if (Array.isArray(transcript)) {
+    transcript = transcript
+      .map((item: { text?: string; sender?: string }) => {
+        const sender = item.sender === "bot" ? "AI" : "Customer";
+        return `${sender}: ${item.text || ""}`;
+      })
+      .join("\n");
+  }
+
   return {
-    transcript: findValue(payload, transcriptKeys) as string | undefined,
+    transcript: transcript as string | undefined,
     audioUrl: findValue(payload, audioUrlKeys) as string | undefined,
     callerPhone: findValue(payload, phoneKeys) as string | undefined,
     callDuration: findValue(payload, durationKeys) as number | string | undefined,

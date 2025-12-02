@@ -1,12 +1,14 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Phone, Clock, Smile, Frown, Meh } from "lucide-react";
+import { Phone, Clock, Smile, Frown, Meh, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { formatDuration, maskPhoneNumber } from "@/lib/utils";
 
 // Support both camelCase (Drizzle) and snake_case (Supabase direct) field names
 interface CallData {
   id: string;
+  // Status
+  status?: string | null;
   // Timestamps - support both cases
   callTimestamp?: Date | string | null;
   call_timestamp?: Date | string | null;
@@ -93,22 +95,31 @@ export function CallCard({ call, onClick }: CallCardProps) {
         </div>
 
         <div className="mt-3 flex items-center space-x-2">
-          {call.campaign_outcome_tags && (
-            <Badge
-              style={{
-                backgroundColor: call.campaign_outcome_tags.tag_color,
-                color: "#fff",
-              }}
-            >
-              {call.campaign_outcome_tags.tag_name}
+          {call.status === "processing" ? (
+            <Badge variant="secondary" className="flex items-center gap-1">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Processing
             </Badge>
+          ) : (
+            <>
+              {call.campaign_outcome_tags && (
+                <Badge
+                  style={{
+                    backgroundColor: call.campaign_outcome_tags.tag_color,
+                    color: "#fff",
+                  }}
+                >
+                  {call.campaign_outcome_tags.tag_name}
+                </Badge>
+              )}
+              <div className="flex items-center space-x-1">
+                {getSentimentIcon()}
+                <span className="text-xs capitalize text-muted-foreground">
+                  {sentiment || "Pending"}
+                </span>
+              </div>
+            </>
           )}
-          <div className="flex items-center space-x-1">
-            {getSentimentIcon()}
-            <span className="text-xs capitalize text-muted-foreground">
-              {sentiment || "Pending"}
-            </span>
-          </div>
         </div>
 
         {summary && (

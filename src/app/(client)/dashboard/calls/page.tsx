@@ -70,7 +70,7 @@ export default function CallsPage() {
 
         const campaignIds = campaigns.map((c) => c.id);
 
-        // Build query
+        // Build query - show both completed and processing calls
         let query = supabase
           .from("calls")
           .select(
@@ -84,7 +84,7 @@ export default function CallsPage() {
             { count: "exact" }
           )
           .in("campaign_id", campaignIds)
-          .eq("status", "completed");
+          .in("status", ["completed", "processing"]);
 
         // Apply sentiment filter
         if (sentimentFilter !== "all") {
