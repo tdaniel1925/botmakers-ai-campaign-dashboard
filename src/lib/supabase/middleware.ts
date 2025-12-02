@@ -51,14 +51,14 @@ export async function updateSession(request: NextRequest) {
   // If user is authenticated
   if (user) {
     // Check if admin user
-    const { data: adminUser } = await supabase
+    const { data: adminUser, error: adminError } = await supabase
       .from("admin_users")
       .select("id")
       .eq("id", user.id)
       .single();
 
     // Check if client user
-    const { data: clientUser } = await supabase
+    const { data: clientUser, error: clientError } = await supabase
       .from("clients")
       .select("id")
       .eq("email", user.email)
@@ -67,9 +67,18 @@ export async function updateSession(request: NextRequest) {
     const isAdmin = !!adminUser;
     const isClient = !!clientUser;
 
+    // Log RLS errors for debugging (but don't block)
+    if (adminError && adminError.code !== "PGRST116") {
+      console.error("Admin check error:", adminError.message);
+    }
+    if (clientError && clientError.code !== "PGRST116") {
+      console.error("Client check error:", clientError.message);
+    }
+
     // Redirect authenticated users from login page
     if (pathname === "/login") {
       const url = request.nextUrl.clone();
+      // If we can't determine user type, default to dashboard
       url.pathname = isAdmin ? "/admin" : "/dashboard";
       return NextResponse.redirect(url);
     }
@@ -88,11 +97,16 @@ export async function updateSession(request: NextRequest) {
       return NextResponse.redirect(url);
     }
 
-    // Protect client dashboard routes
+    // Protect client dashboard routes - but allow if we couldn't check due to RLS
+    // PGRST116 = no rows found (expected), other errors might be RLS issues
     if (pathname.startsWith("/dashboard") && !isClient && !isAdmin) {
-      const url = request.nextUrl.clone();
-      url.pathname = "/login";
-      return NextResponse.redirect(url);
+      // Only redirect to login if both checks definitively failed (no rows found)
+      // If there was an RLS error, let the page handle it
+      if (clientError?.code === "PGRST116" && adminError?.code === "PGRST116") {
+        const url = request.nextUrl.clone();
+        url.pathname = "/login";
+        return NextResponse.redirect(url);
+      }
     }
   }
 
