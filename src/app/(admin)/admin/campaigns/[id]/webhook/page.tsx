@@ -221,9 +221,10 @@ export default function WebhookConfigPage() {
                       </div>
                     </div>
                     <span className="text-xs text-muted-foreground">
-                      {formatDistanceToNow(new Date(log.created_at), {
-                        addSuffix: true,
-                      })}
+                      {formatDistanceToNow(
+                        new Date(log.created_at.endsWith("Z") ? log.created_at : log.created_at + "Z"),
+                        { addSuffix: true }
+                      )}
                     </span>
                   </div>
                 ))}
