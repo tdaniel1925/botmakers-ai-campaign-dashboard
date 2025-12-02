@@ -29,7 +29,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { name, email, company_name, send_invite, save_as_draft } = body;
+    const { name, email, company_name, billing_tier, billing_notes, send_invite, save_as_draft } = body;
 
     if (!name || !email) {
       return NextResponse.json(
@@ -86,6 +86,8 @@ export async function POST(request: Request) {
         temp_password: tempPassword,
         invite_status: inviteStatus,
         invited_at: send_invite ? new Date().toISOString() : null,
+        billing_tier: billing_tier || "standard",
+        billing_notes: billing_notes || null,
       })
       .select()
       .single();

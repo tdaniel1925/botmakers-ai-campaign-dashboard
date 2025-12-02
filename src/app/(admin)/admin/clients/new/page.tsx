@@ -5,6 +5,14 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Card,
   CardContent,
@@ -32,6 +40,7 @@ import {
   Send,
   Copy,
   Check,
+  CreditCard,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -39,6 +48,8 @@ export default function NewClientPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [companyName, setCompanyName] = useState("");
+  const [billingTier, setBillingTier] = useState("standard");
+  const [billingNotes, setBillingNotes] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [previewHtml, setPreviewHtml] = useState("");
@@ -117,6 +128,8 @@ export default function NewClientPage() {
           name,
           email,
           company_name: companyName || null,
+          billing_tier: billingTier,
+          billing_notes: billingNotes || null,
           send_invite: action === "send",
           save_as_draft: action === "draft",
         }),
@@ -282,49 +295,112 @@ export default function NewClientPage() {
           </CardFooter>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <Mail className="mr-2 h-5 w-5" />
-              Email Info
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4 text-sm">
-            <div>
-              <h4 className="font-medium">What happens when you send?</h4>
-              <ul className="mt-2 space-y-1 text-muted-foreground">
-                <li>- User account is created</li>
-                <li>- Secure password is generated</li>
-                <li>- Welcome email is sent with credentials</li>
-                <li>- Client can log in immediately</li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-medium">Save as Draft?</h4>
-              <p className="mt-1 text-muted-foreground">
-                Creates the client but doesn&apos;t send the email yet. You can send the
-                invite later from the client details page.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <Mail className="mr-2 h-5 w-5" />
+                Email Info
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 text-sm">
+              <div>
+                <h4 className="font-medium">What happens when you send?</h4>
+                <ul className="mt-2 space-y-1 text-muted-foreground">
+                  <li>- User account is created</li>
+                  <li>- Secure password is generated</li>
+                  <li>- Welcome email is sent with credentials</li>
+                  <li>- Client can log in immediately</li>
+                </ul>
+              </div>
+              <div>
+                <h4 className="font-medium">Save as Draft?</h4>
+                <p className="mt-1 text-muted-foreground">
+                  Creates the client but doesn&apos;t send the email yet. You can send the
+                  invite later from the client details page.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Billing Settings Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <CreditCard className="mr-2 h-5 w-5" />
+                Billing Settings
+              </CardTitle>
+              <CardDescription>
+                Set billing options for this client
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label>Billing Tier</Label>
+                <Select value={billingTier} onValueChange={setBillingTier}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="free">
+                      <div className="flex flex-col">
+                        <span>Free</span>
+                        <span className="text-xs text-muted-foreground">No charges</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="standard">
+                      <div className="flex flex-col">
+                        <span>Standard</span>
+                        <span className="text-xs text-muted-foreground">Pay-per-use</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="premium">
+                      <div className="flex flex-col">
+                        <span>Premium</span>
+                        <span className="text-xs text-muted-foreground">Enterprise</span>
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {billingTier === "free" && (
+                <div className="rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-950">
+                  <p className="text-sm text-green-700 dark:text-green-300">
+                    This client won&apos;t be charged for usage.
+                  </p>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <Label>Billing Notes</Label>
+                <Textarea
+                  placeholder="Internal notes..."
+                  value={billingNotes}
+                  onChange={(e) => setBillingNotes(e.target.value)}
+                  rows={2}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       {/* Email Preview Dialog */}
       <Dialog open={showPreview} onOpenChange={setShowPreview}>
-        <DialogContent className="max-w-4xl max-h-[90vh]">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle>Email Preview</DialogTitle>
             <DialogDescription>
               This is how the welcome email will appear to {name || "the client"}
             </DialogDescription>
           </DialogHeader>
-          <Tabs defaultValue="preview" className="w-full">
+          <Tabs defaultValue="preview" className="w-full flex-1 overflow-hidden flex flex-col">
             <TabsList>
               <TabsTrigger value="preview">Preview</TabsTrigger>
               <TabsTrigger value="html">HTML Source</TabsTrigger>
             </TabsList>
-            <TabsContent value="preview" className="mt-4">
+            <TabsContent value="preview" className="mt-4 flex-1 overflow-auto">
               {previewLoading ? (
                 <div className="flex items-center justify-center h-96">
                   <Loader2 className="h-8 w-8 animate-spin" />
@@ -333,14 +409,14 @@ export default function NewClientPage() {
                 <div className="border rounded-lg overflow-hidden bg-white">
                   <iframe
                     srcDoc={previewHtml}
-                    className="w-full h-[500px]"
+                    className="w-full h-[400px]"
                     title="Email Preview"
                   />
                 </div>
               )}
             </TabsContent>
-            <TabsContent value="html" className="mt-4">
-              <pre className="bg-muted p-4 rounded-lg overflow-auto max-h-[500px] text-xs">
+            <TabsContent value="html" className="mt-4 flex-1 overflow-auto">
+              <pre className="bg-muted p-4 rounded-lg text-xs whitespace-pre-wrap break-all">
                 {previewHtml}
               </pre>
             </TabsContent>

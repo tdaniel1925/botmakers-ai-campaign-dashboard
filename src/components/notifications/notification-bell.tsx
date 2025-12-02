@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Bell, Check, CheckCheck, X, Info, AlertTriangle, AlertCircle, CheckCircle } from "lucide-react";
+import { Bell, Check, CheckCheck, X, Info, AlertTriangle, AlertCircle, CheckCircle, Phone, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -15,7 +15,7 @@ import { formatDistanceToNow } from "date-fns";
 
 interface Notification {
   id: string;
-  type: "info" | "warning" | "error" | "success";
+  type: "info" | "warning" | "error" | "success" | "call_received" | "report_ready";
   title: string;
   message: string;
   link?: string;
@@ -106,6 +106,10 @@ export function NotificationBell() {
         return <AlertTriangle className="h-4 w-4 text-yellow-500" />;
       case "error":
         return <AlertCircle className="h-4 w-4 text-red-500" />;
+      case "call_received":
+        return <Phone className="h-4 w-4 text-blue-500" />;
+      case "report_ready":
+        return <FileText className="h-4 w-4 text-purple-500" />;
       default:
         return <Info className="h-4 w-4 text-blue-500" />;
     }

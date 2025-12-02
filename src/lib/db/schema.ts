@@ -42,6 +42,9 @@ export const clients = pgTable("clients", {
   inviteStatus: text("invite_status").default("draft"), // draft, pending, sent, accepted
   invitedAt: timestamp("invited_at"),
   acceptedAt: timestamp("accepted_at"),
+  // Billing tier - allows admin to set free accounts
+  billingTier: text("billing_tier").default("standard"), // free, standard, premium
+  billingNotes: text("billing_notes"), // Admin notes about billing arrangement
   // Email preferences
   reportFrequency: text("report_frequency").default("weekly"), // none, daily, weekly, monthly
   reportDayOfWeek: integer("report_day_of_week").default(1), // 0=Sunday, 1=Monday, etc.

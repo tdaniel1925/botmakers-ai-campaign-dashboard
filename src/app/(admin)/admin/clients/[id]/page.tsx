@@ -5,6 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Card,
   CardContent,
@@ -53,6 +54,7 @@ import {
   Check,
   Eye,
   Mail,
+  CreditCard,
 } from "lucide-react";
 import Link from "next/link";
 import { format } from "date-fns";
@@ -72,6 +74,8 @@ interface Client {
   report_frequency: string;
   report_day_of_week: number;
   report_hour: number;
+  billing_tier: string;
+  billing_notes: string | null;
 }
 
 export default function EditClientPage() {
@@ -84,6 +88,8 @@ export default function EditClientPage() {
   const [reportFrequency, setReportFrequency] = useState("weekly");
   const [reportDayOfWeek, setReportDayOfWeek] = useState("1");
   const [reportHour, setReportHour] = useState("9");
+  const [billingTier, setBillingTier] = useState("standard");
+  const [billingNotes, setBillingNotes] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isSendingInvite, setIsSendingInvite] = useState(false);
@@ -111,6 +117,8 @@ export default function EditClientPage() {
         setReportFrequency(data.report_frequency || "weekly");
         setReportDayOfWeek(String(data.report_day_of_week || 1));
         setReportHour(String(data.report_hour || 9));
+        setBillingTier(data.billing_tier || "standard");
+        setBillingNotes(data.billing_notes || "");
       } catch {
         toast({
           title: "Error",
@@ -142,6 +150,8 @@ export default function EditClientPage() {
           report_frequency: reportFrequency,
           report_day_of_week: parseInt(reportDayOfWeek),
           report_hour: parseInt(reportHour),
+          billing_tier: billingTier,
+          billing_notes: billingNotes || null,
         }),
       });
 
@@ -600,24 +610,88 @@ export default function EditClientPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* Billing Settings Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <CreditCard className="mr-2 h-5 w-5" />
+                Billing Settings
+              </CardTitle>
+              <CardDescription>
+                Control billing for this client
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label>Billing Tier</Label>
+                <Select value={billingTier} onValueChange={setBillingTier}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="free">
+                      <div className="flex flex-col">
+                        <span>Free</span>
+                        <span className="text-xs text-muted-foreground">No charges, no payment method required</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="standard">
+                      <div className="flex flex-col">
+                        <span>Standard</span>
+                        <span className="text-xs text-muted-foreground">Pay-per-use billing</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="premium">
+                      <div className="flex flex-col">
+                        <span>Premium</span>
+                        <span className="text-xs text-muted-foreground">Custom enterprise pricing</span>
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {billingTier === "free" && (
+                <div className="rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-950">
+                  <p className="text-sm text-green-700 dark:text-green-300">
+                    This client will not be charged for any usage. No payment method is required.
+                  </p>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <Label>Billing Notes</Label>
+                <Textarea
+                  placeholder="Internal notes about billing arrangement..."
+                  value={billingNotes}
+                  onChange={(e) => setBillingNotes(e.target.value)}
+                  rows={3}
+                />
+                <p className="text-xs text-muted-foreground">
+                  These notes are only visible to admins.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
 
       {/* Email Preview Dialog */}
       <Dialog open={showPreview} onOpenChange={setShowPreview}>
-        <DialogContent className="max-w-4xl max-h-[90vh]">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle>Email Preview</DialogTitle>
             <DialogDescription>
               This is how the email will appear to {client?.name}
             </DialogDescription>
           </DialogHeader>
-          <Tabs defaultValue="preview" className="w-full">
+          <Tabs defaultValue="preview" className="w-full flex-1 overflow-hidden flex flex-col">
             <TabsList>
               <TabsTrigger value="preview">Preview</TabsTrigger>
               <TabsTrigger value="html">HTML Source</TabsTrigger>
             </TabsList>
-            <TabsContent value="preview" className="mt-4">
+            <TabsContent value="preview" className="mt-4 flex-1 overflow-auto">
               {previewLoading ? (
                 <div className="flex items-center justify-center h-96">
                   <Loader2 className="h-8 w-8 animate-spin" />
@@ -626,14 +700,14 @@ export default function EditClientPage() {
                 <div className="border rounded-lg overflow-hidden bg-white">
                   <iframe
                     srcDoc={previewHtml}
-                    className="w-full h-[500px]"
+                    className="w-full h-[400px]"
                     title="Email Preview"
                   />
                 </div>
               )}
             </TabsContent>
-            <TabsContent value="html" className="mt-4">
-              <pre className="bg-muted p-4 rounded-lg overflow-auto max-h-[500px] text-xs">
+            <TabsContent value="html" className="mt-4 flex-1 overflow-auto">
+              <pre className="bg-muted p-4 rounded-lg text-xs whitespace-pre-wrap break-all">
                 {previewHtml}
               </pre>
             </TabsContent>

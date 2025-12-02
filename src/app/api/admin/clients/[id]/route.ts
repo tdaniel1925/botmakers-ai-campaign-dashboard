@@ -46,6 +46,11 @@ export async function PUT(
     if (body.email !== undefined) updateData.email = body.email;
     if (body.company_name !== undefined) updateData.company_name = body.company_name;
     if (body.is_active !== undefined) updateData.is_active = body.is_active;
+    if (body.report_frequency !== undefined) updateData.report_frequency = body.report_frequency;
+    if (body.report_day_of_week !== undefined) updateData.report_day_of_week = body.report_day_of_week;
+    if (body.report_hour !== undefined) updateData.report_hour = body.report_hour;
+    if (body.billing_tier !== undefined) updateData.billing_tier = body.billing_tier;
+    if (body.billing_notes !== undefined) updateData.billing_notes = body.billing_notes;
 
     const { data: client, error } = await supabase
       .from("clients")
