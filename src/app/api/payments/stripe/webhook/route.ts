@@ -11,7 +11,7 @@ function getStripe(): Stripe {
       throw new Error("STRIPE_SECRET_KEY is not set");
     }
     stripe = new Stripe(secretKey, {
-      apiVersion: "2024-06-20",
+      apiVersion: "2025-11-17.clover",
     });
   }
   return stripe;
@@ -168,18 +168,20 @@ export async function POST(request: NextRequest) {
 
         if (clientId) {
           // Update billing account with failure
-          await supabase.rpc("increment_failed_payment_count", {
-            p_client_id: clientId,
-          }).catch(() => {
+          try {
+            await supabase.rpc("increment_failed_payment_count", {
+              p_client_id: clientId,
+            });
+          } catch {
             // Fallback if RPC doesn't exist
-            supabase
+            await supabase
               .from("client_billing_accounts")
               .update({
                 last_failed_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
               })
               .eq("client_id", clientId);
-          });
+          }
         }
         break;
       }

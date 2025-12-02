@@ -69,10 +69,12 @@ export async function trackUsage(params: TrackUsageParams): Promise<void> {
 
   // Update client billing account balance
   if (totalAmount > 0) {
-    await supabase.rpc("increment_billing_balance", {
-      p_client_id: params.clientId,
-      p_amount: totalAmount,
-    }).catch(async () => {
+    try {
+      await supabase.rpc("increment_billing_balance", {
+        p_client_id: params.clientId,
+        p_amount: totalAmount,
+      });
+    } catch {
       // Fallback: update directly
       const { data: account } = await supabase
         .from("client_billing_accounts")
@@ -91,7 +93,7 @@ export async function trackUsage(params: TrackUsageParams): Promise<void> {
         }, {
           onConflict: "client_id",
         });
-    });
+    }
 
     // Check if we should auto-charge
     await checkAndAutoCharge(params.clientId);
@@ -182,7 +184,7 @@ async function chargeWithStripe(
   const secretKey = process.env.STRIPE_SECRET_KEY;
   if (!secretKey) throw new Error("Stripe not configured");
 
-  const stripe = new Stripe(secretKey, { apiVersion: "2024-06-20" });
+  const stripe = new Stripe(secretKey, { apiVersion: "2025-11-17.clover" });
 
   const paymentIntent = await stripe.paymentIntents.create({
     amount: Math.round(amount * 100), // Convert to cents
