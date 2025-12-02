@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Table,
   TableBody,
@@ -47,6 +47,10 @@ import {
   RefreshCw,
   Activity,
   Webhook,
+  Play,
+  Pause,
+  Volume2,
+  Download,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -215,6 +219,84 @@ function DetectedFieldBadge({
   );
 }
 
+function InlineAudioPlayer({ src }: { src: string }) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
+    const handleLoadedMetadata = () => setDuration(audio.duration);
+    const handleEnded = () => setIsPlaying(false);
+
+    audio.addEventListener("timeupdate", handleTimeUpdate);
+    audio.addEventListener("loadedmetadata", handleLoadedMetadata);
+    audio.addEventListener("ended", handleEnded);
+
+    return () => {
+      audio.removeEventListener("timeupdate", handleTimeUpdate);
+      audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
+      audio.removeEventListener("ended", handleEnded);
+    };
+  }, []);
+
+  const togglePlay = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (isPlaying) {
+      audio.pause();
+    } else {
+      audio.play();
+    }
+    setIsPlaying(!isPlaying);
+  };
+
+  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const newTime = parseFloat(e.target.value);
+    audio.currentTime = newTime;
+    setCurrentTime(newTime);
+  };
+
+  const formatTime = (time: number) => {
+    if (isNaN(time)) return "0:00";
+    const mins = Math.floor(time / 60);
+    const secs = Math.floor(time % 60);
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  return (
+    <div className="flex items-center gap-3 p-3 bg-background rounded-lg border">
+      <audio ref={audioRef} src={src} preload="metadata" />
+      <Button variant="outline" size="icon" onClick={togglePlay} className="h-8 w-8 shrink-0">
+        {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+      </Button>
+      <div className="flex-1 flex items-center gap-2">
+        <span className="text-xs text-muted-foreground w-10">{formatTime(currentTime)}</span>
+        <input
+          type="range"
+          min={0}
+          max={duration || 100}
+          value={currentTime}
+          onChange={handleSeek}
+          className="flex-1 h-1 bg-muted rounded-lg appearance-none cursor-pointer"
+        />
+        <span className="text-xs text-muted-foreground w-10">{formatTime(duration)}</span>
+      </div>
+      <a href={src} download className="shrink-0">
+        <Button variant="ghost" size="icon" className="h-8 w-8">
+          <Download className="h-4 w-4" />
+        </Button>
+      </a>
+    </div>
+  );
+}
+
 function PayloadViewer({ payload, analysis }: {
   payload: Record<string, unknown>;
   analysis: ReturnType<typeof analyzePayload>;
@@ -231,6 +313,17 @@ function PayloadViewer({ payload, analysis }: {
         <DetectedFieldBadge detected={analysis.hasDuration} label="Duration" icon={Timer} />
         <DetectedFieldBadge detected={analysis.hasCallId} label="Call ID" icon={Hash} />
       </div>
+
+      {/* Audio Player - Show prominently if audio URL exists */}
+      {analysis.hasAudioUrl && analysis.audioUrl && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <Volume2 className="h-4 w-4 text-green-600" />
+            <span className="font-medium text-sm">Call Recording</span>
+          </div>
+          <InlineAudioPlayer src={analysis.audioUrl} />
+        </div>
+      )}
 
       {/* Extracted Values */}
       {(analysis.hasTranscript || analysis.hasPhone || analysis.hasDuration || analysis.hasCallId) && (
