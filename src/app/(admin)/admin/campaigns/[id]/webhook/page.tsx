@@ -32,7 +32,13 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import Link from "next/link";
-import type { Campaign } from "@/lib/db/schema";
+
+interface CampaignData {
+  id: string;
+  name: string;
+  webhook_token: string;
+  payload_mapping: PayloadMapping | null;
+}
 
 interface PayloadMapping {
   transcript?: string;
@@ -138,7 +144,7 @@ function JsonExplorer({
 
 export default function WebhookConfigPage() {
   const params = useParams();
-  const [campaign, setCampaign] = useState<Campaign | null>(null);
+  const [campaign, setCampaign] = useState<CampaignData | null>(null);
   const [samplePayload, setSamplePayload] = useState("");
   const [parsedPayload, setParsedPayload] = useState<Record<string, unknown> | null>(null);
   const [mapping, setMapping] = useState<PayloadMapping>({});
@@ -180,7 +186,7 @@ export default function WebhookConfigPage() {
   };
 
   const webhookUrl = campaign
-    ? `${process.env.NEXT_PUBLIC_APP_URL || window.location.origin}/api/webhooks/${campaign.webhookToken}`
+    ? `${process.env.NEXT_PUBLIC_APP_URL || window.location.origin}/api/webhooks/${campaign.webhook_token}`
     : "";
 
   useEffect(() => {
