@@ -1,6 +1,7 @@
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
+import { verifyAdmin, forbiddenResponse } from "@/lib/admin-auth";
 
 // Lazy init to avoid build-time errors when env var isn't available
 function getResendClient() {
@@ -15,6 +16,12 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Verify admin access
+    const authResult = await verifyAdmin();
+    if (!authResult.authenticated || !authResult.admin) {
+      return forbiddenResponse(authResult.error);
+    }
+
     const { id } = await params;
     const supabase = await createClient();
     const serviceClient = await createServiceClient();

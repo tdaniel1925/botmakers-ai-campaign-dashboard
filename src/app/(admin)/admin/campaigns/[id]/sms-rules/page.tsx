@@ -15,6 +15,16 @@ import {
 } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import {
   Loader2,
@@ -29,11 +39,25 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import type { SmsRule } from "@/lib/db/schema";
+
+// Supabase returns snake_case column names
+interface SmsRuleRow {
+  id: string;
+  campaign_id: string;
+  name: string;
+  trigger_condition: string;
+  message_template: string;
+  is_active: boolean;
+  priority: number;
+  trigger_count: number | null;
+  last_triggered_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
 
 export default function SmsRulesPage() {
   const params = useParams();
-  const [rules, setRules] = useState<SmsRule[]>([]);
+  const [rules, setRules] = useState<SmsRuleRow[]>([]);
   const [campaignName, setCampaignName] = useState("");
   const [newRuleName, setNewRuleName] = useState("");
   const [newTriggerCondition, setNewTriggerCondition] = useState("");
@@ -44,6 +68,7 @@ export default function SmsRulesPage() {
   const [editName, setEditName] = useState("");
   const [editCondition, setEditCondition] = useState("");
   const [editMessage, setEditMessage] = useState("");
+  const [deleteRuleId, setDeleteRuleId] = useState<string | null>(null);
   const { toast } = useToast();
   const supabase = createClient();
 
@@ -140,16 +165,18 @@ export default function SmsRulesPage() {
     }
   };
 
-  const handleDeleteRule = async (ruleId: string) => {
+  const confirmDeleteRule = async () => {
+    if (!deleteRuleId) return;
+
     try {
       const { error } = await supabase
         .from("sms_rules")
         .delete()
-        .eq("id", ruleId);
+        .eq("id", deleteRuleId);
 
       if (error) throw error;
 
-      setRules(rules.filter((r) => r.id !== ruleId));
+      setRules(rules.filter((r) => r.id !== deleteRuleId));
 
       toast({
         title: "Rule Deleted",
@@ -162,6 +189,8 @@ export default function SmsRulesPage() {
         description: "Failed to delete rule",
         variant: "destructive",
       });
+    } finally {
+      setDeleteRuleId(null);
     }
   };
 
@@ -174,7 +203,7 @@ export default function SmsRulesPage() {
 
       if (error) throw error;
 
-      setRules(rules.map((r) => (r.id === ruleId ? { ...r, isActive } : r)));
+      setRules(rules.map((r) => (r.id === ruleId ? { ...r, is_active: isActive } : r)));
     } catch (error) {
       console.error("Error updating rule:", error);
       toast({
@@ -185,11 +214,11 @@ export default function SmsRulesPage() {
     }
   };
 
-  const startEditing = (rule: SmsRule) => {
+  const startEditing = (rule: SmsRuleRow) => {
     setEditingId(rule.id);
     setEditName(rule.name);
-    setEditCondition(rule.triggerCondition);
-    setEditMessage(rule.messageTemplate);
+    setEditCondition(rule.trigger_condition);
+    setEditMessage(rule.message_template);
   };
 
   const cancelEditing = () => {
@@ -221,8 +250,8 @@ export default function SmsRulesPage() {
             ? {
                 ...r,
                 name: editName,
-                triggerCondition: editCondition,
-                messageTemplate: editMessage,
+                trigger_condition: editCondition,
+                message_template: editMessage,
               }
             : r
         )
@@ -406,21 +435,21 @@ export default function SmsRulesPage() {
                           <div className="space-y-1">
                             <div className="flex items-center space-x-2">
                               <h4 className="font-medium">{rule.name}</h4>
-                              {rule.isActive ? (
+                              {rule.is_active ? (
                                 <Badge variant="default" className="bg-green-500">Active</Badge>
                               ) : (
                                 <Badge variant="secondary">Inactive</Badge>
                               )}
                             </div>
-                            {rule.triggerCount && rule.triggerCount > 0 && (
+                            {rule.trigger_count && rule.trigger_count > 0 && (
                               <p className="text-xs text-muted-foreground">
-                                Triggered {rule.triggerCount} times
+                                Triggered {rule.trigger_count} times
                               </p>
                             )}
                           </div>
                           <div className="flex items-center space-x-2">
                             <Switch
-                              checked={rule.isActive || false}
+                              checked={rule.is_active || false}
                               onCheckedChange={(checked) =>
                                 handleToggleActive(rule.id, checked)
                               }
@@ -431,14 +460,14 @@ export default function SmsRulesPage() {
                         <div className="text-sm space-y-2">
                           <div>
                             <span className="text-muted-foreground">When: </span>
-                            <span className="text-foreground">{rule.triggerCondition}</span>
+                            <span className="text-foreground">{rule.trigger_condition}</span>
                           </div>
                           <div>
                             <span className="text-muted-foreground">Send: </span>
                             <span className="text-foreground bg-muted px-2 py-1 rounded text-xs font-mono">
-                              {rule.messageTemplate.length > 100
-                                ? rule.messageTemplate.substring(0, 100) + "..."
-                                : rule.messageTemplate}
+                              {rule.message_template.length > 100
+                                ? rule.message_template.substring(0, 100) + "..."
+                                : rule.message_template}
                             </span>
                           </div>
                         </div>
@@ -455,7 +484,7 @@ export default function SmsRulesPage() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleDeleteRule(rule.id)}
+                            onClick={() => setDeleteRuleId(rule.id)}
                             className="text-red-500 hover:text-red-700"
                           >
                             <Trash2 className="h-3 w-3 mr-1" />
@@ -477,6 +506,28 @@ export default function SmsRulesPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deleteRuleId} onOpenChange={(open) => !open && setDeleteRuleId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete SMS Rule</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this SMS rule? This action cannot be undone
+              and will stop any automated messages triggered by this rule.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDeleteRule}
+              className="bg-red-500 hover:bg-red-600"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Help Section */}
       <Card>

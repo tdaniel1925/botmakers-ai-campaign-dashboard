@@ -1,11 +1,18 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { verifyAdmin, forbiddenResponse } from "@/lib/admin-auth";
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Verify admin access
+    const authResult = await verifyAdmin();
+    if (!authResult.authenticated || !authResult.admin) {
+      return forbiddenResponse(authResult.error);
+    }
+
     const { id } = await params;
     const supabase = await createClient();
 
@@ -42,6 +49,12 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Verify admin access
+    const authResult = await verifyAdmin();
+    if (!authResult.authenticated || !authResult.admin) {
+      return forbiddenResponse(authResult.error);
+    }
+
     const { id } = await params;
     const body = await request.json();
     const supabase = await createClient();
@@ -81,6 +94,12 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Verify admin access
+    const authResult = await verifyAdmin();
+    if (!authResult.authenticated || !authResult.admin) {
+      return forbiddenResponse(authResult.error);
+    }
+
     const { id } = await params;
     const supabase = await createClient();
 

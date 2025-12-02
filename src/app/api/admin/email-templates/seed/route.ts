@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { verifyAdmin, forbiddenResponse } from "@/lib/admin-auth";
 
 // Lazy init to avoid build-time errors
 function getSupabaseClient() {
@@ -112,6 +113,12 @@ The {{companyName}} Team`,
 // POST - Seed default templates
 export async function POST() {
   try {
+    // Verify admin access
+    const authResult = await verifyAdmin();
+    if (!authResult.authenticated || !authResult.admin) {
+      return forbiddenResponse(authResult.error);
+    }
+
     const supabase = getSupabaseClient();
 
     // Check which templates already exist

@@ -2,12 +2,19 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateTempPassword } from "@/lib/credentials";
 import { sendPasswordResetEmail } from "@/lib/emails";
+import { verifyAdmin, forbiddenResponse } from "@/lib/admin-auth";
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Verify admin access
+    const authResult = await verifyAdmin();
+    if (!authResult.authenticated || !authResult.admin) {
+      return forbiddenResponse(authResult.error);
+    }
+
     const { id } = await params;
     const supabase = await createClient();
     const serviceClient = await createServiceClient();
@@ -74,12 +81,11 @@ export async function POST(
 
     if (!emailResult.success) {
       console.error("Email error:", emailResult.error);
-      // Return success but note email failed
+      // Return error - don't expose password in response
       return NextResponse.json({
-        success: true,
-        warning: "Password reset but email failed to send",
-        newPassword: newTempPassword,
-      });
+        success: false,
+        error: "Password reset but email failed to send. Please try again or contact support.",
+      }, { status: 500 });
     }
 
     return NextResponse.json({

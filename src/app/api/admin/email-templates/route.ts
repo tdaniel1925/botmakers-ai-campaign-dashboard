@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { verifyAdmin, forbiddenResponse } from "@/lib/admin-auth";
 
 // Lazy init to avoid build-time errors
 function getSupabaseClient() {
@@ -12,6 +13,12 @@ function getSupabaseClient() {
 // GET - Fetch all email templates
 export async function GET() {
   try {
+    // Verify admin access
+    const authResult = await verifyAdmin();
+    if (!authResult.authenticated || !authResult.admin) {
+      return forbiddenResponse(authResult.error);
+    }
+
     const supabase = getSupabaseClient();
 
     const { data: templates, error } = await supabase
@@ -36,6 +43,12 @@ export async function GET() {
 // POST - Create a new email template
 export async function POST(request: Request) {
   try {
+    // Verify admin access
+    const authResult = await verifyAdmin();
+    if (!authResult.authenticated || !authResult.admin) {
+      return forbiddenResponse(authResult.error);
+    }
+
     const supabase = getSupabaseClient();
     const body = await request.json();
 

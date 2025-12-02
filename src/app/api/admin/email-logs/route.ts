@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { verifyAdmin, forbiddenResponse } from "@/lib/admin-auth";
 
 // Lazy init to avoid build-time errors
 function getSupabaseClient() {
@@ -12,6 +13,12 @@ function getSupabaseClient() {
 // GET - Fetch email logs with pagination and filtering
 export async function GET(request: Request) {
   try {
+    // Verify admin access
+    const authResult = await verifyAdmin();
+    if (!authResult.authenticated || !authResult.admin) {
+      return forbiddenResponse(authResult.error);
+    }
+
     const supabase = getSupabaseClient();
     const { searchParams } = new URL(request.url);
 

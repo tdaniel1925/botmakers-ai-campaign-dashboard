@@ -14,11 +14,31 @@ import {
 } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, ArrowLeft, Plus, Trash2, GripVertical } from "lucide-react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import type { CampaignOutcomeTag } from "@/lib/db/schema";
+
+// Supabase returns snake_case column names
+interface OutcomeTagRow {
+  id: string;
+  campaign_id: string;
+  tag_name: string;
+  tag_color: string | null;
+  is_positive: boolean | null;
+  sort_order: number | null;
+  created_at: string;
+}
 
 const DEFAULT_COLORS = [
   "#22c55e", // green
@@ -33,12 +53,13 @@ const DEFAULT_COLORS = [
 
 export default function OutcomeTagsPage() {
   const params = useParams();
-  const [tags, setTags] = useState<CampaignOutcomeTag[]>([]);
+  const [tags, setTags] = useState<OutcomeTagRow[]>([]);
   const [newTagName, setNewTagName] = useState("");
   const [newTagColor, setNewTagColor] = useState(DEFAULT_COLORS[0]);
   const [newTagPositive, setNewTagPositive] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [deleteTagId, setDeleteTagId] = useState<string | null>(null);
   const { toast } = useToast();
   const supabase = createClient();
 
@@ -113,16 +134,18 @@ export default function OutcomeTagsPage() {
     }
   };
 
-  const handleDeleteTag = async (tagId: string) => {
+  const confirmDeleteTag = async () => {
+    if (!deleteTagId) return;
+
     try {
       const { error } = await supabase
         .from("campaign_outcome_tags")
         .delete()
-        .eq("id", tagId);
+        .eq("id", deleteTagId);
 
       if (error) throw error;
 
-      setTags(tags.filter((t) => t.id !== tagId));
+      setTags(tags.filter((t) => t.id !== deleteTagId));
 
       toast({
         title: "Tag deleted",
@@ -135,12 +158,14 @@ export default function OutcomeTagsPage() {
         description: "Failed to delete tag",
         variant: "destructive",
       });
+    } finally {
+      setDeleteTagId(null);
     }
   };
 
   const handleUpdateTag = async (
     tagId: string,
-    updates: Partial<CampaignOutcomeTag>
+    updates: Partial<OutcomeTagRow>
   ) => {
     try {
       const { error } = await supabase
@@ -205,13 +230,13 @@ export default function OutcomeTagsPage() {
                       <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />
                       <Badge
                         style={{
-                          backgroundColor: tag.tagColor || "#6b7280",
+                          backgroundColor: tag.tag_color || "#6b7280",
                           color: "#fff",
                         }}
                       >
-                        {tag.tagName}
+                        {tag.tag_name}
                       </Badge>
-                      {tag.isPositive && (
+                      {tag.is_positive && (
                         <span className="text-xs text-green-600 bg-green-50 px-2 py-0.5 rounded">
                           Positive
                         </span>
@@ -219,15 +244,15 @@ export default function OutcomeTagsPage() {
                     </div>
                     <div className="flex items-center space-x-2">
                       <Switch
-                        checked={tag.isPositive || false}
+                        checked={tag.is_positive || false}
                         onCheckedChange={(checked) =>
-                          handleUpdateTag(tag.id, { isPositive: checked })
+                          handleUpdateTag(tag.id, { is_positive: checked })
                         }
                       />
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => handleDeleteTag(tag.id)}
+                        onClick={() => setDeleteTagId(tag.id)}
                         className="text-red-500 hover:text-red-700"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -243,6 +268,28 @@ export default function OutcomeTagsPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* Delete Confirmation Dialog */}
+        <AlertDialog open={!!deleteTagId} onOpenChange={(open) => !open && setDeleteTagId(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Outcome Tag</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete this outcome tag? This may affect
+                existing call categorizations and analytics.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={confirmDeleteTag}
+                className="bg-red-500 hover:bg-red-600"
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         <Card>
           <CardHeader>

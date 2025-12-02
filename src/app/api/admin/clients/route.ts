@@ -2,9 +2,16 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateUsername, generateTempPassword } from "@/lib/credentials";
 import { sendWelcomeEmail } from "@/lib/emails";
+import { verifyAdmin, forbiddenResponse } from "@/lib/admin-auth";
 
 export async function GET() {
   try {
+    // Verify admin access
+    const authResult = await verifyAdmin();
+    if (!authResult.authenticated || !authResult.admin) {
+      return forbiddenResponse(authResult.error);
+    }
+
     const supabase = await createClient();
 
     const { data: clients, error } = await supabase
@@ -28,6 +35,12 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    // Verify admin access
+    const authResult = await verifyAdmin();
+    if (!authResult.authenticated || !authResult.admin) {
+      return forbiddenResponse(authResult.error);
+    }
+
     const body = await request.json();
     const { name, email, company_name, billing_tier, billing_notes, send_invite, save_as_draft } = body;
 
@@ -132,20 +145,23 @@ export async function POST(request: Request) {
           console.error("Email error:", emailResult.error);
         }
 
-        // Link the auth user ID to the client
+        // Store the auth user ID reference (don't update primary key)
         if (authUser?.user) {
           await supabase
             .from("clients")
-            .update({ id: authUser.user.id })
+            .update({ auth_user_id: authUser.user.id })
             .eq("id", client.id);
         }
       }
     }
 
+    // Return client data without exposing password (only show username for draft saves)
     return NextResponse.json({
       ...client,
       username,
-      temp_password: tempPassword,
+      // Only include temp_password for draft saves (not sent invites)
+      // The password is sent via email for invites
+      ...(save_as_draft ? { temp_password: tempPassword } : {}),
     }, { status: 201 });
   } catch (error) {
     console.error("Error creating client:", error);

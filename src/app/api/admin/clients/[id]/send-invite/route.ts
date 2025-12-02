@@ -2,12 +2,19 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { generateTempPassword } from "@/lib/credentials";
 import { sendWelcomeEmail, sendReInviteEmail } from "@/lib/emails";
+import { verifyAdmin, forbiddenResponse } from "@/lib/admin-auth";
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Verify admin access
+    const authResult = await verifyAdmin();
+    if (!authResult.authenticated || !authResult.admin) {
+      return forbiddenResponse(authResult.error);
+    }
+
     const { id } = await params;
     const body = await request.json().catch(() => ({}));
     const { regeneratePassword = false, isResend = false } = body;

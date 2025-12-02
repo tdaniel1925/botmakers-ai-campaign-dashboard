@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { previewEmail, EmailTemplateType } from "@/lib/emails";
+import { verifyAdmin, forbiddenResponse } from "@/lib/admin-auth";
 
 function getSupabaseClient() {
   return createClient(
@@ -11,6 +12,12 @@ function getSupabaseClient() {
 
 export async function POST(request: Request) {
   try {
+    // Verify admin access
+    const authResult = await verifyAdmin();
+    if (!authResult.authenticated || !authResult.admin) {
+      return forbiddenResponse(authResult.error);
+    }
+
     const body = await request.json();
     const { templateType, props } = body;
 

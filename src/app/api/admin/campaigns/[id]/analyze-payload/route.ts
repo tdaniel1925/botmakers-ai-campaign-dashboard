@@ -1,8 +1,15 @@
 import { NextResponse } from "next/server";
 import { getAIClient, getModelName } from "@/lib/ai/deepseek";
+import { verifyAdmin, forbiddenResponse } from "@/lib/admin-auth";
 
 export async function POST(request: Request) {
   try {
+    // Verify admin access
+    const authResult = await verifyAdmin();
+    if (!authResult.authenticated || !authResult.admin) {
+      return forbiddenResponse(authResult.error);
+    }
+
     const body = await request.json();
     const { payload } = body;
 

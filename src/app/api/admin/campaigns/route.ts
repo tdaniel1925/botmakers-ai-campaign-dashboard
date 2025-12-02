@@ -1,9 +1,16 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { nanoid } from "nanoid";
+import { verifyAdmin, forbiddenResponse } from "@/lib/admin-auth";
 
 export async function GET() {
   try {
+    // Verify admin access
+    const authResult = await verifyAdmin();
+    if (!authResult.authenticated || !authResult.admin) {
+      return forbiddenResponse(authResult.error);
+    }
+
     const supabase = await createClient();
 
     const { data: campaigns, error } = await supabase
@@ -35,6 +42,12 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    // Verify admin access
+    const authResult = await verifyAdmin();
+    if (!authResult.authenticated || !authResult.admin) {
+      return forbiddenResponse(authResult.error);
+    }
+
     const body = await request.json();
     const { name, description, client_id } = body;
 

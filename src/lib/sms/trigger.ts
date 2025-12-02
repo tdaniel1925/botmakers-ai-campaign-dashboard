@@ -194,7 +194,9 @@ export async function processCallForSms(callId: string): Promise<{
     return { sent: false, error: "No caller phone number" };
   }
 
-  const campaign = call.campaigns as { id: string; client_id: string };
+  // Supabase returns campaigns as array even with !inner, take first element
+  const campaigns = call.campaigns as unknown as { id: string; client_id: string }[] | { id: string; client_id: string };
+  const campaign = Array.isArray(campaigns) ? campaigns[0] : campaigns;
 
   // Get active SMS rules for this campaign
   const { data: rules, error: rulesError } = await supabase
@@ -286,13 +288,17 @@ export async function processCallForSms(callId: string): Promise<{
 
   await supabase.from("sms_logs").update(updateData).eq("id", smsLog.id);
 
-  // Update rule trigger stats
+  // Update rule trigger stats - fetch current count first
+  const { data: currentRule } = await supabase
+    .from("sms_rules")
+    .select("trigger_count")
+    .eq("id", matchedRule.id)
+    .single();
+
   await supabase
     .from("sms_rules")
     .update({
-      trigger_count: (matchedRule as { triggerCount?: number }).triggerCount
-        ? (matchedRule as { triggerCount: number }).triggerCount + 1
-        : 1,
+      trigger_count: (currentRule?.trigger_count || 0) + 1,
       last_triggered_at: new Date().toISOString(),
     })
     .eq("id", matchedRule.id);

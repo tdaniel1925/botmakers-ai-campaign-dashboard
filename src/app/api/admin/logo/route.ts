@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { verifyAdmin, forbiddenResponse } from "@/lib/admin-auth";
 
 // Lazy init to avoid build-time errors when env vars aren't available
 function getSupabaseClient() {
@@ -11,6 +12,12 @@ function getSupabaseClient() {
 
 export async function POST(request: Request) {
   try {
+    // Verify admin access
+    const authResult = await verifyAdmin();
+    if (!authResult.authenticated || !authResult.admin) {
+      return forbiddenResponse(authResult.error);
+    }
+
     const supabase = getSupabaseClient();
     const formData = await request.formData();
     const file = formData.get("file") as File;
@@ -92,6 +99,12 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
+    // Verify admin access
+    const authResult = await verifyAdmin();
+    if (!authResult.authenticated || !authResult.admin) {
+      return forbiddenResponse(authResult.error);
+    }
+
     const supabase = getSupabaseClient();
     const { searchParams } = new URL(request.url);
     const logoType = searchParams.get("logoType") || "light";
