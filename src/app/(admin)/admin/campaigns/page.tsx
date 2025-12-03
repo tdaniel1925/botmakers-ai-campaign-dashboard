@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -484,7 +485,9 @@ export default function CampaignsPage() {
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                   <div className="space-y-1 flex-1 min-w-0">
-                    <CardTitle className="text-lg truncate">{campaign.name}</CardTitle>
+                    <Link href={`/admin/campaigns/${campaign.id}`} className="hover:underline">
+                      <CardTitle className="text-lg truncate cursor-pointer hover:text-primary">{campaign.name}</CardTitle>
+                    </Link>
                     <CardDescription className="truncate">
                       {campaign.clients?.name}
                       {campaign.clients?.company_name && ` (${campaign.clients.company_name})`}
