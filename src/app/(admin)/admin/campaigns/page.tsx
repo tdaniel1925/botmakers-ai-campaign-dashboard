@@ -187,7 +187,7 @@ export default function CampaignsPage() {
       const { data: clientsData } = await supabase
         .from("clients")
         .select("id, name, company_name")
-        .eq("status", "active")
+        .eq("is_active", true)
         .order("name");
 
       setClients(clientsData || []);
