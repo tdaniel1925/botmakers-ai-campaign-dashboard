@@ -34,6 +34,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -65,6 +72,9 @@ import {
   Save,
   X,
   TrendingUp,
+  ChevronLeft,
+  ChevronRight,
+  Eye,
   Tag,
   BarChart3,
 } from "lucide-react";
@@ -140,6 +150,20 @@ interface CampaignStats {
     word: string;
     count: number;
   }>;
+}
+
+interface CallRow {
+  id: string;
+  caller_phone: string | null;
+  call_duration: number | null;
+  ai_sentiment: string | null;
+  ai_summary: string | null;
+  status: string;
+  created_at: string;
+  campaign_outcome_tags: {
+    tag_name: string;
+    tag_color: string;
+  } | null;
 }
 
 interface TestResult {
@@ -333,6 +357,14 @@ export default function CampaignDetailPage() {
   });
   const [period, setPeriod] = useState<string>("30d");
 
+  // Calls list state
+  const [calls, setCalls] = useState<CallRow[]>([]);
+  const [callsPage, setCallsPage] = useState(1);
+  const [callsTotalPages, setCallsTotalPages] = useState(1);
+  const [callsLoading, setCallsLoading] = useState(false);
+  const [selectedCall, setSelectedCall] = useState<CallRow | null>(null);
+  const callsPageSize = 10;
+
   const webhookUrl = campaign
     ? `${process.env.NEXT_PUBLIC_APP_URL || (typeof window !== 'undefined' ? window.location.origin : '')}/api/webhooks/${campaign.webhook_token}`
     : "";
@@ -382,6 +414,33 @@ export default function CampaignDetailPage() {
       .order("priority", { ascending: false });
     if (!error) setSmsRules(data || []);
   }, [params.id, supabase]);
+
+  const fetchCalls = useCallback(async (page: number = 1) => {
+    setCallsLoading(true);
+    try {
+      const from = (page - 1) * callsPageSize;
+      const to = from + callsPageSize - 1;
+
+      const { data, count, error } = await supabase
+        .from("calls")
+        .select(`
+          id, caller_phone, call_duration, ai_sentiment, ai_summary, status, created_at,
+          campaign_outcome_tags (tag_name, tag_color)
+        `, { count: "exact" })
+        .eq("campaign_id", params.id)
+        .order("created_at", { ascending: false })
+        .range(from, to);
+
+      if (error) throw error;
+
+      setCalls((data || []) as CallRow[]);
+      setCallsTotalPages(Math.ceil((count || 0) / callsPageSize));
+    } catch (error) {
+      console.error("Error fetching calls:", error);
+    } finally {
+      setCallsLoading(false);
+    }
+  }, [params.id, supabase, callsPageSize]);
 
   const fetchAnalytics = useCallback(async () => {
     try {
@@ -458,11 +517,18 @@ export default function CampaignDetailPage() {
   useEffect(() => {
     async function loadData() {
       setIsLoading(true);
-      await Promise.all([fetchCampaign(), fetchWebhookLogs(), fetchTags(), fetchSmsRules(), fetchAnalytics()]);
+      await Promise.all([fetchCampaign(), fetchWebhookLogs(), fetchTags(), fetchSmsRules(), fetchAnalytics(), fetchCalls(1)]);
       setIsLoading(false);
     }
     loadData();
-  }, [fetchCampaign, fetchWebhookLogs, fetchTags, fetchSmsRules, fetchAnalytics]);
+  }, [fetchCampaign, fetchWebhookLogs, fetchTags, fetchSmsRules, fetchAnalytics, fetchCalls]);
+
+  // Handle calls pagination
+  useEffect(() => {
+    if (!isLoading) {
+      fetchCalls(callsPage);
+    }
+  }, [callsPage, fetchCalls, isLoading]);
 
   useEffect(() => {
     const preset = PLATFORM_PRESETS[selectedPlatform];
@@ -836,6 +902,173 @@ export default function CampaignDetailPage() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Recent Calls */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Recent Calls</CardTitle>
+                  <CardDescription>
+                    {stats?.totalCalls || 0} total calls in this campaign
+                  </CardDescription>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => fetchCalls(callsPage)} disabled={callsLoading}>
+                  <RefreshCw className={`h-4 w-4 mr-2 ${callsLoading ? "animate-spin" : ""}`} />
+                  Refresh
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {callsLoading && calls.length === 0 ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
+              ) : calls.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                  <Phone className="h-12 w-12 mb-4 opacity-50" />
+                  <p className="font-medium">No calls yet</p>
+                  <p className="text-sm">Calls will appear here once received via webhook</p>
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    {calls.map((call) => {
+                      const tagData = call.campaign_outcome_tags as { tag_name: string; tag_color: string } | null;
+                      return (
+                        <div
+                          key={call.id}
+                          onClick={() => setSelectedCall(call)}
+                          className="flex items-center gap-4 p-4 rounded-lg border bg-card hover:bg-muted/50 cursor-pointer transition-colors"
+                        >
+                          {/* Status Icon */}
+                          <div className={`p-2 rounded-full ${
+                            call.ai_sentiment === "positive"
+                              ? "bg-green-100 dark:bg-green-950/50"
+                              : call.ai_sentiment === "negative"
+                              ? "bg-red-100 dark:bg-red-950/50"
+                              : "bg-gray-100 dark:bg-gray-800/50"
+                          }`}>
+                            {call.ai_sentiment === "positive" ? (
+                              <CheckCircle2 className="h-5 w-5 text-green-600" />
+                            ) : call.ai_sentiment === "negative" ? (
+                              <XCircle className="h-5 w-5 text-red-600" />
+                            ) : (
+                              <Phone className="h-5 w-5 text-gray-600" />
+                            )}
+                          </div>
+
+                          {/* Main Info */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="font-mono text-sm">{call.caller_phone || "Unknown"}</span>
+                              {tagData && (
+                                <Badge style={{ backgroundColor: tagData.tag_color, color: "#fff" }} className="text-xs">
+                                  {tagData.tag_name}
+                                </Badge>
+                              )}
+                              {call.status === "processing" && (
+                                <Badge variant="secondary" className="text-xs">Processing</Badge>
+                              )}
+                            </div>
+                            <p className="text-sm text-muted-foreground truncate">
+                              {call.ai_summary || "No summary available"}
+                            </p>
+                          </div>
+
+                          {/* Duration */}
+                          <div className="text-right shrink-0">
+                            <div className="text-sm font-medium">
+                              {call.call_duration ? formatDuration(call.call_duration) : "-"}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {formatDistanceToNow(new Date(call.created_at), { addSuffix: true })}
+                            </div>
+                          </div>
+
+                          {/* Arrow */}
+                          <Eye className="h-5 w-5 text-muted-foreground shrink-0" />
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Pagination */}
+                  {callsTotalPages > 1 && (
+                    <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                      <p className="text-sm text-muted-foreground">
+                        Page {callsPage} of {callsTotalPages}
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCallsPage(p => Math.max(1, p - 1))}
+                          disabled={callsPage === 1 || callsLoading}
+                        >
+                          <ChevronLeft className="h-4 w-4 mr-1" />
+                          Previous
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCallsPage(p => Math.min(callsTotalPages, p + 1))}
+                          disabled={callsPage === callsTotalPages || callsLoading}
+                        >
+                          Next
+                          <ChevronRight className="h-4 w-4 ml-1" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Call Detail Modal */}
+          <Dialog open={!!selectedCall} onOpenChange={(open) => !open && setSelectedCall(null)}>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-3">
+                  <Phone className="h-5 w-5" />
+                  {selectedCall?.caller_phone || "Unknown Caller"}
+                </DialogTitle>
+                <DialogDescription>
+                  {selectedCall?.created_at && format(new Date(selectedCall.created_at), "MMM d, yyyy 'at' h:mm a")}
+                  {selectedCall?.call_duration && ` • ${formatDuration(selectedCall.call_duration)}`}
+                </DialogDescription>
+              </DialogHeader>
+              {selectedCall && (
+                <div className="space-y-4 mt-4">
+                  <div className="flex items-center gap-4">
+                    <Badge variant={
+                      selectedCall.ai_sentiment === "positive" ? "success" :
+                      selectedCall.ai_sentiment === "negative" ? "destructive" : "secondary"
+                    }>
+                      {selectedCall.ai_sentiment || "Unknown"} sentiment
+                    </Badge>
+                    {(() => {
+                      const tagData = selectedCall.campaign_outcome_tags as { tag_name: string; tag_color: string } | null;
+                      return tagData && (
+                        <Badge style={{ backgroundColor: tagData.tag_color, color: "#fff" }}>
+                          {tagData.tag_name}
+                        </Badge>
+                      );
+                    })()}
+                  </div>
+                  {selectedCall.ai_summary && (
+                    <div>
+                      <h4 className="text-sm font-medium mb-2">AI Summary</h4>
+                      <p className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg">
+                        {selectedCall.ai_summary}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </DialogContent>
+          </Dialog>
         </TabsContent>
 
         {/* Webhook Tab */}
