@@ -498,9 +498,22 @@ export default function CampaignDetailPage() {
       const stopWords = new Set(["the", "a", "an", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "do", "does", "did", "will", "would", "could", "should", "and", "or", "but", "if", "then", "when", "at", "by", "for", "with", "to", "from", "in", "out", "on", "i", "you", "he", "she", "it", "we", "they", "what", "this", "that"]);
       calls?.forEach(call => {
         if (call.transcript) {
-          const words = call.transcript.toLowerCase().replace(/[^a-z\s]/g, "").split(/\s+/)
-            .filter((w: string) => w.length > 3 && !stopWords.has(w));
-          words.forEach((word: string) => wordCounts.set(word, (wordCounts.get(word) || 0) + 1));
+          // Handle transcript that could be string or object (VAPI stores full payload)
+          let transcriptText = "";
+          if (typeof call.transcript === "string") {
+            transcriptText = call.transcript;
+          } else if (typeof call.transcript === "object" && call.transcript !== null) {
+            // Try to extract transcript from VAPI response object
+            const transcriptObj = call.transcript as Record<string, unknown>;
+            if (typeof transcriptObj.transcript === "string") {
+              transcriptText = transcriptObj.transcript;
+            }
+          }
+          if (transcriptText) {
+            const words = transcriptText.toLowerCase().replace(/[^a-z\s]/g, "").split(/\s+/)
+              .filter((w: string) => w.length > 3 && !stopWords.has(w));
+            words.forEach((word: string) => wordCounts.set(word, (wordCounts.get(word) || 0) + 1));
+          }
         }
       });
       const topKeywords = Array.from(wordCounts.entries())
