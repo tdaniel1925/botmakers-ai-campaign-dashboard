@@ -163,7 +163,7 @@ interface CallRow {
   campaign_outcome_tags: {
     tag_name: string;
     tag_color: string;
-  } | null;
+  }[] | null;
 }
 
 interface TestResult {
