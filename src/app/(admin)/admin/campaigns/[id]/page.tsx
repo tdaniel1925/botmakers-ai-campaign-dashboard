@@ -805,10 +805,14 @@ export default function CampaignDetailPage() {
 
       {/* Main Tabs */}
       <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="overview" className="flex items-center gap-2">
             <Settings2 className="h-4 w-4" />
             Overview
+          </TabsTrigger>
+          <TabsTrigger value="calls" className="flex items-center gap-2">
+            <Phone className="h-4 w-4" />
+            Calls
           </TabsTrigger>
           <TabsTrigger value="webhook" className="flex items-center gap-2">
             <Zap className="h-4 w-4" />
@@ -902,13 +906,15 @@ export default function CampaignDetailPage() {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
 
-          {/* Recent Calls */}
+        {/* Calls Tab */}
+        <TabsContent value="calls" className="space-y-6">
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>Recent Calls</CardTitle>
+                  <CardTitle>Call History</CardTitle>
                   <CardDescription>
                     {stats?.totalCalls || 0} total calls in this campaign
                   </CardDescription>
