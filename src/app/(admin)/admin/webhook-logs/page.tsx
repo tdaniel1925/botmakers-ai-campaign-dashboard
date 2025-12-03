@@ -1,14 +1,6 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,19 +18,18 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { format, formatDistanceToNow } from "date-fns";
 import {
-  ChevronDown,
-  ChevronRight,
   CheckCircle2,
   XCircle,
   Clock,
-  AlertTriangle,
   Phone,
   FileText,
   Music,
@@ -49,10 +40,16 @@ import {
   Webhook,
   Play,
   Pause,
-  Volume2,
   Download,
+  Search,
+  Eye,
+  Copy,
+  Check,
+  ChevronRight,
+  Zap,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 interface WebhookLog {
   id: string;
@@ -70,21 +67,7 @@ interface WebhookLog {
   } | null;
 }
 
-interface CampaignStats {
-  campaignId: string;
-  campaignName: string;
-  clientName: string;
-  webhookToken: string;
-  totalLogs: number;
-  successCount: number;
-  failedCount: number;
-  pingCount: number;
-  callsWithTranscript: number;
-  lastActivity: string | null;
-  logs: WebhookLog[];
-}
-
-// Helper to detect fields from payload (mirrors webhook logic)
+// Helper to detect fields from payload
 function analyzePayload(payload: Record<string, unknown>) {
   const findValue = (obj: unknown, keys: string[]): unknown => {
     if (!obj || typeof obj !== "object") return undefined;
@@ -126,35 +109,31 @@ function analyzePayload(payload: Record<string, unknown>) {
 
   const transcriptKeys = [
     "formatted_transcript", "transcript", "transcription", "text", "content", "message",
-    "call_transcript", "conversation", "dialog", "artifact.transcript",
-    "recording_transcript", "call_recording_transcript"
+    "call_transcript", "conversation", "dialog", "artifact.transcript"
   ];
 
   const audioUrlKeys = [
     "recording_url", "recordingUrl", "audio_url", "audioUrl",
     "audio", "recording", "media_url", "mediaUrl",
     "stereo_recording_url", "stereoRecordingUrl",
-    "artifact.recordingUrl", "call_recording_url", "recording_link"
+    "artifact.recordingUrl", "call_recording_url"
   ];
 
   const phoneKeys = [
     "from", "phone", "caller", "phone_number", "phoneNumber",
     "caller_phone", "callerPhone", "customer_phone", "customerPhone",
-    "from_number", "fromNumber", "caller_id", "callerId",
-    "customer.number", "contact_phone", "lead_phone"
+    "customer.number", "contact_phone", "lead_phone", "to"
   ];
 
   const durationKeys = [
     "duration", "call_duration", "callDuration", "length",
-    "duration_seconds", "durationSeconds", "duration_ms", "durationMs",
-    "talk_time", "talkTime", "call_length", "callLength",
-    "artifact.duration", "call_duration_seconds", "total_duration"
+    "duration_seconds", "durationSeconds",
+    "call_length", "callLength", "artifact.duration", "call_duration_seconds"
   ];
 
   const callIdKeys = [
     "id", "call_id", "callId", "external_id", "externalId",
-    "recording_id", "recordingId", "uuid", "call_uuid", "callUuid",
-    "call_reference", "unique_id"
+    "recording_id", "recordingId", "uuid", "call_uuid"
   ];
 
   let transcript = findValue(payload, ["formatted_transcript"]);
@@ -179,47 +158,7 @@ function analyzePayload(payload: Record<string, unknown>) {
   };
 }
 
-function StatusIcon({ status, isPing }: { status: string; isPing: boolean }) {
-  if (isPing) {
-    return <Activity className="h-4 w-4 text-blue-500" />;
-  }
-  switch (status) {
-    case "success":
-      return <CheckCircle2 className="h-4 w-4 text-green-500" />;
-    case "processing":
-      return <Clock className="h-4 w-4 text-yellow-500" />;
-    case "failed":
-      return <XCircle className="h-4 w-4 text-red-500" />;
-    default:
-      return <AlertTriangle className="h-4 w-4 text-gray-500" />;
-  }
-}
-
-function DetectedFieldBadge({
-  detected,
-  label,
-  icon: Icon
-}: {
-  detected: boolean;
-  label: string;
-  icon: React.ElementType;
-}) {
-  return (
-    <div className={`flex items-center gap-1 px-2 py-1 rounded text-xs ${
-      detected ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"
-    }`}>
-      <Icon className="h-3 w-3" />
-      <span>{label}</span>
-      {detected ? (
-        <CheckCircle2 className="h-3 w-3" />
-      ) : (
-        <XCircle className="h-3 w-3" />
-      )}
-    </div>
-  );
-}
-
-function InlineAudioPlayer({ src }: { src: string }) {
+function AudioPlayer({ src }: { src: string }) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -271,25 +210,25 @@ function InlineAudioPlayer({ src }: { src: string }) {
   };
 
   return (
-    <div className="flex items-center gap-3 p-3 bg-background rounded-lg border">
+    <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
       <audio ref={audioRef} src={src} preload="metadata" />
-      <Button variant="outline" size="icon" onClick={togglePlay} className="h-8 w-8 shrink-0">
+      <Button variant="outline" size="icon" onClick={togglePlay} className="h-10 w-10 shrink-0">
         {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
       </Button>
-      <div className="flex-1 flex items-center gap-2">
-        <span className="text-xs text-muted-foreground w-10">{formatTime(currentTime)}</span>
+      <div className="flex-1 flex items-center gap-3">
+        <span className="text-sm text-muted-foreground w-12">{formatTime(currentTime)}</span>
         <input
           type="range"
           min={0}
           max={duration || 100}
           value={currentTime}
           onChange={handleSeek}
-          className="flex-1 h-1 bg-muted rounded-lg appearance-none cursor-pointer"
+          className="flex-1 h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
         />
-        <span className="text-xs text-muted-foreground w-10">{formatTime(duration)}</span>
+        <span className="text-sm text-muted-foreground w-12">{formatTime(duration)}</span>
       </div>
       <a href={src} download className="shrink-0">
-        <Button variant="ghost" size="icon" className="h-8 w-8">
+        <Button variant="ghost" size="icon" className="h-10 w-10">
           <Download className="h-4 w-4" />
         </Button>
       </a>
@@ -297,282 +236,156 @@ function InlineAudioPlayer({ src }: { src: string }) {
   );
 }
 
-function PayloadViewer({ payload, analysis }: {
-  payload: Record<string, unknown>;
-  analysis: ReturnType<typeof analyzePayload>;
-}) {
-  const [showRaw, setShowRaw] = useState(false);
+function LogDetailModal({ log, open, onClose }: { log: WebhookLog | null; open: boolean; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+  const { toast } = useToast();
 
-  return (
-    <div className="space-y-3">
-      {/* Detected Fields Summary */}
-      <div className="flex flex-wrap gap-2">
-        <DetectedFieldBadge detected={analysis.hasTranscript} label="Transcript" icon={FileText} />
-        <DetectedFieldBadge detected={analysis.hasPhone} label="Phone" icon={Phone} />
-        <DetectedFieldBadge detected={analysis.hasAudioUrl} label="Audio" icon={Music} />
-        <DetectedFieldBadge detected={analysis.hasDuration} label="Duration" icon={Timer} />
-        <DetectedFieldBadge detected={analysis.hasCallId} label="Call ID" icon={Hash} />
-      </div>
+  if (!log) return null;
 
-      {/* Audio Player - Show prominently if audio URL exists */}
-      {analysis.hasAudioUrl && analysis.audioUrl && (
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <Volume2 className="h-4 w-4 text-green-600" />
-            <span className="font-medium text-sm">Call Recording</span>
-          </div>
-          <InlineAudioPlayer src={analysis.audioUrl} />
-        </div>
-      )}
-
-      {/* Extracted Values */}
-      {(analysis.hasTranscript || analysis.hasPhone || analysis.hasDuration || analysis.hasCallId) && (
-        <div className="bg-muted/50 rounded-lg p-3 space-y-2 text-sm">
-          <h4 className="font-medium text-muted-foreground">Extracted Values:</h4>
-          <div className="grid gap-2">
-            {analysis.phone && (
-              <div className="flex items-center gap-2">
-                <Phone className="h-4 w-4 text-muted-foreground" />
-                <span className="text-muted-foreground">Phone:</span>
-                <span className="font-mono">{analysis.phone}</span>
-              </div>
-            )}
-            {analysis.duration && (
-              <div className="flex items-center gap-2">
-                <Timer className="h-4 w-4 text-muted-foreground" />
-                <span className="text-muted-foreground">Duration:</span>
-                <span className="font-mono">{analysis.duration}s</span>
-              </div>
-            )}
-            {analysis.callId && (
-              <div className="flex items-center gap-2">
-                <Hash className="h-4 w-4 text-muted-foreground" />
-                <span className="text-muted-foreground">Call ID:</span>
-                <span className="font-mono text-xs">{String(analysis.callId).slice(0, 30)}...</span>
-              </div>
-            )}
-            {analysis.hasTranscript && (
-              <div className="flex flex-col gap-1">
-                <div className="flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-muted-foreground">Transcript:</span>
-                </div>
-                <div className="ml-6 p-2 bg-background rounded border text-xs max-h-32 overflow-y-auto font-mono whitespace-pre-wrap">
-                  {String(analysis.transcript).slice(0, 500)}
-                  {String(analysis.transcript).length > 500 && "..."}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Raw Payload Toggle */}
-      <div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setShowRaw(!showRaw)}
-          className="text-xs"
-        >
-          {showRaw ? "Hide" : "Show"} Raw Payload
-        </Button>
-        {showRaw && (
-          <pre className="mt-2 p-3 bg-muted rounded-lg text-xs overflow-auto max-h-64">
-            {JSON.stringify(payload, null, 2)}
-          </pre>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function LogRow({ log }: { log: WebhookLog }) {
-  const [isOpen, setIsOpen] = useState(false);
   const analysis = analyzePayload(log.payload);
   const isPing = log.error_message === "Ping received (no transcript)";
 
+  const handleCopyPayload = () => {
+    navigator.clipboard.writeText(JSON.stringify(log.payload, null, 2));
+    setCopied(true);
+    toast({ title: "Copied", description: "Payload copied to clipboard" });
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <TableRow className="hover:bg-muted/50">
-        <TableCell className="w-8">
-          <CollapsibleTrigger asChild>
-            <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
-              {isOpen ? (
-                <ChevronDown className="h-4 w-4" />
-              ) : (
-                <ChevronRight className="h-4 w-4" />
-              )}
-            </Button>
-          </CollapsibleTrigger>
-        </TableCell>
-        <TableCell className="font-mono text-xs">
-          {format(new Date(log.created_at), "MMM d, HH:mm:ss")}
-          <div className="text-muted-foreground text-[10px]">
-            {formatDistanceToNow(new Date(log.created_at), { addSuffix: true })}
-          </div>
-        </TableCell>
-        <TableCell>
-          <div className="flex items-center gap-2">
-            <StatusIcon status={log.status} isPing={isPing} />
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-3">
             {isPing ? (
-              <Badge variant="secondary" className="text-xs">Ping</Badge>
+              <Badge variant="secondary">Ping Test</Badge>
             ) : log.status === "success" ? (
-              <Badge variant="success" className="text-xs">Call Received</Badge>
-            ) : log.status === "processing" ? (
-              <Badge variant="secondary" className="text-xs">Processing</Badge>
+              <Badge variant="success">Call Received</Badge>
             ) : (
-              <Badge variant="destructive" className="text-xs">Failed</Badge>
+              <Badge variant="destructive">Failed</Badge>
             )}
+            <span className="text-muted-foreground font-normal text-sm">
+              {format(new Date(log.created_at), "MMM d, yyyy 'at' h:mm:ss a")}
+            </span>
+          </DialogTitle>
+          <DialogDescription>
+            {log.campaigns?.name} • {log.campaigns?.clients?.name}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-6 mt-4">
+          {/* Detected Fields */}
+          <div>
+            <h4 className="text-sm font-medium mb-3">Detected Fields</h4>
+            <div className="grid grid-cols-5 gap-2">
+              <div className={`flex flex-col items-center p-3 rounded-lg border ${analysis.hasTranscript ? "bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-800" : "bg-muted/50"}`}>
+                <FileText className={`h-5 w-5 mb-1 ${analysis.hasTranscript ? "text-green-600" : "text-muted-foreground"}`} />
+                <span className="text-xs">Transcript</span>
+              </div>
+              <div className={`flex flex-col items-center p-3 rounded-lg border ${analysis.hasPhone ? "bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-800" : "bg-muted/50"}`}>
+                <Phone className={`h-5 w-5 mb-1 ${analysis.hasPhone ? "text-green-600" : "text-muted-foreground"}`} />
+                <span className="text-xs">Phone</span>
+              </div>
+              <div className={`flex flex-col items-center p-3 rounded-lg border ${analysis.hasAudioUrl ? "bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-800" : "bg-muted/50"}`}>
+                <Music className={`h-5 w-5 mb-1 ${analysis.hasAudioUrl ? "text-green-600" : "text-muted-foreground"}`} />
+                <span className="text-xs">Audio</span>
+              </div>
+              <div className={`flex flex-col items-center p-3 rounded-lg border ${analysis.hasDuration ? "bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-800" : "bg-muted/50"}`}>
+                <Timer className={`h-5 w-5 mb-1 ${analysis.hasDuration ? "text-green-600" : "text-muted-foreground"}`} />
+                <span className="text-xs">Duration</span>
+              </div>
+              <div className={`flex flex-col items-center p-3 rounded-lg border ${analysis.hasCallId ? "bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-800" : "bg-muted/50"}`}>
+                <Hash className={`h-5 w-5 mb-1 ${analysis.hasCallId ? "text-green-600" : "text-muted-foreground"}`} />
+                <span className="text-xs">Call ID</span>
+              </div>
+            </div>
           </div>
-        </TableCell>
-        <TableCell>
-          <div className="flex gap-1">
-            {analysis.hasTranscript && (
-              <span title="Has Transcript">
-                <FileText className="h-4 w-4 text-green-500" />
-              </span>
-            )}
-            {analysis.hasPhone && (
-              <span title="Has Phone">
-                <Phone className="h-4 w-4 text-green-500" />
-              </span>
-            )}
-            {analysis.hasAudioUrl && (
-              <span title="Has Audio">
-                <Music className="h-4 w-4 text-green-500" />
-              </span>
-            )}
-            {analysis.hasDuration && (
-              <span title="Has Duration">
-                <Timer className="h-4 w-4 text-green-500" />
-              </span>
-            )}
-            {!analysis.hasTranscript && !analysis.hasPhone && !analysis.hasAudioUrl && !analysis.hasDuration && (
-              <span className="text-muted-foreground text-xs">No data detected</span>
-            )}
-          </div>
-        </TableCell>
-        <TableCell className="max-w-xs">
-          {log.error_message && !isPing ? (
-            <span className="text-red-600 text-xs truncate block">{log.error_message}</span>
-          ) : analysis.phone ? (
-            <span className="font-mono text-xs">{analysis.phone}</span>
-          ) : (
-            <span className="text-muted-foreground text-xs">-</span>
+
+          {/* Extracted Data */}
+          {(analysis.hasPhone || analysis.hasDuration || analysis.hasCallId) && (
+            <div>
+              <h4 className="text-sm font-medium mb-3">Extracted Data</h4>
+              <div className="grid gap-2">
+                {analysis.phone && (
+                  <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                    <Phone className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">Phone:</span>
+                    <span className="font-mono text-sm">{analysis.phone}</span>
+                  </div>
+                )}
+                {analysis.duration && (
+                  <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                    <Timer className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">Duration:</span>
+                    <span className="font-mono text-sm">{analysis.duration}s</span>
+                  </div>
+                )}
+                {analysis.callId && (
+                  <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                    <Hash className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">Call ID:</span>
+                    <span className="font-mono text-sm truncate">{String(analysis.callId)}</span>
+                  </div>
+                )}
+              </div>
+            </div>
           )}
-        </TableCell>
-      </TableRow>
-      <CollapsibleContent asChild>
-        <TableRow className="bg-muted/30 hover:bg-muted/30">
-          <TableCell colSpan={5} className="p-4">
-            <PayloadViewer payload={log.payload} analysis={analysis} />
-          </TableCell>
-        </TableRow>
-      </CollapsibleContent>
-    </Collapsible>
-  );
-}
 
-function CampaignSection({ stats }: { stats: CampaignStats }) {
-  const [isOpen, setIsOpen] = useState(false);
+          {/* Audio Player */}
+          {analysis.hasAudioUrl && analysis.audioUrl && (
+            <div>
+              <h4 className="text-sm font-medium mb-3">Call Recording</h4>
+              <AudioPlayer src={analysis.audioUrl} />
+            </div>
+          )}
 
-  return (
-    <Card className="mb-4">
-      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-        <CollapsibleTrigger asChild>
-          <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                {isOpen ? (
-                  <ChevronDown className="h-5 w-5 text-muted-foreground" />
-                ) : (
-                  <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                )}
-                <div>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <Webhook className="h-5 w-5" />
-                    {stats.campaignName}
-                  </CardTitle>
-                  <CardDescription>
-                    {stats.clientName} &bull; {stats.totalLogs} total webhooks
-                  </CardDescription>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                {/* Stats Summary */}
-                <div className="flex gap-2">
-                  <Badge variant="success" className="text-xs">
-                    {stats.callsWithTranscript} calls
-                  </Badge>
-                  <Badge variant="secondary" className="text-xs">
-                    {stats.pingCount} pings
-                  </Badge>
-                  {stats.failedCount > 0 && (
-                    <Badge variant="destructive" className="text-xs">
-                      {stats.failedCount} failed
-                    </Badge>
-                  )}
-                </div>
-                {stats.lastActivity && (
-                  <span className="text-xs text-muted-foreground">
-                    Last: {formatDistanceToNow(new Date(stats.lastActivity), { addSuffix: true })}
-                  </span>
-                )}
+          {/* Transcript */}
+          {analysis.hasTranscript && analysis.transcript && (
+            <div>
+              <h4 className="text-sm font-medium mb-3">Transcript</h4>
+              <div className="p-4 bg-muted/50 rounded-lg max-h-48 overflow-y-auto">
+                <pre className="text-sm whitespace-pre-wrap font-mono">{analysis.transcript}</pre>
               </div>
             </div>
-          </CardHeader>
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <CardContent>
-            {/* Webhook URL Info */}
-            <div className="mb-4 p-3 bg-muted rounded-lg">
-              <div className="text-sm text-muted-foreground mb-1">Webhook URL:</div>
-              <code className="text-xs bg-background px-2 py-1 rounded border block overflow-x-auto">
-                {typeof window !== 'undefined' ? window.location.origin : ''}/api/webhooks/{stats.webhookToken}
-              </code>
-            </div>
+          )}
 
-            {/* Logs Table */}
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-8"></TableHead>
-                    <TableHead className="w-32">Time</TableHead>
-                    <TableHead className="w-32">Status</TableHead>
-                    <TableHead>Detected</TableHead>
-                    <TableHead>Details</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {stats.logs.length > 0 ? (
-                    stats.logs.map((log) => (
-                      <LogRow key={log.id} log={log} />
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
-                        No webhook logs for this campaign
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+          {/* Error Message */}
+          {log.error_message && !isPing && (
+            <div>
+              <h4 className="text-sm font-medium mb-3 text-red-600">Error</h4>
+              <div className="p-4 bg-red-50 dark:bg-red-950/30 rounded-lg border border-red-200 dark:border-red-800">
+                <p className="text-sm text-red-700 dark:text-red-400">{log.error_message}</p>
+              </div>
             </div>
-          </CardContent>
-        </CollapsibleContent>
-      </Collapsible>
-    </Card>
+          )}
+
+          {/* Raw Payload */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-sm font-medium">Raw Payload</h4>
+              <Button variant="outline" size="sm" onClick={handleCopyPayload}>
+                {copied ? <Check className="h-3 w-3 mr-2" /> : <Copy className="h-3 w-3 mr-2" />}
+                {copied ? "Copied" : "Copy"}
+              </Button>
+            </div>
+            <pre className="p-4 bg-muted rounded-lg text-xs overflow-auto max-h-64 font-mono">
+              {JSON.stringify(log.payload, null, 2)}
+            </pre>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
 export default function WebhookLogsPage() {
   const [logs, setLogs] = useState<WebhookLog[]>([]);
-  const [campaignStats, setCampaignStats] = useState<CampaignStats[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState<"all" | "calls" | "pings" | "failed">("all");
-  const [view, setView] = useState<"by-campaign" | "timeline">("by-campaign");
+  const [campaignFilter, setCampaignFilter] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedLog, setSelectedLog] = useState<WebhookLog | null>(null);
+  const [campaigns, setCampaigns] = useState<{ id: string; name: string }[]>([]);
   const supabase = createClient();
 
   const fetchLogs = useCallback(async () => {
@@ -590,7 +403,7 @@ export default function WebhookLogsPage() {
         )
       `)
       .order("created_at", { ascending: false })
-      .limit(500);
+      .limit(200);
 
     if (error) {
       console.error("Error fetching logs:", error);
@@ -601,58 +414,15 @@ export default function WebhookLogsPage() {
     const typedLogs = (data || []) as WebhookLog[];
     setLogs(typedLogs);
 
-    // Group by campaign
-    const campaignMap = new Map<string, CampaignStats>();
-
-    for (const log of typedLogs) {
-      const campaignId = log.campaign_id;
-      const isPing = log.error_message === "Ping received (no transcript)";
-      const analysis = analyzePayload(log.payload);
-
-      if (!campaignMap.has(campaignId)) {
-        campaignMap.set(campaignId, {
-          campaignId,
-          campaignName: log.campaigns?.name || "Unknown Campaign",
-          clientName: log.campaigns?.clients?.name || "Unknown Client",
-          webhookToken: log.campaigns?.webhook_token || "",
-          totalLogs: 0,
-          successCount: 0,
-          failedCount: 0,
-          pingCount: 0,
-          callsWithTranscript: 0,
-          lastActivity: null,
-          logs: [],
-        });
+    // Extract unique campaigns
+    const uniqueCampaigns = new Map<string, string>();
+    typedLogs.forEach(log => {
+      if (log.campaigns?.name) {
+        uniqueCampaigns.set(log.campaign_id, log.campaigns.name);
       }
-
-      const stats = campaignMap.get(campaignId)!;
-      stats.totalLogs++;
-      stats.logs.push(log);
-
-      if (!stats.lastActivity || new Date(log.created_at) > new Date(stats.lastActivity)) {
-        stats.lastActivity = log.created_at;
-      }
-
-      if (log.status === "success") {
-        stats.successCount++;
-        if (isPing) {
-          stats.pingCount++;
-        } else if (analysis.hasTranscript) {
-          stats.callsWithTranscript++;
-        }
-      } else if (log.status === "failed") {
-        stats.failedCount++;
-      }
-    }
-
-    // Sort campaigns by last activity
-    const sortedStats = Array.from(campaignMap.values()).sort((a, b) => {
-      if (!a.lastActivity) return 1;
-      if (!b.lastActivity) return -1;
-      return new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime();
     });
+    setCampaigns(Array.from(uniqueCampaigns.entries()).map(([id, name]) => ({ id, name })));
 
-    setCampaignStats(sortedStats);
     setIsLoading(false);
   }, [supabase]);
 
@@ -660,25 +430,33 @@ export default function WebhookLogsPage() {
     fetchLogs();
   }, [fetchLogs]);
 
-  // Filter logs based on selection
-  const getFilteredLogs = (logsToFilter: WebhookLog[]) => {
-    switch (filter) {
-      case "calls":
-        return logsToFilter.filter(log => {
-          const isPing = log.error_message === "Ping received (no transcript)";
-          return log.status === "success" && !isPing;
-        });
-      case "pings":
-        return logsToFilter.filter(log => log.error_message === "Ping received (no transcript)");
-      case "failed":
-        return logsToFilter.filter(log => log.status === "failed");
-      default:
-        return logsToFilter;
-    }
-  };
+  // Filter logs
+  const filteredLogs = logs.filter(log => {
+    const isPing = log.error_message === "Ping received (no transcript)";
+    const analysis = analyzePayload(log.payload);
 
-  // Calculate overall stats
-  const overallStats = {
+    // Status filter
+    if (filter === "calls" && (isPing || log.status !== "success")) return false;
+    if (filter === "pings" && !isPing) return false;
+    if (filter === "failed" && log.status !== "failed") return false;
+
+    // Campaign filter
+    if (campaignFilter !== "all" && log.campaign_id !== campaignFilter) return false;
+
+    // Search filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      const matchesCampaign = log.campaigns?.name?.toLowerCase().includes(query);
+      const matchesClient = log.campaigns?.clients?.name?.toLowerCase().includes(query);
+      const matchesPhone = analysis.phone?.toLowerCase().includes(query);
+      if (!matchesCampaign && !matchesClient && !matchesPhone) return false;
+    }
+
+    return true;
+  });
+
+  // Stats
+  const stats = {
     total: logs.length,
     calls: logs.filter(l => l.status === "success" && l.error_message !== "Ping received (no transcript)").length,
     pings: logs.filter(l => l.error_message === "Ping received (no transcript)").length,
@@ -687,11 +465,12 @@ export default function WebhookLogsPage() {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Webhook Logs</h1>
           <p className="text-muted-foreground">
-            Monitor incoming webhooks and diagnose integration issues
+            Monitor incoming webhooks across all campaigns
           </p>
         </div>
         <Button onClick={fetchLogs} variant="outline" disabled={isLoading}>
@@ -700,197 +479,217 @@ export default function WebhookLogsPage() {
         </Button>
       </div>
 
-      {/* Summary Cards */}
+      {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Webhooks</CardTitle>
-            <Webhook className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{overallStats.total}</div>
-            <p className="text-xs text-muted-foreground">Last 500 entries</p>
+        <Card className="cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => setFilter("all")}>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Total Webhooks</p>
+                <p className="text-3xl font-bold">{stats.total}</p>
+              </div>
+              <div className="p-3 bg-primary/10 rounded-full">
+                <Webhook className="h-6 w-6 text-primary" />
+              </div>
+            </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Calls Received</CardTitle>
-            <CheckCircle2 className="h-4 w-4 text-green-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">{overallStats.calls}</div>
-            <p className="text-xs text-muted-foreground">With transcript data</p>
+        <Card className="cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => setFilter("calls")}>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Calls Received</p>
+                <p className="text-3xl font-bold text-green-600">{stats.calls}</p>
+              </div>
+              <div className="p-3 bg-green-100 dark:bg-green-950/50 rounded-full">
+                <CheckCircle2 className="h-6 w-6 text-green-600" />
+              </div>
+            </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Ping Tests</CardTitle>
-            <Activity className="h-4 w-4 text-blue-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-600">{overallStats.pings}</div>
-            <p className="text-xs text-muted-foreground">Connection tests</p>
+        <Card className="cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => setFilter("pings")}>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Ping Tests</p>
+                <p className="text-3xl font-bold text-blue-600">{stats.pings}</p>
+              </div>
+              <div className="p-3 bg-blue-100 dark:bg-blue-950/50 rounded-full">
+                <Activity className="h-6 w-6 text-blue-600" />
+              </div>
+            </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Failed</CardTitle>
-            <XCircle className="h-4 w-4 text-red-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">{overallStats.failed}</div>
-            <p className="text-xs text-muted-foreground">Errors to investigate</p>
+        <Card className="cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => setFilter("failed")}>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Failed</p>
+                <p className="text-3xl font-bold text-red-600">{stats.failed}</p>
+              </div>
+              <div className="p-3 bg-red-100 dark:bg-red-950/50 rounded-full">
+                <XCircle className="h-6 w-6 text-red-600" />
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Controls */}
-      <div className="flex items-center justify-between">
-        <Tabs value={view} onValueChange={(v) => setView(v as "by-campaign" | "timeline")}>
-          <TabsList>
-            <TabsTrigger value="by-campaign">By Campaign</TabsTrigger>
-            <TabsTrigger value="timeline">Timeline</TabsTrigger>
-          </TabsList>
-        </Tabs>
+      {/* Filters */}
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex flex-wrap gap-4">
+            <div className="flex-1 min-w-[200px]">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search by campaign, client, or phone..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+            </div>
+            <Select value={campaignFilter} onValueChange={setCampaignFilter}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="All Campaigns" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Campaigns</SelectItem>
+                {campaigns.map(c => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={filter} onValueChange={(v) => setFilter(v as typeof filter)}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue placeholder="All Types" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                <SelectItem value="calls">Calls Only</SelectItem>
+                <SelectItem value="pings">Pings Only</SelectItem>
+                <SelectItem value="failed">Failed Only</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
 
-        <Select value={filter} onValueChange={(v) => setFilter(v as typeof filter)}>
-          <SelectTrigger className="w-40">
-            <SelectValue placeholder="Filter logs" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Webhooks</SelectItem>
-            <SelectItem value="calls">Calls Only</SelectItem>
-            <SelectItem value="pings">Pings Only</SelectItem>
-            <SelectItem value="failed">Failed Only</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Main Content */}
-      {view === "by-campaign" ? (
-        <div>
+      {/* Logs List */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent Activity</CardTitle>
+          <CardDescription>
+            {filteredLogs.length} webhook{filteredLogs.length !== 1 ? "s" : ""} found
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
           {isLoading ? (
-            <div className="text-center py-12 text-muted-foreground">
-              Loading webhook logs...
+            <div className="flex items-center justify-center py-12">
+              <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
-          ) : campaignStats.length > 0 ? (
-            campaignStats.map((stats) => {
-              const filteredStats = {
-                ...stats,
-                logs: getFilteredLogs(stats.logs),
-              };
-              // Hide campaigns with no logs after filtering (unless filter is "all")
-              if (filter !== "all" && filteredStats.logs.length === 0) return null;
-              return <CampaignSection key={stats.campaignId} stats={filteredStats} />;
-            })
+          ) : filteredLogs.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+              <Webhook className="h-12 w-12 mb-4 opacity-50" />
+              <p className="font-medium">No webhooks found</p>
+              <p className="text-sm">Try adjusting your filters or wait for incoming data</p>
+            </div>
           ) : (
-            <Card>
-              <CardContent className="py-12 text-center text-muted-foreground">
-                No webhook logs found. Webhooks will appear here once your voice AI platform sends data.
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      ) : (
-        <Card>
-          <CardContent className="p-0">
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-8"></TableHead>
-                    <TableHead className="w-32">Time</TableHead>
-                    <TableHead>Campaign</TableHead>
-                    <TableHead className="w-32">Status</TableHead>
-                    <TableHead>Detected</TableHead>
-                    <TableHead>Details</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {isLoading ? (
-                    <TableRow>
-                      <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                        Loading...
-                      </TableCell>
-                    </TableRow>
-                  ) : getFilteredLogs(logs).length > 0 ? (
-                    getFilteredLogs(logs).map((log) => {
-                      const analysis = analyzePayload(log.payload);
-                      const isPing = log.error_message === "Ping received (no transcript)";
-                      return (
-                        <Collapsible key={log.id} asChild>
-                          <>
-                            <TableRow className="hover:bg-muted/50">
-                              <TableCell className="w-8">
-                                <CollapsibleTrigger asChild>
-                                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
-                                    <ChevronRight className="h-4 w-4" />
-                                  </Button>
-                                </CollapsibleTrigger>
-                              </TableCell>
-                              <TableCell className="font-mono text-xs">
-                                {format(new Date(log.created_at), "MMM d, HH:mm:ss")}
-                              </TableCell>
-                              <TableCell>
-                                <div className="font-medium">{log.campaigns?.name || "Unknown"}</div>
-                                <div className="text-xs text-muted-foreground">
-                                  {log.campaigns?.clients?.name || "Unknown Client"}
-                                </div>
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex items-center gap-2">
-                                  <StatusIcon status={log.status} isPing={isPing} />
-                                  {isPing ? (
-                                    <Badge variant="secondary" className="text-xs">Ping</Badge>
-                                  ) : log.status === "success" ? (
-                                    <Badge variant="success" className="text-xs">Call</Badge>
-                                  ) : (
-                                    <Badge variant="destructive" className="text-xs">Failed</Badge>
-                                  )}
-                                </div>
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex gap-1">
-                                  {analysis.hasTranscript && <FileText className="h-4 w-4 text-green-500" />}
-                                  {analysis.hasPhone && <Phone className="h-4 w-4 text-green-500" />}
-                                  {analysis.hasAudioUrl && <Music className="h-4 w-4 text-green-500" />}
-                                  {analysis.hasDuration && <Timer className="h-4 w-4 text-green-500" />}
-                                </div>
-                              </TableCell>
-                              <TableCell className="max-w-xs">
-                                {log.error_message && !isPing ? (
-                                  <span className="text-red-600 text-xs">{log.error_message}</span>
-                                ) : analysis.phone ? (
-                                  <span className="font-mono text-xs">{analysis.phone}</span>
-                                ) : (
-                                  "-"
-                                )}
-                              </TableCell>
-                            </TableRow>
-                            <CollapsibleContent asChild>
-                              <TableRow className="bg-muted/30">
-                                <TableCell colSpan={6} className="p-4">
-                                  <PayloadViewer payload={log.payload} analysis={analysis} />
-                                </TableCell>
-                              </TableRow>
-                            </CollapsibleContent>
-                          </>
-                        </Collapsible>
-                      );
-                    })
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                        No webhook logs found
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+            <div className="space-y-2">
+              {filteredLogs.map((log) => {
+                const analysis = analyzePayload(log.payload);
+                const isPing = log.error_message === "Ping received (no transcript)";
+
+                return (
+                  <div
+                    key={log.id}
+                    onClick={() => setSelectedLog(log)}
+                    className="flex items-center gap-4 p-4 rounded-lg border bg-card hover:bg-muted/50 cursor-pointer transition-colors"
+                  >
+                    {/* Status Icon */}
+                    <div className={`p-2 rounded-full ${
+                      isPing
+                        ? "bg-blue-100 dark:bg-blue-950/50"
+                        : log.status === "success"
+                        ? "bg-green-100 dark:bg-green-950/50"
+                        : "bg-red-100 dark:bg-red-950/50"
+                    }`}>
+                      {isPing ? (
+                        <Zap className="h-5 w-5 text-blue-600" />
+                      ) : log.status === "success" ? (
+                        <CheckCircle2 className="h-5 w-5 text-green-600" />
+                      ) : (
+                        <XCircle className="h-5 w-5 text-red-600" />
+                      )}
+                    </div>
+
+                    {/* Main Info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-medium truncate">{log.campaigns?.name || "Unknown Campaign"}</span>
+                        <Badge variant={isPing ? "secondary" : log.status === "success" ? "success" : "destructive"} className="shrink-0">
+                          {isPing ? "Ping" : log.status === "success" ? "Call" : "Failed"}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                        <span>{log.campaigns?.clients?.name || "Unknown Client"}</span>
+                        {analysis.phone && (
+                          <span className="font-mono">{analysis.phone}</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Detected Fields */}
+                    <div className="hidden md:flex items-center gap-1">
+                      {analysis.hasTranscript && (
+                        <div className="p-1.5 bg-green-100 dark:bg-green-950/50 rounded" title="Has Transcript">
+                          <FileText className="h-4 w-4 text-green-600" />
+                        </div>
+                      )}
+                      {analysis.hasPhone && (
+                        <div className="p-1.5 bg-green-100 dark:bg-green-950/50 rounded" title="Has Phone">
+                          <Phone className="h-4 w-4 text-green-600" />
+                        </div>
+                      )}
+                      {analysis.hasAudioUrl && (
+                        <div className="p-1.5 bg-green-100 dark:bg-green-950/50 rounded" title="Has Audio">
+                          <Music className="h-4 w-4 text-green-600" />
+                        </div>
+                      )}
+                      {analysis.hasDuration && (
+                        <div className="p-1.5 bg-green-100 dark:bg-green-950/50 rounded" title="Has Duration">
+                          <Timer className="h-4 w-4 text-green-600" />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Time */}
+                    <div className="text-right shrink-0">
+                      <div className="text-sm font-medium">
+                        {format(new Date(log.created_at), "MMM d, HH:mm")}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {formatDistanceToNow(new Date(log.created_at), { addSuffix: true })}
+                      </div>
+                    </div>
+
+                    {/* Arrow */}
+                    <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0" />
+                  </div>
+                );
+              })}
             </div>
-          </CardContent>
-        </Card>
-      )}
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Detail Modal */}
+      <LogDetailModal
+        log={selectedLog}
+        open={!!selectedLog}
+        onClose={() => setSelectedLog(null)}
+      />
     </div>
   );
 }
