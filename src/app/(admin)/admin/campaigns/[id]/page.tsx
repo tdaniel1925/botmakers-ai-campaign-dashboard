@@ -77,6 +77,7 @@ import {
   Eye,
   Tag,
   BarChart3,
+  BookOpen,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { format, formatDistanceToNow, subDays, startOfDay, endOfDay } from "date-fns";
@@ -178,6 +179,31 @@ interface TestResult {
     callId: string | null;
   };
   callId?: string;
+}
+
+interface FieldMapping {
+  transcript: string | null;
+  audioUrl: string | null;
+  callerPhone: string | null;
+  callDuration: string | null;
+  timestamp: string | null;
+  externalCallId: string | null;
+  callStatus: string | null;
+}
+
+interface AIAnalysisResult {
+  mapping: FieldMapping;
+  extracted: {
+    transcript: string | null;
+    audioUrl: string | null;
+    callerPhone: string | null;
+    callDuration: number | null;
+    timestamp: string | null;
+    externalCallId: string | null;
+    callStatus: string | null;
+  };
+  confidence: number;
+  flattenedPayload: Record<string, unknown>;
 }
 
 // ============= Platform Presets =============
@@ -331,6 +357,14 @@ export default function CampaignDetailPage() {
   const [testResult, setTestResult] = useState<TestResult | null>(null);
   const [previewAnalysis, setPreviewAnalysis] = useState<ReturnType<typeof analyzePayload> | null>(null);
 
+  // Field Mapping state
+  const [savedMappings, setSavedMappings] = useState<FieldMapping | null>(null);
+  const [editableMappings, setEditableMappings] = useState<FieldMapping | null>(null);
+  const [aiAnalysisResult, setAiAnalysisResult] = useState<AIAnalysisResult | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isSavingMappings, setIsSavingMappings] = useState(false);
+  const [showMappingEditor, setShowMappingEditor] = useState(false);
+
   // Outcome Tags state
   const [tags, setTags] = useState<OutcomeTagRow[]>([]);
   const [newTagName, setNewTagName] = useState("");
@@ -394,6 +428,21 @@ export default function CampaignDetailPage() {
       }
     } catch (error) {
       console.error("Error fetching webhook logs:", error);
+    }
+  }, [params.id]);
+
+  const fetchSavedMappings = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/admin/campaigns/${params.id}/analyze-payload`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.mappings) {
+          setSavedMappings(data.mappings);
+          setEditableMappings(data.mappings);
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching saved mappings:", error);
     }
   }, [params.id]);
 
@@ -530,11 +579,11 @@ export default function CampaignDetailPage() {
   useEffect(() => {
     async function loadData() {
       setIsLoading(true);
-      await Promise.all([fetchCampaign(), fetchWebhookLogs(), fetchTags(), fetchSmsRules(), fetchAnalytics(), fetchCalls(1)]);
+      await Promise.all([fetchCampaign(), fetchWebhookLogs(), fetchTags(), fetchSmsRules(), fetchAnalytics(), fetchCalls(1), fetchSavedMappings()]);
       setIsLoading(false);
     }
     loadData();
-  }, [fetchCampaign, fetchWebhookLogs, fetchTags, fetchSmsRules, fetchAnalytics, fetchCalls]);
+  }, [fetchCampaign, fetchWebhookLogs, fetchTags, fetchSmsRules, fetchAnalytics, fetchCalls, fetchSavedMappings]);
 
   // Handle calls pagination
   useEffect(() => {
@@ -609,6 +658,83 @@ export default function CampaignDetailPage() {
     } finally {
       setIsTesting(false);
     }
+  };
+
+  const handleAnalyzePayload = async () => {
+    if (!testPayload) return;
+    setIsAnalyzing(true);
+    setAiAnalysisResult(null);
+    try {
+      const response = await fetch(`/api/admin/campaigns/${params.id}/analyze-payload`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ payload: testPayload }),
+      });
+      if (!response.ok) throw new Error("Failed to analyze payload");
+      const result = await response.json();
+      setAiAnalysisResult(result);
+      setEditableMappings(result.mapping);
+      setShowMappingEditor(true);
+      toast({ title: "Analysis complete", description: `AI confidence: ${result.confidence}%` });
+    } catch (error) {
+      toast({ title: "Error", description: error instanceof Error ? error.message : "Failed to analyze", variant: "destructive" });
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const handleSaveMappings = async () => {
+    if (!editableMappings) return;
+    setIsSavingMappings(true);
+    try {
+      const response = await fetch(`/api/admin/campaigns/${params.id}/analyze-payload`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mappings: editableMappings }),
+      });
+      if (!response.ok) throw new Error("Failed to save mappings");
+      setSavedMappings(editableMappings);
+      setShowMappingEditor(false);
+      toast({ title: "Saved", description: "Field mappings saved successfully" });
+    } catch (error) {
+      toast({ title: "Error", description: error instanceof Error ? error.message : "Failed to save", variant: "destructive" });
+    } finally {
+      setIsSavingMappings(false);
+    }
+  };
+
+  const handleClearMappings = async () => {
+    setIsSavingMappings(true);
+    try {
+      const emptyMappings: FieldMapping = {
+        transcript: null,
+        audioUrl: null,
+        callerPhone: null,
+        callDuration: null,
+        timestamp: null,
+        externalCallId: null,
+        callStatus: null,
+      };
+      const response = await fetch(`/api/admin/campaigns/${params.id}/analyze-payload`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mappings: emptyMappings }),
+      });
+      if (!response.ok) throw new Error("Failed to clear mappings");
+      setSavedMappings(null);
+      setEditableMappings(null);
+      setAiAnalysisResult(null);
+      setShowMappingEditor(false);
+      toast({ title: "Cleared", description: "Will use AI auto-detection for new webhooks" });
+    } catch (error) {
+      toast({ title: "Error", description: error instanceof Error ? error.message : "Failed to clear", variant: "destructive" });
+    } finally {
+      setIsSavingMappings(false);
+    }
+  };
+
+  const updateMappingField = (field: keyof FieldMapping, value: string | null) => {
+    setEditableMappings(prev => prev ? { ...prev, [field]: value || null } : null);
   };
 
   const handleAddTag = async () => {
@@ -1092,6 +1218,31 @@ export default function CampaignDetailPage() {
 
         {/* Webhook Tab */}
         <TabsContent value="webhook" className="space-y-6">
+          {/* Setup Guide Banner */}
+          <Card className="bg-gradient-to-r from-primary/10 via-primary/5 to-background border-primary/20">
+            <CardContent className="py-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-full bg-primary/10">
+                    <BookOpen className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="font-medium">New to webhooks?</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Read our setup guide for step-by-step instructions
+                    </p>
+                  </div>
+                </div>
+                <Button asChild variant="outline" size="sm">
+                  <Link href={`/admin/campaigns/${params.id}/payload-guide`}>
+                    View Setup Guide
+                    <ExternalLink className="h-4 w-4 ml-2" />
+                  </Link>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
           <div className="grid gap-6 lg:grid-cols-2">
             {/* Platform Setup */}
             <Card>
@@ -1125,37 +1276,77 @@ export default function CampaignDetailPage() {
               </CardContent>
             </Card>
 
-            {/* Auto-Detection Info */}
+            {/* Field Mappings Status */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Sparkles className="h-5 w-5 text-yellow-500" />
-                  Smart Auto-Detection
+                  <Settings2 className="h-5 w-5" />
+                  Field Mappings
                 </CardTitle>
+                <CardDescription>
+                  {savedMappings ? "Using saved mappings" : "Using AI auto-detection"}
+                </CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="grid gap-2">
-                  <div className="flex items-center gap-2 p-2 rounded border bg-card">
-                    <FileText className="h-4 w-4 text-primary" />
-                    <span className="text-sm">Transcript</span>
+              <CardContent className="space-y-3">
+                {savedMappings ? (
+                  <>
+                    <div className="space-y-2 text-sm">
+                      {savedMappings.transcript && (
+                        <div className="flex items-center gap-2 p-2 rounded border bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-900">
+                          <FileText className="h-4 w-4 text-green-600" />
+                          <span className="font-medium">Transcript:</span>
+                          <code className="text-xs bg-muted px-1 rounded">{savedMappings.transcript}</code>
+                        </div>
+                      )}
+                      {savedMappings.callerPhone && (
+                        <div className="flex items-center gap-2 p-2 rounded border bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-900">
+                          <Phone className="h-4 w-4 text-green-600" />
+                          <span className="font-medium">Phone:</span>
+                          <code className="text-xs bg-muted px-1 rounded">{savedMappings.callerPhone}</code>
+                        </div>
+                      )}
+                      {savedMappings.audioUrl && (
+                        <div className="flex items-center gap-2 p-2 rounded border bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-900">
+                          <Music className="h-4 w-4 text-green-600" />
+                          <span className="font-medium">Audio:</span>
+                          <code className="text-xs bg-muted px-1 rounded">{savedMappings.audioUrl}</code>
+                        </div>
+                      )}
+                      {savedMappings.callDuration && (
+                        <div className="flex items-center gap-2 p-2 rounded border bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-900">
+                          <Timer className="h-4 w-4 text-green-600" />
+                          <span className="font-medium">Duration:</span>
+                          <code className="text-xs bg-muted px-1 rounded">{savedMappings.callDuration}</code>
+                        </div>
+                      )}
+                      {savedMappings.externalCallId && (
+                        <div className="flex items-center gap-2 p-2 rounded border bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-900">
+                          <Hash className="h-4 w-4 text-green-600" />
+                          <span className="font-medium">Call ID:</span>
+                          <code className="text-xs bg-muted px-1 rounded">{savedMappings.externalCallId}</code>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex gap-2 pt-2">
+                      <Button variant="outline" size="sm" onClick={() => { setEditableMappings(savedMappings); setShowMappingEditor(true); }}>
+                        <Edit2 className="h-4 w-4 mr-1" /> Edit
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={handleClearMappings} disabled={isSavingMappings}>
+                        <Trash2 className="h-4 w-4 mr-1" /> Clear
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-center py-4">
+                    <Sparkles className="h-8 w-8 mx-auto mb-2 text-yellow-500" />
+                    <p className="text-sm text-muted-foreground mb-3">
+                      AI will automatically detect fields from incoming webhooks
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Use "Analyze with AI" below to set custom mappings
+                    </p>
                   </div>
-                  <div className="flex items-center gap-2 p-2 rounded border bg-card">
-                    <Phone className="h-4 w-4 text-primary" />
-                    <span className="text-sm">Phone Number</span>
-                  </div>
-                  <div className="flex items-center gap-2 p-2 rounded border bg-card">
-                    <Music className="h-4 w-4 text-primary" />
-                    <span className="text-sm">Recording URL</span>
-                  </div>
-                  <div className="flex items-center gap-2 p-2 rounded border bg-card">
-                    <Timer className="h-4 w-4 text-primary" />
-                    <span className="text-sm">Duration</span>
-                  </div>
-                  <div className="flex items-center gap-2 p-2 rounded border bg-card">
-                    <Hash className="h-4 w-4 text-primary" />
-                    <span className="text-sm">Call ID</span>
-                  </div>
-                </div>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -1165,9 +1356,9 @@ export default function CampaignDetailPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Play className="h-5 w-5" />
-                Test Webhook
+                Test & Analyze Payload
               </CardTitle>
-              <CardDescription>Send a test payload to verify your setup</CardDescription>
+              <CardDescription>Analyze a sample payload to configure field mappings</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-6 lg:grid-cols-2">
@@ -1178,9 +1369,14 @@ export default function CampaignDetailPage() {
                     className="font-mono text-xs min-h-[200px]"
                     placeholder="Enter JSON payload..."
                   />
-                  <Button onClick={handleTestWebhook} disabled={isTesting || !testPayload} className="w-full">
-                    {isTesting ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Sending...</> : <><Play className="h-4 w-4 mr-2" />Send Test</>}
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button onClick={handleAnalyzePayload} disabled={isAnalyzing || !testPayload} className="flex-1" variant="secondary">
+                      {isAnalyzing ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Analyzing...</> : <><Sparkles className="h-4 w-4 mr-2" />Analyze with AI</>}
+                    </Button>
+                    <Button onClick={handleTestWebhook} disabled={isTesting || !testPayload} className="flex-1">
+                      {isTesting ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Sending...</> : <><Play className="h-4 w-4 mr-2" />Send Test</>}
+                    </Button>
+                  </div>
                 </div>
                 <div className="space-y-4">
                   <div className="text-sm font-medium mb-2">Detection Preview</div>
@@ -1212,6 +1408,127 @@ export default function CampaignDetailPage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* AI Analysis & Mapping Editor */}
+          {showMappingEditor && aiAnalysisResult && (
+            <Card className="border-primary/50 bg-primary/5">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <Sparkles className="h-5 w-5 text-yellow-500" />
+                      AI-Suggested Field Mappings
+                    </CardTitle>
+                    <CardDescription>
+                      Confidence: {aiAnalysisResult.confidence}% • Review and customize the mappings below
+                    </CardDescription>
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={() => setShowMappingEditor(false)}>
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 lg:grid-cols-2">
+                  {/* Mapping Fields */}
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-medium">Field Mappings</h4>
+                    {(Object.entries({
+                      transcript: { label: "Transcript", icon: FileText },
+                      callerPhone: { label: "Caller Phone", icon: Phone },
+                      audioUrl: { label: "Audio URL", icon: Music },
+                      callDuration: { label: "Call Duration", icon: Timer },
+                      externalCallId: { label: "Call ID", icon: Hash },
+                      timestamp: { label: "Timestamp", icon: Clock },
+                      callStatus: { label: "Call Status", icon: Tag },
+                    }) as [keyof FieldMapping, { label: string; icon: React.ElementType }][]).map(([field, { label, icon: Icon }]) => (
+                      <div key={field} className="flex items-center gap-2">
+                        <Icon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                        <Label className="w-24 text-sm flex-shrink-0">{label}</Label>
+                        <Select
+                          value={editableMappings?.[field] || "__none__"}
+                          onValueChange={(value) => updateMappingField(field, value === "__none__" ? null : value)}
+                        >
+                          <SelectTrigger className="flex-1 h-8 text-xs">
+                            <SelectValue placeholder="Select field path..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">
+                              <span className="text-muted-foreground">Not mapped</span>
+                            </SelectItem>
+                            {Object.keys(aiAnalysisResult.flattenedPayload).map((path) => (
+                              <SelectItem key={path} value={path}>
+                                <code className="text-xs">{path}</code>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Extracted Values Preview */}
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-medium">Extracted Values Preview</h4>
+                    <div className="space-y-2 text-sm bg-muted/50 p-3 rounded-lg max-h-[300px] overflow-y-auto">
+                      {aiAnalysisResult.extracted.transcript && (
+                        <div>
+                          <span className="text-muted-foreground">Transcript:</span>
+                          <span className="ml-2 text-xs">{String(aiAnalysisResult.extracted.transcript).substring(0, 100)}...</span>
+                        </div>
+                      )}
+                      {aiAnalysisResult.extracted.callerPhone && (
+                        <div>
+                          <span className="text-muted-foreground">Phone:</span>
+                          <span className="ml-2">{aiAnalysisResult.extracted.callerPhone}</span>
+                        </div>
+                      )}
+                      {aiAnalysisResult.extracted.audioUrl && (
+                        <div>
+                          <span className="text-muted-foreground">Audio:</span>
+                          <span className="ml-2 text-xs truncate">{aiAnalysisResult.extracted.audioUrl}</span>
+                        </div>
+                      )}
+                      {aiAnalysisResult.extracted.callDuration !== null && (
+                        <div>
+                          <span className="text-muted-foreground">Duration:</span>
+                          <span className="ml-2">{aiAnalysisResult.extracted.callDuration}s</span>
+                        </div>
+                      )}
+                      {aiAnalysisResult.extracted.externalCallId && (
+                        <div>
+                          <span className="text-muted-foreground">Call ID:</span>
+                          <span className="ml-2">{aiAnalysisResult.extracted.externalCallId}</span>
+                        </div>
+                      )}
+                      {aiAnalysisResult.extracted.timestamp && (
+                        <div>
+                          <span className="text-muted-foreground">Timestamp:</span>
+                          <span className="ml-2">{aiAnalysisResult.extracted.timestamp}</span>
+                        </div>
+                      )}
+                      {aiAnalysisResult.extracted.callStatus && (
+                        <div>
+                          <span className="text-muted-foreground">Status:</span>
+                          <span className="ml-2">{aiAnalysisResult.extracted.callStatus}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 pt-4 border-t">
+                  <Button onClick={handleSaveMappings} disabled={isSavingMappings}>
+                    {isSavingMappings ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                    Save Mappings
+                  </Button>
+                  <Button variant="outline" onClick={() => setShowMappingEditor(false)}>
+                    Cancel
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Recent Logs */}
           <Card>
