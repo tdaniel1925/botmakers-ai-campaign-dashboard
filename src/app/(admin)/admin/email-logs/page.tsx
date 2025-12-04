@@ -537,7 +537,7 @@ export default function EmailLogsPage() {
               {selectedLog.metadata && Object.keys(selectedLog.metadata).length > 0 && (
                 <div className="space-y-1">
                   <p className="text-sm text-muted-foreground">Metadata</p>
-                  <pre className="text-sm bg-muted p-3 rounded overflow-auto max-h-[150px]">
+                  <pre className="text-sm bg-muted p-3 rounded overflow-y-auto overflow-x-hidden max-h-[150px] whitespace-pre-wrap break-all">
                     {JSON.stringify(selectedLog.metadata, null, 2)}
                   </pre>
                 </div>

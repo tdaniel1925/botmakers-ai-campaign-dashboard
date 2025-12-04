@@ -368,7 +368,7 @@ function LogDetailModal({ log, open, onClose }: { log: WebhookLog | null; open: 
                 {copied ? "Copied" : "Copy"}
               </Button>
             </div>
-            <pre className="p-4 bg-muted rounded-lg text-xs overflow-auto max-h-64 font-mono">
+            <pre className="p-4 bg-muted rounded-lg text-xs overflow-y-auto overflow-x-hidden max-h-64 font-mono whitespace-pre-wrap break-all">
               {JSON.stringify(log.payload, null, 2)}
             </pre>
           </div>

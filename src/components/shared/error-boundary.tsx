@@ -65,12 +65,12 @@ export class ErrorBoundary extends Component<Props, State> {
             </CardHeader>
             <CardContent>
               {process.env.NODE_ENV === "development" && this.state.error && (
-                <div className="bg-muted rounded-lg p-4 overflow-auto max-h-48">
-                  <p className="text-sm font-mono text-destructive">
+                <div className="bg-muted rounded-lg p-4 overflow-y-auto overflow-x-hidden max-h-48">
+                  <p className="text-sm font-mono text-destructive break-all">
                     {this.state.error.toString()}
                   </p>
                   {this.state.errorInfo && (
-                    <pre className="text-xs mt-2 text-muted-foreground">
+                    <pre className="text-xs mt-2 text-muted-foreground whitespace-pre-wrap break-all">
                       {this.state.errorInfo.componentStack}
                     </pre>
                   )}

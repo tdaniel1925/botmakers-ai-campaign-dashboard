@@ -522,7 +522,7 @@ export default function WebhookLogsPage() {
               </div>
 
               {/* Payload JSON */}
-              <div className="flex-1 overflow-auto">
+              <div className="flex-1 min-h-0 overflow-hidden">
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="text-sm font-medium">Raw Payload</h4>
                   <Button
@@ -534,7 +534,7 @@ export default function WebhookLogsPage() {
                     Copy
                   </Button>
                 </div>
-                <pre className="p-4 rounded-lg bg-muted font-mono text-xs overflow-auto max-h-[400px]">
+                <pre className="p-4 rounded-lg bg-muted font-mono text-xs overflow-y-auto overflow-x-hidden max-h-[400px] whitespace-pre-wrap break-all">
                   {JSON.stringify(selectedLog.payload, null, 2)}
                 </pre>
               </div>

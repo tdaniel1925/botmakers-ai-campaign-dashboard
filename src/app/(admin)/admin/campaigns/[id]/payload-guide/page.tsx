@@ -471,7 +471,7 @@ export default function PayloadGuidePage() {
                 Copy
               </Button>
             </div>
-            <pre className="text-xs font-mono overflow-x-auto p-3 bg-background rounded border max-h-[300px]">
+            <pre className="text-xs font-mono overflow-y-auto overflow-x-hidden p-3 bg-background rounded border max-h-[300px] whitespace-pre-wrap break-all">
               {JSON.stringify(platform.samplePayload, null, 2)}
             </pre>
           </div>
