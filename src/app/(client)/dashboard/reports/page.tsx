@@ -417,47 +417,6 @@ export default function ReportsPage() {
       </Card>
 
       {/* Export Info */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Export Data</CardTitle>
-          <CardDescription>
-            Download your call data for further analysis
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Export includes: Call ID, Date, Campaign, Phone Number, Duration,
-              Outcome, Sentiment, AI Summary, and Full Transcript.
-            </p>
-            <div className="flex items-center space-x-4">
-              <Button
-                onClick={handleExportCSV}
-                disabled={isExporting || calls.length === 0}
-              >
-                {isExporting ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <FileSpreadsheet className="mr-2 h-4 w-4" />
-                )}
-                Download CSV ({calls.length} calls)
-              </Button>
-              <Button
-                variant="outline"
-                onClick={handleExportPDF}
-                disabled={isExportingPDF || calls.length === 0}
-              >
-                {isExportingPDF ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <FileText className="mr-2 h-4 w-4" />
-                )}
-                Download PDF Report
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }

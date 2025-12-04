@@ -25,7 +25,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { format, formatDistanceToNow } from "date-fns";
+import { format, formatDistanceToNow, subDays, startOfDay, endOfDay } from "date-fns";
 import {
   CheckCircle2,
   XCircle,
@@ -46,7 +46,11 @@ import {
   Copy,
   Check,
   ChevronRight,
+  ChevronLeft,
+  ChevronsLeft,
+  ChevronsRight,
   Zap,
+  Calendar,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -378,6 +382,8 @@ function LogDetailModal({ log, open, onClose }: { log: WebhookLog | null; open: 
   );
 }
 
+const ITEMS_PER_PAGE = 50;
+
 export default function WebhookLogsPage() {
   const [logs, setLogs] = useState<WebhookLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -386,11 +392,26 @@ export default function WebhookLogsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedLog, setSelectedLog] = useState<WebhookLog | null>(null);
   const [campaigns, setCampaigns] = useState<{ id: string; name: string }[]>([]);
+  const [dateRange, setDateRange] = useState<"7" | "14" | "30" | "90" | "all">("7");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
   const supabase = createClient();
 
   const fetchLogs = useCallback(async () => {
     setIsLoading(true);
-    const { data, error } = await supabase
+
+    // Calculate date range filter
+    let startDate: Date | null = null;
+    if (dateRange !== "all") {
+      const days = parseInt(dateRange);
+      startDate = startOfDay(subDays(new Date(), days - 1));
+    }
+
+    // Calculate pagination offset
+    const offset = (currentPage - 1) * ITEMS_PER_PAGE;
+
+    // Build query
+    let query = supabase
       .from("webhook_logs")
       .select(`
         *,
@@ -401,9 +422,16 @@ export default function WebhookLogsPage() {
             name
           )
         )
-      `)
+      `, { count: "exact" })
       .order("created_at", { ascending: false })
-      .limit(200);
+      .range(offset, offset + ITEMS_PER_PAGE - 1);
+
+    // Apply date filter
+    if (startDate) {
+      query = query.gte("created_at", startDate.toISOString());
+    }
+
+    const { data, error, count } = await query;
 
     if (error) {
       console.error("Error fetching logs:", error);
@@ -413,18 +441,20 @@ export default function WebhookLogsPage() {
 
     const typedLogs = (data || []) as WebhookLog[];
     setLogs(typedLogs);
+    setTotalCount(count || 0);
 
-    // Extract unique campaigns
-    const uniqueCampaigns = new Map<string, string>();
-    typedLogs.forEach(log => {
-      if (log.campaigns?.name) {
-        uniqueCampaigns.set(log.campaign_id, log.campaigns.name);
-      }
-    });
-    setCampaigns(Array.from(uniqueCampaigns.entries()).map(([id, name]) => ({ id, name })));
+    // Fetch all campaigns for filter dropdown (separate query)
+    const { data: allCampaigns } = await supabase
+      .from("campaigns")
+      .select("id, name")
+      .order("name");
+
+    if (allCampaigns) {
+      setCampaigns(allCampaigns);
+    }
 
     setIsLoading(false);
-  }, [supabase]);
+  }, [supabase, dateRange, currentPage]);
 
   useEffect(() => {
     fetchLogs();
@@ -572,6 +602,22 @@ export default function WebhookLogsPage() {
                 <SelectItem value="failed">Failed Only</SelectItem>
               </SelectContent>
             </Select>
+            <Select value={dateRange} onValueChange={(v) => {
+              setDateRange(v as typeof dateRange);
+              setCurrentPage(1);
+            }}>
+              <SelectTrigger className="w-[150px]">
+                <Calendar className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="Date Range" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="7">Last 7 days</SelectItem>
+                <SelectItem value="14">Last 14 days</SelectItem>
+                <SelectItem value="30">Last 30 days</SelectItem>
+                <SelectItem value="90">Last 90 days</SelectItem>
+                <SelectItem value="all">All time</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </CardContent>
       </Card>
@@ -579,10 +625,20 @@ export default function WebhookLogsPage() {
       {/* Logs List */}
       <Card>
         <CardHeader>
-          <CardTitle>Recent Activity</CardTitle>
-          <CardDescription>
-            {filteredLogs.length} webhook{filteredLogs.length !== 1 ? "s" : ""} found
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Recent Activity</CardTitle>
+              <CardDescription>
+                Showing {filteredLogs.length} of {totalCount} webhook{totalCount !== 1 ? "s" : ""}
+                {dateRange !== "all" && ` from the last ${dateRange} days`}
+              </CardDescription>
+            </div>
+            {totalCount > ITEMS_PER_PAGE && (
+              <div className="text-sm text-muted-foreground">
+                Page {currentPage} of {Math.ceil(totalCount / ITEMS_PER_PAGE)}
+              </div>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -679,6 +735,80 @@ export default function WebhookLogsPage() {
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {/* Pagination Controls */}
+          {totalCount > ITEMS_PER_PAGE && (
+            <div className="flex items-center justify-between pt-4 mt-4 border-t">
+              <div className="text-sm text-muted-foreground">
+                Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1} to {Math.min(currentPage * ITEMS_PER_PAGE, totalCount)} of {totalCount} entries
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setCurrentPage(1)}
+                  disabled={currentPage === 1 || isLoading}
+                  title="First page"
+                >
+                  <ChevronsLeft className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1 || isLoading}
+                  title="Previous page"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <div className="flex items-center gap-1 px-2">
+                  {Array.from({ length: Math.min(5, Math.ceil(totalCount / ITEMS_PER_PAGE)) }, (_, i) => {
+                    const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
+                    let pageNum: number;
+                    if (totalPages <= 5) {
+                      pageNum = i + 1;
+                    } else if (currentPage <= 3) {
+                      pageNum = i + 1;
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i;
+                    } else {
+                      pageNum = currentPage - 2 + i;
+                    }
+                    return (
+                      <Button
+                        key={pageNum}
+                        variant={currentPage === pageNum ? "default" : "outline"}
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => setCurrentPage(pageNum)}
+                        disabled={isLoading}
+                      >
+                        {pageNum}
+                      </Button>
+                    );
+                  })}
+                </div>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setCurrentPage(p => Math.min(Math.ceil(totalCount / ITEMS_PER_PAGE), p + 1))}
+                  disabled={currentPage >= Math.ceil(totalCount / ITEMS_PER_PAGE) || isLoading}
+                  title="Next page"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setCurrentPage(Math.ceil(totalCount / ITEMS_PER_PAGE))}
+                  disabled={currentPage >= Math.ceil(totalCount / ITEMS_PER_PAGE) || isLoading}
+                  title="Last page"
+                >
+                  <ChevronsRight className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           )}
         </CardContent>

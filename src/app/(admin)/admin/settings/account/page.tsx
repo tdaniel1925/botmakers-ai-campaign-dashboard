@@ -90,6 +90,15 @@ export default function AccountSettingsPage() {
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (!currentPassword) {
+      toast({
+        title: "Current password required",
+        description: "Please enter your current password to verify your identity",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (newPassword !== confirmPassword) {
       toast({
         title: "Passwords don't match",
@@ -111,6 +120,22 @@ export default function AccountSettingsPage() {
     setIsChangingPassword(true);
 
     try {
+      // First verify the current password by re-authenticating
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: email,
+        password: currentPassword,
+      });
+
+      if (signInError) {
+        toast({
+          title: "Verification failed",
+          description: "Current password is incorrect",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Now update the password
       const { error } = await supabase.auth.updateUser({
         password: newPassword,
       });
@@ -196,6 +221,20 @@ export default function AccountSettingsPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
+                <Label htmlFor="currentPassword">Current Password</Label>
+                <Input
+                  id="currentPassword"
+                  type="password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  placeholder="Enter current password"
+                  required
+                />
+                <p className="text-xs text-muted-foreground">
+                  Required to verify your identity
+                </p>
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="newPassword">New Password</Label>
                 <Input
                   id="newPassword"
@@ -221,7 +260,7 @@ export default function AccountSettingsPage() {
             <CardFooter>
               <Button
                 type="submit"
-                disabled={isChangingPassword || !newPassword || !confirmPassword}
+                disabled={isChangingPassword || !currentPassword || !newPassword || !confirmPassword}
               >
                 {isChangingPassword && (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />

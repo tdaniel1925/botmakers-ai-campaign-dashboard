@@ -19,33 +19,81 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Logo } from "@/components/shared/logo";
 import Link from "next/link";
 
+// Email regex for validation
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isMagicLink, setIsMagicLink] = useState(false);
+  const [emailError, setEmailError] = useState("");
+  const [rateLimitError, setRateLimitError] = useState("");
   const { toast } = useToast();
   const supabase = createClient();
 
+  const validateEmail = (email: string): boolean => {
+    if (!email) {
+      setEmailError("Email is required");
+      return false;
+    }
+    if (!emailRegex.test(email)) {
+      setEmailError("Please enter a valid email address");
+      return false;
+    }
+    setEmailError("");
+    return true;
+  };
+
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!validateEmail(email)) {
+      return;
+    }
+
     setIsLoading(true);
+    setRateLimitError("");
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+      // Use rate-limited API endpoint
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password, type: "password" }),
       });
 
-      if (error) {
+      const data = await response.json();
+
+      if (response.status === 429) {
+        // Rate limited
+        setRateLimitError(data.message || "Too many login attempts. Please try again later.");
         toast({
-          title: "Login failed",
-          description: error.message,
+          title: "Too many attempts",
+          description: data.message || "Please wait before trying again.",
           variant: "destructive",
         });
-      } else {
-        window.location.href = "/";
+        return;
       }
+
+      if (!response.ok) {
+        toast({
+          title: "Login failed",
+          description: data.error || "Invalid email or password. Please try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Set session in Supabase client
+      if (data.session) {
+        await supabase.auth.setSession({
+          access_token: data.session.access_token,
+          refresh_token: data.session.refresh_token,
+        });
+      }
+
+      window.location.href = "/";
     } catch {
       toast({
         title: "Error",
@@ -59,28 +107,48 @@ export default function LoginPage() {
 
   const handleMagicLink = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!validateEmail(email)) {
+      return;
+    }
+
     setIsLoading(true);
+    setRateLimitError("");
 
     try {
-      const { error } = await supabase.auth.signInWithOtp({
-        email,
-        options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
-        },
+      // Use rate-limited API endpoint
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, type: "otp" }),
       });
 
-      if (error) {
+      const data = await response.json();
+
+      if (response.status === 429) {
+        // Rate limited
+        setRateLimitError(data.message || "Too many login attempts. Please try again later.");
         toast({
-          title: "Error",
-          description: error.message,
+          title: "Too many attempts",
+          description: data.message || "Please wait before trying again.",
           variant: "destructive",
         });
-      } else {
-        toast({
-          title: "Check your email",
-          description: "We sent you a login link. Check your inbox!",
-        });
+        return;
       }
+
+      if (!response.ok) {
+        toast({
+          title: "Error",
+          description: data.error || "Failed to send magic link",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({
+        title: "Check your email",
+        description: "We sent you a login link. Check your inbox!",
+      });
     } catch {
       toast({
         title: "Error",
@@ -116,9 +184,21 @@ export default function LoginPage() {
                 type="email"
                 placeholder="name@example.com"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (emailError) validateEmail(e.target.value);
+                }}
+                onBlur={() => email && validateEmail(email)}
+                className={emailError ? "border-red-500" : ""}
                 required
+                aria-invalid={!!emailError}
+                aria-describedby={emailError ? "email-error" : undefined}
               />
+              {emailError && (
+                <p id="email-error" className="text-sm text-red-500">
+                  {emailError}
+                </p>
+              )}
             </div>
             {!isMagicLink && (
               <div className="space-y-2">
@@ -143,7 +223,12 @@ export default function LoginPage() {
             )}
           </CardContent>
           <CardFooter className="flex flex-col space-y-4">
-            <Button type="submit" className="w-full" disabled={isLoading}>
+            {rateLimitError && (
+              <div className="w-full p-3 rounded-md bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+                {rateLimitError}
+              </div>
+            )}
+            <Button type="submit" className="w-full" disabled={isLoading || !!rateLimitError}>
               {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {isMagicLink ? "Send Magic Link" : "Sign In"}
             </Button>

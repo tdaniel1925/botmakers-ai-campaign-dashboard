@@ -188,15 +188,14 @@ export default function BillingPage() {
         const summary: UsageSummary[] = [];
         ratesRes.data?.forEach((rate) => {
           const usage = usageMap.get(rate.rate_type);
-          if (usage || true) { // Show all rate types
-            summary.push({
-              rate_type: rate.rate_type,
-              display_name: rate.display_name,
-              total_quantity: usage?.quantity || 0,
-              total_amount: usage?.amount || 0,
-              unit_name: rate.unit_name,
-            });
-          }
+          // Always show all rate types so users can see pricing
+          summary.push({
+            rate_type: rate.rate_type,
+            display_name: rate.display_name,
+            total_quantity: usage?.quantity || 0,
+            total_amount: usage?.amount || 0,
+            unit_name: rate.unit_name,
+          });
         });
         setUsageSummary(summary);
       }

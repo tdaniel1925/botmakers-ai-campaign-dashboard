@@ -47,6 +47,16 @@ const ipRatelimit = redis
     })
   : null;
 
+// Auth rate limiting: 10 attempts per 15 minutes per IP (stricter for security)
+const authRatelimit = redis
+  ? new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(10, "15 m"),
+      analytics: true,
+      prefix: "ratelimit:auth",
+    })
+  : null;
+
 // ============= In-Memory Fallback =============
 
 interface RateLimitEntry {
@@ -111,6 +121,7 @@ class InMemoryRateLimiter {
 // In-memory fallbacks
 const inMemoryCampaignLimiter = new InMemoryRateLimiter(60000, 200);
 const inMemoryIpLimiter = new InMemoryRateLimiter(60000, 500);
+const inMemoryAuthLimiter = new InMemoryRateLimiter(900000, 10); // 15 minutes, 10 attempts
 
 // ============= Unified Rate Limiter Interface =============
 
@@ -171,6 +182,13 @@ export const ipRateLimiter = new UnifiedRateLimiter(
   ipRatelimit,
   inMemoryIpLimiter,
   "ip"
+);
+
+// Auth rate limiter - stricter limits for login/signup
+export const authRateLimiter = new UnifiedRateLimiter(
+  authRatelimit,
+  inMemoryAuthLimiter,
+  "auth"
 );
 
 // ============= AI Processing Queue with Database Persistence =============
