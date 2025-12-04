@@ -3,6 +3,9 @@ import OpenAI from "openai";
 // AI Provider configuration - supports both OpenAI and DeepSeek
 type AIProvider = "openai" | "deepseek";
 
+// Timeout for AI API calls (45 seconds)
+const AI_TIMEOUT_MS = 45000;
+
 function getAIProvider(): AIProvider {
   if (process.env.OPENAI_API_KEY) return "openai";
   if (process.env.DEEPSEEK_API_KEY) return "deepseek";
@@ -59,8 +62,14 @@ export async function summarizeCall(
 
   const client = getAIClient();
   const model = getModelName();
+  const startTime = Date.now();
 
-  const response = await client.chat.completions.create({
+  // Create abort controller for timeout
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
+
+  try {
+    const response = await client.chat.completions.create({
     model,
     messages: [
       {
@@ -92,25 +101,43 @@ Respond ONLY with a JSON object:
 }`,
       },
     ],
-    response_format: { type: "json_object" },
-    max_tokens: 1000,
-  });
+      response_format: { type: "json_object" },
+      max_tokens: 1000,
+    }, { signal: controller.signal });
 
-  const content = response.choices[0].message.content;
-  if (!content) {
-    throw new Error("No response from AI");
+    clearTimeout(timeoutId);
+    const processingTime = Date.now() - startTime;
+
+    const content = response.choices[0].message.content;
+    if (!content) {
+      throw new Error("No response from AI");
+    }
+
+    const result = JSON.parse(content);
+
+    // Log successful AI processing
+    console.log(`[AI] Summarization completed in ${processingTime}ms using ${model}`);
+
+    return {
+      summary: result.summary || "Unable to generate summary",
+      outcome: result.outcome || outcomeTags[0] || "Unknown",
+      sentiment: (result.sentiment as "positive" | "negative" | "neutral") || "neutral",
+      keyPoints: result.keyPoints || result.key_points || [],
+      callerIntent: result.callerIntent || result.caller_intent || "Unknown",
+      resolution: result.resolution || "unclear",
+    };
+  } catch (error) {
+    clearTimeout(timeoutId);
+    const processingTime = Date.now() - startTime;
+
+    if (error instanceof Error && error.name === "AbortError") {
+      console.error(`[AI] Summarization timed out after ${processingTime}ms`);
+      throw new Error(`AI processing timed out after ${AI_TIMEOUT_MS}ms`);
+    }
+
+    console.error(`[AI] Summarization failed after ${processingTime}ms:`, error);
+    throw error;
   }
-
-  const result = JSON.parse(content);
-
-  return {
-    summary: result.summary || "Unable to generate summary",
-    outcome: result.outcome || outcomeTags[0] || "Unknown",
-    sentiment: (result.sentiment as "positive" | "negative" | "neutral") || "neutral",
-    keyPoints: result.keyPoints || result.key_points || [],
-    callerIntent: result.callerIntent || result.caller_intent || "Unknown",
-    resolution: result.resolution || "unclear",
-  };
 }
 
 // Export functions for external use

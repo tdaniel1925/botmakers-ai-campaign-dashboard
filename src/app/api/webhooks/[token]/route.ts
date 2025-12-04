@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { processCallWithAI } from "@/lib/ai/summarize";
-import { campaignRateLimiter, ipRateLimiter, aiQueue } from "@/lib/rate-limiter";
+import { campaignRateLimiter, ipRateLimiter, aiQueue, webhookDeduplicator } from "@/lib/rate-limiter";
 import { extractFieldsWithAI, applyMappings, type FieldMapping } from "@/lib/ai/payload-parser";
+import { logger } from "@/lib/logger";
+
+// Request timeout for database operations (30 seconds)
+const DB_TIMEOUT_MS = 30000;
 
 // Lazy init to avoid build-time errors when env vars aren't available
 function getSupabaseClient() {
@@ -24,19 +28,31 @@ function getClientIP(request: Request): string {
   return "unknown";
 }
 
+// Helper to add timeout to promises
+function withTimeout<T>(promiseLike: PromiseLike<T>, ms: number, operation: string): Promise<T> {
+  return Promise.race([
+    Promise.resolve(promiseLike),
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`${operation} timed out after ${ms}ms`)), ms)
+    ),
+  ]);
+}
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ token: string }> }
 ) {
+  const startTime = Date.now();
   const supabase = getSupabaseClient();
 
   try {
     const { token } = await params;
     const clientIP = getClientIP(request);
 
-    // Check IP rate limit first (500 req/min across all campaigns)
-    const ipLimit = ipRateLimiter.isRateLimited(clientIP);
+    // Check IP rate limit first (500 req/min across all campaigns) - now async for Redis
+    const ipLimit = await ipRateLimiter.isRateLimited(clientIP);
     if (ipLimit.limited) {
+      logger.webhook.rateLimited(clientIP, "ip");
       return NextResponse.json(
         { error: "Rate limit exceeded. Try again later.", resetIn: ipLimit.resetIn },
         {
@@ -49,9 +65,10 @@ export async function POST(
       );
     }
 
-    // Check campaign rate limit (200 req/min per campaign)
-    const campaignLimit = campaignRateLimiter.isRateLimited(token);
+    // Check campaign rate limit (200 req/min per campaign) - now async for Redis
+    const campaignLimit = await campaignRateLimiter.isRateLimited(token);
     if (campaignLimit.limited) {
+      logger.webhook.rateLimited(token, "campaign");
       return NextResponse.json(
         { error: "Campaign rate limit exceeded. Try again later.", resetIn: campaignLimit.resetIn },
         {
@@ -66,12 +83,16 @@ export async function POST(
 
     const payload = await request.json();
 
-    // Find campaign by webhook token - include payload_mapping
-    const { data: campaigns, error: campaignError } = await supabase
-      .from("campaigns")
-      .select("id, is_active, payload_mapping")
-      .eq("webhook_token", token)
-      .limit(1);
+    // Find campaign by webhook token - include payload_mapping (with timeout)
+    const { data: campaigns, error: campaignError } = await withTimeout(
+      supabase
+        .from("campaigns")
+        .select("id, is_active, payload_mapping")
+        .eq("webhook_token", token)
+        .limit(1),
+      DB_TIMEOUT_MS,
+      "Campaign lookup"
+    );
 
     const campaign = campaigns?.[0];
 
@@ -98,10 +119,10 @@ export async function POST(
       // Use saved mappings
       usedMappings = campaign.payload_mapping as FieldMapping;
       extractedFields = applyMappings(payload, usedMappings);
-      console.log("Using saved field mappings for campaign:", campaign.id);
+      logger.debug("Using saved field mappings", { campaignId: campaign.id });
     } else {
       // Use AI to extract and suggest mappings
-      console.log("Using AI extraction for campaign:", campaign.id);
+      logger.debug("Using AI extraction", { campaignId: campaign.id });
       const aiResult = await extractFieldsWithAI(payload);
       extractedFields = aiResult.fields;
       usedMappings = aiResult.suggestedMappings;
@@ -113,19 +134,19 @@ export async function POST(
           .from("campaigns")
           .update({ payload_mapping: aiResult.suggestedMappings })
           .eq("id", campaign.id);
-        console.log("Saved AI-suggested mappings with confidence:", aiResult.confidence);
+        logger.info("Saved AI-suggested mappings", { campaignId: campaign.id, confidence: aiResult.confidence });
       }
     }
 
     // Log what was extracted for debugging
-    console.log("Webhook received for campaign:", campaign.id);
-    console.log("Extracted fields:", {
+    logger.webhook.received(campaign.id, {
       hasTranscript: !!extractedFields.transcript,
       hasAudio: !!extractedFields.audioUrl,
       hasPhone: !!extractedFields.callerPhone,
       hasDuration: !!extractedFields.callDuration,
       hasTimestamp: !!extractedFields.timestamp,
       hasCallId: !!extractedFields.externalCallId,
+      isNewMapping,
     });
 
     // If no transcript, treat as a ping/test request - acknowledge and return success
@@ -152,6 +173,33 @@ export async function POST(
       });
     }
 
+    // Check for duplicate webhook (idempotency)
+    if (extractedFields.externalCallId) {
+      const isDuplicate = await webhookDeduplicator.isDuplicate(
+        campaign.id,
+        extractedFields.externalCallId
+      );
+
+      if (isDuplicate) {
+        logger.webhook.duplicate(campaign.id, extractedFields.externalCallId);
+
+        // Log as duplicate but don't create a new call
+        await supabase.from("webhook_logs").insert({
+          campaign_id: campaign.id,
+          payload,
+          status: "success",
+          error_message: "Duplicate webhook (already processed)",
+        });
+
+        return NextResponse.json({
+          success: true,
+          message: "Webhook already processed (duplicate)",
+          type: "duplicate",
+          externalCallId: extractedFields.externalCallId,
+        });
+      }
+    }
+
     // Parse timestamp
     let parsedTimestamp: string | null = null;
     if (extractedFields.timestamp) {
@@ -162,22 +210,26 @@ export async function POST(
       }
     }
 
-    // Create call record with all extracted data
-    const { data: call, error: callError } = await supabase
-      .from("calls")
-      .insert({
-        campaign_id: campaign.id,
-        transcript: extractedFields.transcript,
-        audio_url: extractedFields.audioUrl,
-        caller_phone: extractedFields.callerPhone,
-        call_duration: extractedFields.callDuration,
-        external_call_id: extractedFields.externalCallId,
-        raw_payload: payload,
-        call_timestamp: parsedTimestamp,
-        status: "processing",
-      })
-      .select()
-      .single();
+    // Create call record with all extracted data (with timeout)
+    const { data: call, error: callError } = await withTimeout(
+      supabase
+        .from("calls")
+        .insert({
+          campaign_id: campaign.id,
+          transcript: extractedFields.transcript,
+          audio_url: extractedFields.audioUrl,
+          caller_phone: extractedFields.callerPhone,
+          call_duration: extractedFields.callDuration,
+          external_call_id: extractedFields.externalCallId,
+          raw_payload: payload,
+          call_timestamp: parsedTimestamp,
+          status: "processing",
+        })
+        .select()
+        .single(),
+      DB_TIMEOUT_MS,
+      "Call insert"
+    );
 
     if (callError || !call) {
       await supabase.from("webhook_logs").insert({
@@ -203,10 +255,14 @@ export async function POST(
     // Queue AI processing
     aiQueue.add(call.id, () => processCallWithAI(call.id));
 
+    const processingTime = Date.now() - startTime;
+    logger.webhook.processed(campaign.id, call.id, processingTime);
+
     return NextResponse.json({
       success: true,
       callId: call.id,
       message: "Call received and queued for AI processing",
+      processingTimeMs: processingTime,
       detected: {
         transcript: "found",
         audioUrl: extractedFields.audioUrl ? "found" : null,
@@ -216,9 +272,13 @@ export async function POST(
       }
     });
   } catch (error) {
-    console.error("Webhook error:", error);
+    const processingTime = Date.now() - startTime;
+    logger.webhook.failed("unknown", error, { processingTimeMs: processingTime });
     return NextResponse.json(
-      { error: "Internal server error" },
+      {
+        error: error instanceof Error ? error.message : "Internal server error",
+        processingTimeMs: processingTime,
+      },
       { status: 500 }
     );
   }
