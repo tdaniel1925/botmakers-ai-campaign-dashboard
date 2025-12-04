@@ -1538,10 +1538,17 @@ export default function CampaignDetailPage() {
                   <CardTitle>Recent Webhook Logs</CardTitle>
                   <CardDescription>Last 10 webhook requests</CardDescription>
                 </div>
-                <Button variant="outline" size="sm" onClick={fetchWebhookLogs}>
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Refresh
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={fetchWebhookLogs}>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Refresh
+                  </Button>
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href={`/admin/campaigns/${params.id}/webhook-logs`}>
+                      View All Logs
+                    </Link>
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
