@@ -51,6 +51,8 @@ import {
   ChevronsRight,
   Zap,
   Calendar,
+  Loader2,
+  RotateCcw,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -240,14 +242,36 @@ function AudioPlayer({ src }: { src: string }) {
   );
 }
 
-function LogDetailModal({ log, open, onClose }: { log: WebhookLog | null; open: boolean; onClose: () => void }) {
+function LogDetailModal({ log, open, onClose, onReprocess }: { log: WebhookLog | null; open: boolean; onClose: () => void; onReprocess?: (id: string) => Promise<void> }) {
   const [copied, setCopied] = useState(false);
+  const [isReprocessing, setIsReprocessing] = useState(false);
   const { toast } = useToast();
 
   if (!log) return null;
 
   const analysis = analyzePayload(log.payload);
   const isPing = log.error_message === "Ping received (no transcript)";
+
+  const handleReprocess = async () => {
+    if (!onReprocess || isReprocessing) return;
+    setIsReprocessing(true);
+    try {
+      await onReprocess(log.id);
+      toast({
+        title: "Reprocessing started",
+        description: "The webhook is being reprocessed. Check back shortly.",
+      });
+      onClose();
+    } catch {
+      toast({
+        title: "Reprocess failed",
+        description: "Failed to reprocess the webhook. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsReprocessing(false);
+    }
+  };
 
   const handleCopyPayload = () => {
     navigator.clipboard.writeText(JSON.stringify(log.payload, null, 2));
@@ -356,7 +380,24 @@ function LogDetailModal({ log, open, onClose }: { log: WebhookLog | null; open: 
           {/* Error Message */}
           {log.error_message && !isPing && (
             <div>
-              <h4 className="text-sm font-medium mb-3 text-red-600">Error</h4>
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-sm font-medium text-red-600">Error</h4>
+                {log.status === "failed" && analysis.hasTranscript && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleReprocess}
+                    disabled={isReprocessing}
+                  >
+                    {isReprocessing ? (
+                      <Loader2 className="h-3 w-3 mr-2 animate-spin" />
+                    ) : (
+                      <RotateCcw className="h-3 w-3 mr-2" />
+                    )}
+                    Reprocess
+                  </Button>
+                )}
+              </div>
               <div className="p-4 bg-red-50 dark:bg-red-950/30 rounded-lg border border-red-200 dark:border-red-800">
                 <p className="text-sm text-red-700 dark:text-red-400">{log.error_message}</p>
               </div>
@@ -819,6 +860,16 @@ export default function WebhookLogsPage() {
         log={selectedLog}
         open={!!selectedLog}
         onClose={() => setSelectedLog(null)}
+        onReprocess={async (id) => {
+          const response = await fetch(`/api/admin/webhook-logs/${id}/reprocess`, {
+            method: "POST",
+          });
+          if (!response.ok) {
+            throw new Error("Reprocess failed");
+          }
+          // Refresh the logs
+          fetchLogs();
+        }}
       />
     </div>
   );

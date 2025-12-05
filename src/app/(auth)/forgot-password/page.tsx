@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,31 +18,71 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Logo } from "@/components/shared/logo";
 import Link from "next/link";
 
+// Email regex for validation
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [emailError, setEmailError] = useState("");
+  const [rateLimitError, setRateLimitError] = useState("");
   const { toast } = useToast();
-  const supabase = createClient();
+
+  const validateEmail = (email: string): boolean => {
+    if (!email) {
+      setEmailError("Email is required");
+      return false;
+    }
+    if (!emailRegex.test(email)) {
+      setEmailError("Please enter a valid email address");
+      return false;
+    }
+    setEmailError("");
+    return true;
+  };
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!validateEmail(email)) {
+      return;
+    }
+
     setIsLoading(true);
+    setRateLimitError("");
 
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
+      // Use rate-limited API endpoint
+      const response = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
       });
 
-      if (error) {
+      const data = await response.json();
+
+      if (response.status === 429) {
+        // Rate limited
+        setRateLimitError(data.message || "Too many requests. Please try again later.");
         toast({
-          title: "Error",
-          description: error.message,
+          title: "Too many attempts",
+          description: data.message || "Please wait before trying again.",
           variant: "destructive",
         });
-      } else {
-        setIsSuccess(true);
+        return;
       }
+
+      if (!response.ok) {
+        toast({
+          title: "Error",
+          description: data.error || "Failed to send reset link",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setIsSuccess(true);
     } catch {
       toast({
         title: "Error",
@@ -71,7 +110,7 @@ export default function ForgotPasswordPage() {
             </div>
             <CardTitle className="text-2xl text-center">Check your email</CardTitle>
             <CardDescription className="text-center">
-              We sent a password reset link to <strong>{email}</strong>
+              If an account exists for <strong>{email}</strong>, you will receive a password reset link.
             </CardDescription>
           </CardHeader>
           <CardFooter className="flex flex-col space-y-4">
@@ -81,7 +120,10 @@ export default function ForgotPasswordPage() {
             <Button
               variant="outline"
               className="w-full"
-              onClick={() => setIsSuccess(false)}
+              onClick={() => {
+                setIsSuccess(false);
+                setRateLimitError("");
+              }}
             >
               Try again
             </Button>
@@ -121,13 +163,30 @@ export default function ForgotPasswordPage() {
                 type="email"
                 placeholder="name@example.com"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (emailError) validateEmail(e.target.value);
+                }}
+                onBlur={() => email && validateEmail(email)}
+                className={emailError ? "border-red-500" : ""}
                 required
+                aria-invalid={!!emailError}
+                aria-describedby={emailError ? "email-error" : undefined}
               />
+              {emailError && (
+                <p id="email-error" className="text-sm text-red-500">
+                  {emailError}
+                </p>
+              )}
             </div>
           </CardContent>
           <CardFooter className="flex flex-col space-y-4">
-            <Button type="submit" className="w-full" disabled={isLoading}>
+            {rateLimitError && (
+              <div className="w-full p-3 rounded-md bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+                {rateLimitError}
+              </div>
+            )}
+            <Button type="submit" className="w-full" disabled={isLoading || !!rateLimitError}>
               {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Send Reset Link
             </Button>

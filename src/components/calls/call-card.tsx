@@ -1,5 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Phone, Clock, Smile, Frown, Meh, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { formatDuration, maskPhoneNumber } from "@/lib/utils";
@@ -35,9 +36,12 @@ interface CallData {
 interface CallCardProps {
   call: CallData;
   onClick?: () => void;
+  isSelectable?: boolean;
+  isSelected?: boolean;
+  onSelect?: (id: string, selected: boolean) => void;
 }
 
-export function CallCard({ call, onClick }: CallCardProps) {
+export function CallCard({ call, onClick, isSelectable, isSelected, onSelect }: CallCardProps) {
   // Helper to get value from either camelCase or snake_case
   const timestamp = call.callTimestamp || call.call_timestamp;
   const createdAt = call.createdAt || call.created_at;
@@ -67,14 +71,26 @@ export function CallCard({ call, onClick }: CallCardProps) {
     }
   };
 
+  const handleCheckboxClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+  };
+
   return (
     <Card
-      className="cursor-pointer hover:shadow-md transition-shadow"
+      className={`cursor-pointer hover:shadow-md transition-shadow ${isSelected ? "ring-2 ring-primary" : ""}`}
       onClick={onClick}
     >
       <CardContent className="p-4">
         <div className="flex items-start justify-between">
           <div className="flex items-center space-x-2">
+            {isSelectable && (
+              <div onClick={handleCheckboxClick}>
+                <Checkbox
+                  checked={isSelected}
+                  onCheckedChange={(checked: boolean | "indeterminate") => onSelect?.(call.id, checked === true)}
+                />
+              </div>
+            )}
             <Phone className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm text-muted-foreground">
               {getDisplayDate()}

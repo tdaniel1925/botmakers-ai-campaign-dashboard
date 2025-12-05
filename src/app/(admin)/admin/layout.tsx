@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { AdminSidebar, AdminMobileMenuButton } from "@/components/admin/admin-sidebar";
+import { SessionTimeoutWarning } from "@/components/shared/session-timeout-warning";
 
 export default function AdminLayout({
   children,
@@ -23,6 +24,7 @@ export default function AdminLayout({
         </div>
         <div className="container mx-auto py-6 px-4">{children}</div>
       </main>
+      <SessionTimeoutWarning logoutUrl="/login" />
     </div>
   );
 }

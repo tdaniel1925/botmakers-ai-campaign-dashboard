@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { ClientSidebar, MobileMenuButton } from "@/components/dashboard/client-sidebar";
 import { createClient } from "@/lib/supabase/client";
+import { SessionTimeoutWarning } from "@/components/shared/session-timeout-warning";
 
 export default function DashboardLayout({
   children,
@@ -48,6 +49,7 @@ export default function DashboardLayout({
         </div>
         <div className="container mx-auto py-6 px-4">{children}</div>
       </main>
+      <SessionTimeoutWarning logoutUrl="/login" />
     </div>
   );
 }

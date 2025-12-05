@@ -6,6 +6,7 @@ import { CallCard } from "@/components/calls/call-card";
 import { CallDetail } from "@/components/calls/call-detail";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -13,8 +14,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
-import { Search, ChevronLeft, ChevronRight } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { Search, ChevronLeft, ChevronRight, Download, Trash2, MoreHorizontal, CheckSquare, XSquare } from "lucide-react";
 import type { Call } from "@/lib/db/schema";
 import type { DateRange } from "react-day-picker";
 
@@ -36,7 +44,10 @@ export default function CallsPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedCalls, setSelectedCalls] = useState<Set<string>>(new Set());
   const supabase = createClient();
+  const { toast } = useToast();
   const pageSize = 20;
 
   useEffect(() => {
@@ -149,17 +160,126 @@ export default function CallsPage() {
   }, [supabase, page, sentimentFilter, dateRange, sortBy, searchQuery]);
 
   const handleCallClick = (call: CallWithTag) => {
-    setSelectedCall(call);
-    setIsDetailOpen(true);
+    if (isSelectionMode) {
+      handleSelectCall(call.id, !selectedCalls.has(call.id));
+    } else {
+      setSelectedCall(call);
+      setIsDetailOpen(true);
+    }
+  };
+
+  const handleSelectCall = (id: string, selected: boolean) => {
+    setSelectedCalls((prev) => {
+      const newSet = new Set(prev);
+      if (selected) {
+        newSet.add(id);
+      } else {
+        newSet.delete(id);
+      }
+      return newSet;
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (selectedCalls.size === calls.length) {
+      setSelectedCalls(new Set());
+    } else {
+      setSelectedCalls(new Set(calls.map((c) => c.id)));
+    }
+  };
+
+  const handleExportSelected = () => {
+    const selectedData = calls.filter((c) => selectedCalls.has(c.id));
+    const csvContent = [
+      ["Date", "Phone", "Duration", "Sentiment", "Summary", "Outcome"].join(","),
+      ...selectedData.map((call) => {
+        // Handle both camelCase (Drizzle) and snake_case (Supabase direct)
+        const callRecord = call as unknown as Record<string, unknown>;
+        const createdAt = callRecord.created_at || callRecord.createdAt;
+        const callerPhone = callRecord.caller_phone || callRecord.callerPhone;
+        const callDuration = callRecord.call_duration || callRecord.callDuration;
+        const aiSentiment = callRecord.ai_sentiment || callRecord.aiSentiment;
+        const aiSummary = callRecord.ai_summary || callRecord.aiSummary;
+        return [
+          createdAt ? new Date(createdAt as string).toISOString() : "",
+          callerPhone || "",
+          callDuration || "",
+          aiSentiment || "",
+          `"${(String(aiSummary || "")).replace(/"/g, '""')}"`,
+          call.campaign_outcome_tags?.tag_name || "",
+        ].join(",");
+      }),
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `calls-export-${new Date().toISOString().split("T")[0]}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+
+    toast({
+      title: "Export complete",
+      description: `Exported ${selectedData.length} call(s) to CSV`,
+    });
+  };
+
+  const handleCancelSelection = () => {
+    setIsSelectionMode(false);
+    setSelectedCalls(new Set());
   };
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Calls</h1>
-        <p className="text-muted-foreground">
-          View and search through your call history
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Calls</h1>
+          <p className="text-muted-foreground">
+            View and search through your call history
+          </p>
+        </div>
+        {!isSelectionMode ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsSelectionMode(true)}
+            disabled={calls.length === 0}
+          >
+            <CheckSquare className="h-4 w-4 mr-2" />
+            Select
+          </Button>
+        ) : (
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">
+              {selectedCalls.size} selected
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSelectAll}
+            >
+              {selectedCalls.size === calls.length ? "Deselect All" : "Select All"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportSelected}
+              disabled={selectedCalls.size === 0}
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Export
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleCancelSelection}
+            >
+              <XSquare className="h-4 w-4 mr-2" />
+              Cancel
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Filters */}
@@ -232,6 +352,9 @@ export default function CallsPage() {
                 key={call.id}
                 call={call}
                 onClick={() => handleCallClick(call)}
+                isSelectable={isSelectionMode}
+                isSelected={selectedCalls.has(call.id)}
+                onSelect={handleSelectCall}
               />
             ))}
           </div>

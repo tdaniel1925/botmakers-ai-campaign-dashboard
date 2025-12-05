@@ -15,6 +15,8 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { PasswordInput } from "@/components/shared/password-strength-indicator";
+import { validatePassword } from "@/lib/password-validation";
 
 export default function AccountSettingsPage() {
   const [email, setEmail] = useState("");
@@ -108,10 +110,12 @@ export default function AccountSettingsPage() {
       return;
     }
 
-    if (newPassword.length < 8) {
+    // Validate password strength
+    const passwordValidation = validatePassword(newPassword, {}, { email, name });
+    if (!passwordValidation.isValid) {
       toast({
-        title: "Password too short",
-        description: "Password must be at least 8 characters",
+        title: "Password too weak",
+        description: passwordValidation.feedback[0] || "Please choose a stronger password",
         variant: "destructive",
       });
       return;
@@ -236,13 +240,17 @@ export default function AccountSettingsPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="newPassword">New Password</Label>
-                <Input
+                <PasswordInput
                   id="newPassword"
-                  type="password"
+                  name="newPassword"
                   value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
+                  onChange={setNewPassword}
                   placeholder="Enter new password"
-                  minLength={8}
+                  showStrengthIndicator={true}
+                  showRequirements={true}
+                  showGenerator={true}
+                  userEmail={email}
+                  userName={name}
                 />
               </div>
               <div className="space-y-2">
@@ -254,13 +262,27 @@ export default function AccountSettingsPage() {
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder="Confirm new password"
                   minLength={8}
+                  className={confirmPassword && newPassword !== confirmPassword ? "border-red-500" : ""}
                 />
+                {confirmPassword && newPassword !== confirmPassword && (
+                  <p className="text-xs text-red-500">Passwords do not match</p>
+                )}
+                {confirmPassword && newPassword === confirmPassword && newPassword.length > 0 && (
+                  <p className="text-xs text-green-600">Passwords match</p>
+                )}
               </div>
             </CardContent>
             <CardFooter>
               <Button
                 type="submit"
-                disabled={isChangingPassword || !currentPassword || !newPassword || !confirmPassword}
+                disabled={
+                  isChangingPassword ||
+                  !currentPassword ||
+                  !newPassword ||
+                  !confirmPassword ||
+                  newPassword !== confirmPassword ||
+                  !validatePassword(newPassword, {}, { email, name }).isValid
+                }
               >
                 {isChangingPassword && (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
