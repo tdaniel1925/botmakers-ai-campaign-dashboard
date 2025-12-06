@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   Users,
   Megaphone,
+  PhoneOutgoing,
   Webhook,
   Settings,
   Image,
@@ -43,6 +44,11 @@ const sidebarItems = [
     title: "Campaigns",
     href: "/admin/campaigns",
     icon: Megaphone,
+  },
+  {
+    title: "Outbound",
+    href: "/admin/outbound",
+    icon: PhoneOutgoing,
   },
   {
     title: "Webhook Logs",
