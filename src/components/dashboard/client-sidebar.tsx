@@ -10,6 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import {
   LayoutDashboard,
   Megaphone,
+  PhoneOutgoing,
   FileBarChart,
   LogOut,
   CreditCard,
@@ -31,6 +32,11 @@ const sidebarItems = [
     title: "Campaigns",
     href: "/dashboard/campaigns",
     icon: Megaphone,
+  },
+  {
+    title: "Outbound",
+    href: "/dashboard/outbound",
+    icon: PhoneOutgoing,
   },
   {
     title: "Calls",
