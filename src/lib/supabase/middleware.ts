@@ -36,7 +36,15 @@ export async function updateSession(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
   // Public routes that don't require authentication
-  const publicRoutes = ["/login", "/accept-invite", "/api/webhooks", "/api/setup", "/api/admin/clients/accept-invite", "/api/admin/seed-demo"];
+  const publicRoutes = [
+    "/login",
+    "/accept-invite",
+    "/api/webhooks",
+    "/api/setup",
+    "/api/admin/clients/accept-invite",
+    "/api/admin/seed-demo",
+    "/api/scheduler", // QStash job handlers (verify their own signature)
+  ];
   const isPublicRoute = publicRoutes.some((route) =>
     pathname.startsWith(route)
   );
