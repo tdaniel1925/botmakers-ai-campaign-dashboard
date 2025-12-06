@@ -54,7 +54,7 @@ export const clients = pgTable("clients", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-// Campaigns
+// Campaigns (Inbound - webhook-based)
 export const campaigns = pgTable("campaigns", {
   id: uuid("id").primaryKey().defaultRandom(),
   clientId: uuid("client_id").references(() => clients.id, { onDelete: "cascade" }),
@@ -63,6 +63,8 @@ export const campaigns = pgTable("campaigns", {
   webhookToken: text("webhook_token").unique().notNull(),
   isActive: boolean("is_active").default(true),
   payloadMapping: jsonb("payload_mapping"),
+  // Campaign type: inbound (webhook-based) or outbound (AI calling)
+  campaignType: text("campaign_type").default("inbound"), // 'inbound' | 'outbound'
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -492,3 +494,6 @@ export type SmsRule = typeof smsRules.$inferSelect;
 export type NewSmsRule = typeof smsRules.$inferInsert;
 export type SmsLog = typeof smsLogs.$inferSelect;
 export type NewSmsLog = typeof smsLogs.$inferInsert;
+
+// Re-export all outbound campaign types
+export * from "./outbound-schema";
