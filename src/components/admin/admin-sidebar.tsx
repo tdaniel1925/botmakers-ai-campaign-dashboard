@@ -23,6 +23,7 @@ import {
   MessageSquare,
   Menu,
   X,
+  Contact,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -49,6 +50,11 @@ const sidebarItems = [
     title: "Outbound",
     href: "/admin/outbound",
     icon: PhoneOutgoing,
+  },
+  {
+    title: "CRM",
+    href: "/admin/crm",
+    icon: Contact,
   },
   {
     title: "Webhook Logs",
