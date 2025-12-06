@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { verifyAdmin, forbiddenResponse } from "@/lib/admin-auth";
 import { createVapiAssistant } from "@/lib/vapi/assistant";
+import { scheduleCampaignProcessor } from "@/lib/scheduler/qstash";
+
+function getBaseUrl(request: NextRequest): string {
+  const host = request.headers.get("host") || "localhost:3000";
+  const protocol = host.includes("localhost") ? "http" : "https";
+  return `${protocol}://${host}`;
+}
 
 /**
  * POST /api/admin/outbound-campaigns/[id]/launch
@@ -191,6 +198,17 @@ export async function POST(
       return NextResponse.json({ error: updateError.message }, { status: 500 });
     }
 
+    // Start the campaign processor scheduler
+    const baseUrl = getBaseUrl(request);
+    let schedulerId: string | null = null;
+
+    try {
+      schedulerId = await scheduleCampaignProcessor(id, baseUrl, 1); // Process every 1 minute
+    } catch (scheduleError) {
+      console.error("Error starting campaign scheduler:", scheduleError);
+      // Don't fail the launch, but log the error - campaign can still be processed manually
+    }
+
     // Log the action
     await supabase.from("audit_logs").insert({
       user_id: authResult.admin!.id,
@@ -204,6 +222,7 @@ export async function POST(
         client_id: campaign.client_id,
         is_test_mode: campaign.is_test_mode,
         contact_count: contactCount,
+        scheduler_id: schedulerId,
       },
     });
 
@@ -211,6 +230,7 @@ export async function POST(
       success: true,
       message: "Campaign launched successfully",
       campaign: updatedCampaign,
+      schedulerId,
     });
   } catch (error) {
     console.error("Error launching outbound campaign:", error);
