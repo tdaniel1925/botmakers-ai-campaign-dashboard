@@ -214,12 +214,12 @@ export default function CRMPage() {
             className="pl-9"
           />
         </div>
-        <Select value={selectedClient} onValueChange={setSelectedClient}>
+        <Select value={selectedClient || "all"} onValueChange={(v) => setSelectedClient(v === "all" ? "" : v)}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="All Clients" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">All Clients</SelectItem>
+            <SelectItem value="all">All Clients</SelectItem>
             {clients.map((client) => (
               <SelectItem key={client.id} value={client.id}>
                 {client.name}
@@ -227,12 +227,12 @@ export default function CRMPage() {
             ))}
           </SelectContent>
         </Select>
-        <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+        <Select value={selectedStatus || "all"} onValueChange={(v) => setSelectedStatus(v === "all" ? "" : v)}>
           <SelectTrigger className="w-[150px]">
             <SelectValue placeholder="All Statuses" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">All Statuses</SelectItem>
+            <SelectItem value="all">All Statuses</SelectItem>
             <SelectItem value="lead">Lead</SelectItem>
             <SelectItem value="prospect">Prospect</SelectItem>
             <SelectItem value="qualified">Qualified</SelectItem>
@@ -240,12 +240,12 @@ export default function CRMPage() {
             <SelectItem value="churned">Churned</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={selectedStage} onValueChange={setSelectedStage}>
+        <Select value={selectedStage || "all"} onValueChange={(v) => setSelectedStage(v === "all" ? "" : v)}>
           <SelectTrigger className="w-[150px]">
             <SelectValue placeholder="All Stages" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">All Stages</SelectItem>
+            <SelectItem value="all">All Stages</SelectItem>
             {PIPELINE_STAGES.map((stage) => (
               <SelectItem key={stage.value} value={stage.value}>
                 {stage.label}
