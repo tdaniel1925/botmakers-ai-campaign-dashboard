@@ -126,14 +126,38 @@ const TIMEZONES = [
   "Pacific/Honolulu",
 ];
 
-const VOICES = [
-  { id: "jennifer", name: "Jennifer (Professional Female)", provider: "vapi" },
-  { id: "mark", name: "Mark (Professional Male)", provider: "vapi" },
-  { id: "sarah", name: "Sarah (Friendly Female)", provider: "vapi" },
-  { id: "john", name: "John (Friendly Male)", provider: "vapi" },
-  { id: "emily", name: "Emily (Conversational Female)", provider: "vapi" },
-  { id: "michael", name: "Michael (Conversational Male)", provider: "vapi" },
+// Vapi native voices (optimized for conversational AI)
+const VAPI_VOICES = [
+  { id: "Hana", name: "Hana", description: "American Female, 22", provider: "vapi" },
+  { id: "Harry", name: "Harry", description: "American Male, 24", provider: "vapi" },
+  { id: "Paige", name: "Paige", description: "American Female, 26", provider: "vapi" },
+  { id: "Cole", name: "Cole", description: "American Male, 22", provider: "vapi" },
+  { id: "Savannah", name: "Savannah", description: "Southern American Female, 25", provider: "vapi" },
+  { id: "Spencer", name: "Spencer", description: "American Female, 26", provider: "vapi" },
+  { id: "Lily", name: "Lily", description: "Asian American Female, 25", provider: "vapi" },
+  { id: "Elliot", name: "Elliot", description: "Canadian Male, 25", provider: "vapi" },
+  { id: "Rohan", name: "Rohan", description: "Indian American Male, 24", provider: "vapi" },
+  { id: "Neha", name: "Neha", description: "Indian American Female, 30", provider: "vapi" },
 ];
+
+// ElevenLabs preset voices (high quality, natural sounding)
+const ELEVENLABS_VOICES = [
+  { id: "21m00Tcm4TlvDq8ikWAM", name: "Rachel", description: "Professional Female", provider: "11labs" },
+  { id: "TxGEqnHWrfWFTfGW9XjX", name: "Josh", description: "Professional Male", provider: "11labs" },
+  { id: "pNInz6obpgDQGcFmaJgB", name: "Adam", description: "Deep Male", provider: "11labs" },
+  { id: "LcfcDJNUP1GQjkzn1xUU", name: "Emily", description: "Friendly Female", provider: "11labs" },
+  { id: "TX3LPaxmHKxFdv7VOQHJ", name: "Liam", description: "Conversational Male", provider: "11labs" },
+  { id: "EXAVITQu4vr4xnSDxMaL", name: "Sarah", description: "Soft Female", provider: "11labs" },
+  { id: "GBv7mTt0atIp3Br8iCZE", name: "Thomas", description: "Calm Male", provider: "11labs" },
+];
+
+// Combined voices grouped by provider
+const VOICE_PROVIDERS = [
+  { id: "vapi", name: "Vapi Voices", description: "Optimized for conversational AI" },
+  { id: "11labs", name: "ElevenLabs", description: "High quality, natural sounding" },
+];
+
+const VOICES = [...VAPI_VOICES, ...ELEVENLABS_VOICES];
 
 const DATA_TYPES = ["string", "number", "boolean"];
 
@@ -166,7 +190,7 @@ const initialData: WizardData = {
   description: "",
   system_prompt: "",
   first_message: "Hello, this is an AI assistant calling on behalf of {{company_name}}. How are you today?",
-  voice_id: "jennifer",
+  voice_id: "Hana",
   voice_provider: "vapi",
   structured_data_schema: [],
   end_call_conditions: ["goodbye", "bye", "thank you for your time"],
@@ -553,22 +577,47 @@ export default function NewOutboundCampaignPage() {
                 <Label htmlFor="voice">Voice</Label>
                 <Select
                   value={data.voice_id}
-                  onValueChange={(value) => updateData("voice_id", value)}
+                  onValueChange={(value) => {
+                    const selectedVoice = VOICES.find(v => v.id === value);
+                    updateData("voice_id", value);
+                    if (selectedVoice) {
+                      updateData("voice_provider", selectedVoice.provider);
+                    }
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select a voice" />
                   </SelectTrigger>
                   <SelectContent>
-                    {VOICES.map((voice) => (
+                    <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted">
+                      Vapi Voices (Optimized for AI)
+                    </div>
+                    {VAPI_VOICES.map((voice) => (
                       <SelectItem key={voice.id} value={voice.id}>
                         <div className="flex items-center gap-2">
-                          <Mic className="h-4 w-4" />
-                          {voice.name}
+                          <Mic className="h-4 w-4 text-primary" />
+                          <span>{voice.name}</span>
+                          <span className="text-xs text-muted-foreground">- {voice.description}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                    <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted mt-1">
+                      ElevenLabs Voices (High Quality)
+                    </div>
+                    {ELEVENLABS_VOICES.map((voice) => (
+                      <SelectItem key={voice.id} value={voice.id}>
+                        <div className="flex items-center gap-2">
+                          <Mic className="h-4 w-4 text-purple-500" />
+                          <span>{voice.name}</span>
+                          <span className="text-xs text-muted-foreground">- {voice.description}</span>
                         </div>
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground">
+                  Selected: {VOICES.find(v => v.id === data.voice_id)?.name} ({data.voice_provider === "11labs" ? "ElevenLabs" : "Vapi"})
+                </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="first_message">First Message</Label>
@@ -1145,6 +1194,9 @@ export default function NewOutboundCampaignPage() {
                       <Label className="text-muted-foreground">Voice</Label>
                       <p className="font-medium">
                         {VOICES.find((v) => v.id === data.voice_id)?.name || data.voice_id}
+                        <span className="text-sm text-muted-foreground ml-1">
+                          ({data.voice_provider === "11labs" ? "ElevenLabs" : "Vapi"})
+                        </span>
                       </p>
                     </div>
                     <div>

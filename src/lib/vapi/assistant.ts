@@ -12,7 +12,7 @@ interface VapiAssistantConfig {
   systemPrompt: string;
   firstMessage?: string;
   voiceId?: string;
-  voiceProvider?: "vapi" | "elevenlabs" | "playht" | "deepgram";
+  voiceProvider?: "vapi" | "11labs" | "elevenlabs" | "playht" | "deepgram";
   endCallConditions?: string[];
   structuredDataSchema?: Array<{
     name: string;
@@ -23,6 +23,25 @@ interface VapiAssistantConfig {
   maxDurationSeconds?: number;
   silenceTimeoutSeconds?: number;
   interruptionsEnabled?: boolean;
+}
+
+/**
+ * Map internal provider names to Vapi API provider names
+ */
+function mapVoiceProvider(provider: string): string {
+  switch (provider) {
+    case "11labs":
+    case "elevenlabs":
+      return "11labs";
+    case "vapi":
+      return "vapi";
+    case "playht":
+      return "playht";
+    case "deepgram":
+      return "deepgram";
+    default:
+      return "vapi";
+  }
 }
 
 interface VapiAssistant {
@@ -101,16 +120,16 @@ export async function createVapiAssistant(
 
   // Configure voice
   if (config.voiceId) {
-    const voiceProvider = config.voiceProvider || "vapi";
+    const voiceProvider = mapVoiceProvider(config.voiceProvider || "vapi");
     assistantPayload.voice = {
       provider: voiceProvider,
       voiceId: config.voiceId,
     };
   } else {
-    // Default to Vapi's built-in voice
+    // Default to Vapi's built-in Hana voice (American Female, optimized for AI)
     assistantPayload.voice = {
       provider: "vapi",
-      voiceId: "jennifer", // Professional female voice
+      voiceId: "Hana",
     };
   }
 
@@ -194,7 +213,7 @@ export async function updateVapiAssistant(
 
   if (config.voiceId) {
     updatePayload.voice = {
-      provider: config.voiceProvider || "vapi",
+      provider: mapVoiceProvider(config.voiceProvider || "vapi"),
       voiceId: config.voiceId,
     };
   }
@@ -278,18 +297,31 @@ export async function getVapiAssistant(
 }
 
 /**
- * List available Vapi voices
+ * List available voices for Vapi assistants
+ * Includes both Vapi native voices and ElevenLabs preset voices
  */
 export async function listVapiVoices(): Promise<
-  Array<{ voiceId: string; name: string; provider: string }>
+  Array<{ voiceId: string; name: string; description: string; provider: string }>
 > {
-  // Return common Vapi voices - in production, you might fetch this from Vapi API
   return [
-    { voiceId: "jennifer", name: "Jennifer (Professional Female)", provider: "vapi" },
-    { voiceId: "mark", name: "Mark (Professional Male)", provider: "vapi" },
-    { voiceId: "sarah", name: "Sarah (Friendly Female)", provider: "vapi" },
-    { voiceId: "john", name: "John (Friendly Male)", provider: "vapi" },
-    { voiceId: "emily", name: "Emily (Conversational Female)", provider: "vapi" },
-    { voiceId: "michael", name: "Michael (Conversational Male)", provider: "vapi" },
+    // Vapi native voices (optimized for conversational AI)
+    { voiceId: "Hana", name: "Hana", description: "American Female, 22", provider: "vapi" },
+    { voiceId: "Harry", name: "Harry", description: "American Male, 24", provider: "vapi" },
+    { voiceId: "Paige", name: "Paige", description: "American Female, 26", provider: "vapi" },
+    { voiceId: "Cole", name: "Cole", description: "American Male, 22", provider: "vapi" },
+    { voiceId: "Savannah", name: "Savannah", description: "Southern American Female, 25", provider: "vapi" },
+    { voiceId: "Spencer", name: "Spencer", description: "American Female, 26", provider: "vapi" },
+    { voiceId: "Lily", name: "Lily", description: "Asian American Female, 25", provider: "vapi" },
+    { voiceId: "Elliot", name: "Elliot", description: "Canadian Male, 25", provider: "vapi" },
+    { voiceId: "Rohan", name: "Rohan", description: "Indian American Male, 24", provider: "vapi" },
+    { voiceId: "Neha", name: "Neha", description: "Indian American Female, 30", provider: "vapi" },
+    // ElevenLabs preset voices (high quality, natural sounding)
+    { voiceId: "21m00Tcm4TlvDq8ikWAM", name: "Rachel", description: "Professional Female", provider: "11labs" },
+    { voiceId: "TxGEqnHWrfWFTfGW9XjX", name: "Josh", description: "Professional Male", provider: "11labs" },
+    { voiceId: "pNInz6obpgDQGcFmaJgB", name: "Adam", description: "Deep Male", provider: "11labs" },
+    { voiceId: "LcfcDJNUP1GQjkzn1xUU", name: "Emily", description: "Friendly Female", provider: "11labs" },
+    { voiceId: "TX3LPaxmHKxFdv7VOQHJ", name: "Liam", description: "Conversational Male", provider: "11labs" },
+    { voiceId: "EXAVITQu4vr4xnSDxMaL", name: "Sarah", description: "Soft Female", provider: "11labs" },
+    { voiceId: "GBv7mTt0atIp3Br8iCZE", name: "Thomas", description: "Calm Male", provider: "11labs" },
   ];
 }
