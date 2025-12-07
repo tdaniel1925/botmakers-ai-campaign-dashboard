@@ -69,24 +69,28 @@ export default async function AdminDashboardPage() {
           value={totalClients}
           description="Active client accounts"
           icon={Users}
+          href="/admin/clients"
         />
         <StatsCard
           title="Total Campaigns"
           value={totalCampaigns}
           description="Across all clients"
           icon={Megaphone}
+          href="/admin/campaigns"
         />
         <StatsCard
           title="Total Calls"
           value={totalCalls}
           description="All time"
           icon={Phone}
+          href="/admin/campaigns"
         />
         <StatsCard
           title="Today's Calls"
           value={todayCalls || 0}
           description="Calls received today"
           icon={TrendingUp}
+          href="/admin/campaigns"
         />
       </div>
 
