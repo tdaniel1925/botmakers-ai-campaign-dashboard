@@ -47,7 +47,17 @@ import {
   Plus,
   Trash2,
   Mic,
+  Sparkles,
+  X,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface Client {
   id: string;
@@ -229,8 +239,64 @@ export default function NewOutboundCampaignPage() {
   const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
+  // AI Prompt Generator state
+  const [showAIPromptDialog, setShowAIPromptDialog] = useState(false);
+  const [aiPromptDescription, setAiPromptDescription] = useState("");
+  const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false);
+
   const router = useRouter();
   const { toast } = useToast();
+
+  // AI Prompt Generator handler
+  const handleGeneratePrompt = async () => {
+    if (!aiPromptDescription.trim()) {
+      toast({
+        title: "Description required",
+        description: "Please describe what you want the AI agent to do",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsGeneratingPrompt(true);
+    try {
+      const selectedClient = clients.find(c => c.id === data.client_id);
+
+      const response = await fetch("/api/admin/ai/generate-prompt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          description: aiPromptDescription,
+          campaignType: "outbound calling",
+          companyName: selectedClient?.company_name || selectedClient?.name || "",
+          targetAudience: "",
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to generate prompt");
+      }
+
+      const { prompt } = await response.json();
+      updateData("system_prompt", prompt);
+      setShowAIPromptDialog(false);
+      setAiPromptDescription("");
+
+      toast({
+        title: "Prompt generated",
+        description: "AI has created a system prompt. Feel free to edit it.",
+      });
+    } catch (error) {
+      toast({
+        title: "Generation failed",
+        description: error instanceof Error ? error.message : "Could not generate prompt",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGeneratingPrompt(false);
+    }
+  };
 
   // Voice preview handler
   const handleVoicePreview = (voiceId: string, previewUrl: string, e: React.MouseEvent) => {
@@ -728,7 +794,19 @@ export default function NewOutboundCampaignPage() {
                 </p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="system_prompt">System Prompt *</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="system_prompt">System Prompt *</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowAIPromptDialog(true)}
+                    className="gap-2"
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    Generate with AI
+                  </Button>
+                </div>
                 <Textarea
                   id="system_prompt"
                   value={data.system_prompt}
@@ -738,6 +816,7 @@ export default function NewOutboundCampaignPage() {
                 />
                 <p className="text-xs text-muted-foreground">
                   Define the AI agent&apos;s personality, goals, and how it should handle the conversation.
+                  Or click &quot;Generate with AI&quot; to create one automatically.
                 </p>
               </div>
             </div>
@@ -1446,6 +1525,74 @@ export default function NewOutboundCampaignPage() {
           )}
         </div>
       </div>
+
+      {/* AI Prompt Generator Dialog */}
+      <Dialog open={showAIPromptDialog} onOpenChange={setShowAIPromptDialog}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-primary" />
+              Generate System Prompt with AI
+            </DialogTitle>
+            <DialogDescription>
+              Describe what you want your AI calling agent to do, and we&apos;ll generate a comprehensive system prompt for you.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="ai-description">What should the AI agent do?</Label>
+              <Textarea
+                id="ai-description"
+                value={aiPromptDescription}
+                onChange={(e) => setAiPromptDescription(e.target.value)}
+                placeholder="Example: Make sales calls to introduce our new software product. Be friendly and professional. Collect contact information from interested leads and schedule follow-up demos."
+                rows={5}
+                className="resize-none"
+              />
+              <p className="text-xs text-muted-foreground">
+                Include details about the purpose, tone, and any specific information you want to collect.
+              </p>
+            </div>
+            {data.client_id && clients.find(c => c.id === data.client_id) && (
+              <div className="rounded-md bg-muted p-3 text-sm">
+                <span className="text-muted-foreground">Company: </span>
+                <span className="font-medium">
+                  {clients.find(c => c.id === data.client_id)?.company_name ||
+                   clients.find(c => c.id === data.client_id)?.name}
+                </span>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowAIPromptDialog(false);
+                setAiPromptDescription("");
+              }}
+              disabled={isGeneratingPrompt}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleGeneratePrompt}
+              disabled={isGeneratingPrompt || !aiPromptDescription.trim()}
+            >
+              {isGeneratingPrompt ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  Generate Prompt
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
