@@ -149,9 +149,10 @@ export async function POST(
 
       case "twilio-import": {
         // Import existing Twilio number
-        if (!twilioPhoneSid) {
+        // phoneNumber should be in E.164 format (e.g., +15551234567)
+        if (!phoneNumber) {
           return NextResponse.json(
-            { error: "Twilio phone SID is required for import" },
+            { error: "Phone number is required for import (E.164 format, e.g., +15551234567)" },
             { status: 400 }
           );
         }
@@ -171,14 +172,14 @@ export async function POST(
         vapiPhoneNumber = await importTwilioPhoneNumber({
           twilioAccountSid: twilioKeys.accountSid,
           twilioAuthToken: twilioKeys.authToken,
-          twilioPhoneSid: twilioPhoneSid,
+          twilioPhoneNumber: phoneNumber, // E.164 format
           name: phoneName2,
           assistantId: campaign.vapi_assistant_id || undefined,
           serverUrl: webhookUrl,
         });
 
         provisionedPhoneNumber = vapiPhoneNumber.number;
-        twilioSid = twilioPhoneSid;
+        twilioSid = twilioPhoneSid || null; // Optional Twilio SID for reference
         break;
       }
 
@@ -208,14 +209,14 @@ export async function POST(
           friendlyName || `${campaign.name}`
         );
 
-        // Then import it to Vapi
+        // Then import it to Vapi using the purchased phone number (E.164 format)
         const clientData3 = campaign.clients as unknown as { id: string; name: string } | null;
         const phoneName3 = `${campaign.name} - ${clientData3?.name || "Campaign"}`;
 
         vapiPhoneNumber = await importTwilioPhoneNumber({
           twilioAccountSid: twilioKeys2.accountSid,
           twilioAuthToken: twilioKeys2.authToken,
-          twilioPhoneSid: purchasedNumber.sid,
+          twilioPhoneNumber: purchasedNumber.phoneNumber, // E.164 format from Twilio
           name: phoneName3,
           assistantId: campaign.vapi_assistant_id || undefined,
           serverUrl: webhookUrl,

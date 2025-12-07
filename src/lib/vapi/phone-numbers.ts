@@ -30,7 +30,8 @@ interface ProvisionPhoneConfig {
 interface ImportTwilioPhoneConfig {
   twilioAccountSid: string;
   twilioAuthToken: string;
-  twilioPhoneSid: string;
+  /** The phone number in E.164 format (e.g., +15551234567) */
+  twilioPhoneNumber: string;
   name?: string;
   assistantId?: string;
   serverUrl?: string;
@@ -160,17 +161,21 @@ export async function provisionVapiPhoneNumber(
 
 /**
  * Import an existing Twilio phone number to Vapi
+ *
+ * Uses the dedicated Twilio import endpoint: POST /phone-number/import/twilio
+ *
+ * @see https://docs.vapi.ai/api-reference/phone-numbers/import-twilio-number
  */
 export async function importTwilioPhoneNumber(
   config: ImportTwilioPhoneConfig
 ): Promise<VapiPhoneNumber> {
   const apiKey = await getVapiApiKey();
 
+  // Build payload according to Vapi's import Twilio endpoint spec
   const payload: Record<string, unknown> = {
-    provider: "twilio",
+    twilioPhoneNumber: config.twilioPhoneNumber, // E.164 format: +15551234567
     twilioAccountSid: config.twilioAccountSid,
     twilioAuthToken: config.twilioAuthToken,
-    twilioPhoneNumber: config.twilioPhoneSid,
   };
 
   if (config.name) {
@@ -185,7 +190,8 @@ export async function importTwilioPhoneNumber(
     payload.serverUrl = config.serverUrl;
   }
 
-  const response = await fetch(`${VAPI_API_URL}/phone-number`, {
+  // Use the dedicated Twilio import endpoint
+  const response = await fetch(`${VAPI_API_URL}/phone-number/import/twilio`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -198,7 +204,7 @@ export async function importTwilioPhoneNumber(
     const errorData = await response.json().catch(() => ({}));
     console.error("Vapi import Twilio phone number error:", errorData);
     throw new Error(
-      `Failed to import Twilio phone number to Vapi: ${response.status} ${response.statusText}`
+      `Failed to import Twilio phone number to Vapi: ${errorData.message || response.status}`
     );
   }
 
