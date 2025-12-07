@@ -59,11 +59,19 @@ interface WizardData {
   // Step 2: Campaign Details
   name: string;
   description: string;
-  // Step 3: Vapi Configuration
+  // Step 3: Call Provider Configuration
+  call_provider: "vapi" | "autocalls" | "synthflow";
+  // Vapi-specific
   vapi_key_source: "system" | "client";
   vapi_api_key: string;
   vapi_assistant_id: string;
   vapi_phone_number_id: string;
+  // AutoCalls-specific
+  autocalls_api_key: string;
+  autocalls_assistant_id: string;
+  // Synthflow-specific
+  synthflow_api_key: string;
+  synthflow_model_id: string;
   // Step 4: Schedule
   schedule_days: number[];
   schedule_start_time: string;
@@ -121,7 +129,7 @@ const SMS_TRIGGER_TYPES = [
 const STEPS = [
   { id: 1, title: "Client", icon: Building2 },
   { id: 2, title: "Details", icon: FileText },
-  { id: 3, title: "Vapi Config", icon: Key },
+  { id: 3, title: "Call Provider", icon: Key },
   { id: 4, title: "Schedule", icon: Calendar },
   { id: 5, title: "SMS", icon: MessageSquare },
   { id: 6, title: "Contacts", icon: Users },
@@ -130,14 +138,25 @@ const STEPS = [
   { id: 9, title: "Review", icon: Play },
 ];
 
+const CALL_PROVIDERS = [
+  { value: "vapi", label: "Vapi", description: "Vapi.ai voice agents" },
+  { value: "autocalls", label: "AutoCalls.ai", description: "AutoCalls.ai voice agents" },
+  { value: "synthflow", label: "Synthflow", description: "Synthflow AI voice agents" },
+];
+
 const initialData: WizardData = {
   client_id: "",
   name: "",
   description: "",
+  call_provider: "vapi",
   vapi_key_source: "system",
   vapi_api_key: "",
   vapi_assistant_id: "",
   vapi_phone_number_id: "",
+  autocalls_api_key: "",
+  autocalls_assistant_id: "",
+  synthflow_api_key: "",
+  synthflow_model_id: "",
   schedule_days: [1, 2, 3, 4, 5], // Mon-Fri
   schedule_start_time: "09:00",
   schedule_end_time: "17:00",
@@ -195,67 +214,74 @@ export default function NewOutboundCampaignPage() {
     }
   };
 
-  // Validate Vapi credentials
-  const validateVapiCredentials = async () => {
-    // If using system keys, only validate assistant ID format
-    if (data.vapi_key_source === "system") {
-      if (!data.vapi_assistant_id.trim()) {
-        setVapiValidationError("Assistant ID is required");
-        return false;
-      }
-      return true;
-    }
-
-    // If using client keys, validate all credentials
-    if (!data.vapi_api_key || !data.vapi_assistant_id) {
-      setVapiValidationError("API Key and Assistant ID are required");
-      return false;
-    }
-
+  // Validate provider credentials
+  const validateProviderCredentials = async () => {
     setIsValidatingVapi(true);
     setVapiValidationError(null);
 
     try {
-      const assistantResponse = await fetch(`https://api.vapi.ai/assistant/${data.vapi_assistant_id}`, {
-        headers: {
-          Authorization: `Bearer ${data.vapi_api_key}`,
-        },
-      });
+      // Validate based on selected provider
+      switch (data.call_provider) {
+        case "vapi":
+          // If using system keys, only validate assistant ID format
+          if (data.vapi_key_source === "system") {
+            if (!data.vapi_assistant_id.trim()) {
+              setVapiValidationError("Assistant ID is required");
+              return false;
+            }
+            return true;
+          }
+          // Validate client Vapi credentials
+          if (!data.vapi_api_key || !data.vapi_assistant_id) {
+            setVapiValidationError("API Key and Assistant ID are required");
+            return false;
+          }
+          // Call Vapi API to validate
+          const vapiResponse = await fetch(`https://api.vapi.ai/assistant/${data.vapi_assistant_id}`, {
+            headers: { Authorization: `Bearer ${data.vapi_api_key}` },
+          });
+          if (!vapiResponse.ok) {
+            if (vapiResponse.status === 401) {
+              setVapiValidationError("Invalid API Key");
+              return false;
+            }
+            if (vapiResponse.status === 404) {
+              setVapiValidationError("Assistant not found");
+              return false;
+            }
+            setVapiValidationError("Failed to validate Vapi credentials");
+            return false;
+          }
+          break;
 
-      if (!assistantResponse.ok) {
-        if (assistantResponse.status === 401) {
-          setVapiValidationError("Invalid API Key. Please check your Vapi private key.");
-          return false;
-        }
-        if (assistantResponse.status === 404) {
-          setVapiValidationError("Assistant not found. Please check your Assistant ID.");
-          return false;
-        }
-        setVapiValidationError("Failed to validate credentials.");
-        return false;
-      }
+        case "autocalls":
+          if (!data.autocalls_api_key || !data.autocalls_assistant_id) {
+            setVapiValidationError("API Key and Assistant ID are required for AutoCalls");
+            return false;
+          }
+          // Basic format validation (AutoCalls uses integer IDs)
+          if (isNaN(parseInt(data.autocalls_assistant_id))) {
+            setVapiValidationError("AutoCalls Assistant ID must be a number");
+            return false;
+          }
+          break;
 
-      if (data.vapi_phone_number_id) {
-        const phoneResponse = await fetch(`https://api.vapi.ai/phone-number/${data.vapi_phone_number_id}`, {
-          headers: {
-            Authorization: `Bearer ${data.vapi_api_key}`,
-          },
-        });
-
-        if (!phoneResponse.ok && phoneResponse.status === 404) {
-          setVapiValidationError("Phone Number not found. Please check your Phone Number ID.");
-          return false;
-        }
+        case "synthflow":
+          if (!data.synthflow_api_key || !data.synthflow_model_id) {
+            setVapiValidationError("API Key and Agent ID are required for Synthflow");
+            return false;
+          }
+          break;
       }
 
       toast({
         title: "Credentials validated",
-        description: "Your Vapi credentials are valid.",
+        description: "Your provider credentials look valid.",
       });
       return true;
     } catch (error) {
-      console.error("Vapi validation error:", error);
-      setVapiValidationError("Failed to connect to Vapi.");
+      console.error("Provider validation error:", error);
+      setVapiValidationError("Failed to validate credentials.");
       return false;
     } finally {
       setIsValidatingVapi(false);
@@ -269,10 +295,20 @@ export default function NewOutboundCampaignPage() {
       case 2:
         return !!data.name;
       case 3:
-        if (data.vapi_key_source === "system") {
-          return !!data.vapi_assistant_id.trim();
+        // Validate based on selected provider
+        switch (data.call_provider) {
+          case "vapi":
+            if (data.vapi_key_source === "system") {
+              return !!data.vapi_assistant_id.trim();
+            }
+            return !!data.vapi_api_key.trim() && !!data.vapi_assistant_id.trim();
+          case "autocalls":
+            return !!data.autocalls_api_key.trim() && !!data.autocalls_assistant_id.trim();
+          case "synthflow":
+            return !!data.synthflow_api_key.trim() && !!data.synthflow_model_id.trim();
+          default:
+            return false;
         }
-        return !!data.vapi_api_key.trim() && !!data.vapi_assistant_id.trim();
       case 4:
         return data.schedule_days.length > 0 && !!data.schedule_start_time && !!data.schedule_end_time;
       case 8:
@@ -292,9 +328,9 @@ export default function NewOutboundCampaignPage() {
       return;
     }
 
-    // Validate Vapi credentials on step 3
+    // Validate provider credentials on step 3
     if (currentStep === 3) {
-      const isValid = await validateVapiCredentials();
+      const isValid = await validateProviderCredentials();
       if (!isValid) return;
     }
 
@@ -370,16 +406,35 @@ export default function NewOutboundCampaignPage() {
   const saveCampaignData = async () => {
     if (!createdCampaignId) return;
 
+    // Build provider-specific config based on selected provider
+    const providerConfig: Record<string, unknown> = {
+      call_provider: data.call_provider,
+    };
+
+    switch (data.call_provider) {
+      case "vapi":
+        providerConfig.vapi_key_source = data.vapi_key_source;
+        providerConfig.vapi_api_key = data.vapi_key_source === "client" ? data.vapi_api_key : null;
+        providerConfig.vapi_assistant_id = data.vapi_assistant_id;
+        providerConfig.vapi_phone_number_id = data.vapi_phone_number_id || null;
+        break;
+      case "autocalls":
+        providerConfig.provider_api_key = data.autocalls_api_key;
+        providerConfig.autocalls_assistant_id = parseInt(data.autocalls_assistant_id);
+        break;
+      case "synthflow":
+        providerConfig.provider_api_key = data.synthflow_api_key;
+        providerConfig.synthflow_model_id = data.synthflow_model_id;
+        break;
+    }
+
     const response = await fetch(`/api/admin/outbound-campaigns/${createdCampaignId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: data.name,
         description: data.description || null,
-        vapi_key_source: data.vapi_key_source,
-        vapi_api_key: data.vapi_key_source === "client" ? data.vapi_api_key : null,
-        vapi_assistant_id: data.vapi_assistant_id,
-        vapi_phone_number_id: data.vapi_phone_number_id || null,
+        ...providerConfig,
         retry_enabled: data.retry_enabled,
         retry_attempts: data.retry_attempts,
         retry_delay_minutes: data.retry_delay_minutes,
@@ -533,134 +588,210 @@ export default function NewOutboundCampaignPage() {
         return (
           <div className="space-y-6">
             <div>
-              <h2 className="text-xl font-semibold mb-2">Vapi Configuration</h2>
+              <h2 className="text-xl font-semibold mb-2">Call Provider</h2>
               <p className="text-muted-foreground">
-                Configure the Vapi assistant that will handle calls for this campaign.
+                Choose and configure the AI voice provider that will handle outbound calls.
               </p>
             </div>
 
-            {/* API Key Source Selection */}
             <div className="space-y-4">
+              {/* Provider Selection */}
               <div className="space-y-2">
-                <Label>API Key Source</Label>
+                <Label>Call Provider *</Label>
                 <Select
-                  value={data.vapi_key_source}
-                  onValueChange={(value: "system" | "client") => updateData("vapi_key_source", value)}
+                  value={data.call_provider}
+                  onValueChange={(value: "vapi" | "autocalls" | "synthflow") => updateData("call_provider", value)}
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="system">
-                      <div className="flex flex-col">
-                        <span>Use System Keys (Bill to Client)</span>
-                        <span className="text-xs text-muted-foreground">Uses your platform&apos;s Vapi account</span>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="client">
-                      <div className="flex flex-col">
-                        <span>Use Client&apos;s Own Keys</span>
-                        <span className="text-xs text-muted-foreground">Client provides their own Vapi credentials</span>
-                      </div>
-                    </SelectItem>
+                    {CALL_PROVIDERS.map((provider) => (
+                      <SelectItem key={provider.value} value={provider.value}>
+                        <div className="flex flex-col">
+                          <span>{provider.label}</span>
+                          <span className="text-xs text-muted-foreground">{provider.description}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
 
-              {/* Help link */}
-              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                <div className="flex gap-3">
-                  <Key className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+              {/* Vapi Configuration */}
+              {data.call_provider === "vapi" && (
+                <>
                   <div className="space-y-2">
-                    <p className="font-medium text-blue-900 dark:text-blue-100">Where to find Vapi credentials</p>
-                    <ul className="text-sm text-blue-700 dark:text-blue-300 space-y-1">
-                      <li>
-                        <strong>Assistant ID:</strong>{" "}
-                        <a
-                          href="https://dashboard.vapi.ai/assistants"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="underline inline-flex items-center gap-1"
-                        >
-                          Vapi Dashboard → Assistants
-                          <ExternalLink className="h-3 w-3" />
-                        </a>
-                      </li>
-                      <li>
-                        <strong>Phone Number ID:</strong>{" "}
-                        <a
-                          href="https://dashboard.vapi.ai/phone-numbers"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="underline inline-flex items-center gap-1"
-                        >
-                          Vapi Dashboard → Phone Numbers
-                          <ExternalLink className="h-3 w-3" />
-                        </a>
-                      </li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-
-              {/* Client API Key (only if using client keys) */}
-              {data.vapi_key_source === "client" && (
-                <div className="space-y-2">
-                  <Label htmlFor="vapi_api_key">Vapi API Key (Private Key) *</Label>
-                  <div className="relative">
-                    <Input
-                      id="vapi_api_key"
-                      type={showApiKey ? "text" : "password"}
-                      value={data.vapi_api_key}
-                      onChange={(e) => updateData("vapi_api_key", e.target.value)}
-                      placeholder="vapi_xxxxxxxx..."
-                      className="pr-10"
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-                      onClick={() => setShowApiKey(!showApiKey)}
+                    <Label>API Key Source</Label>
+                    <Select
+                      value={data.vapi_key_source}
+                      onValueChange={(value: "system" | "client") => updateData("vapi_key_source", value)}
                     >
-                      {showApiKey ? (
-                        <EyeOff className="h-4 w-4 text-muted-foreground" />
-                      ) : (
-                        <Eye className="h-4 w-4 text-muted-foreground" />
-                      )}
-                    </Button>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="system">System Keys (Bill to Client)</SelectItem>
+                        <SelectItem value="client">Client&apos;s Own Keys</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Client&apos;s private API key from Vapi dashboard. Will be encrypted.
-                  </p>
-                </div>
+
+                  {data.vapi_key_source === "client" && (
+                    <div className="space-y-2">
+                      <Label htmlFor="vapi_api_key">Vapi API Key *</Label>
+                      <div className="relative">
+                        <Input
+                          id="vapi_api_key"
+                          type={showApiKey ? "text" : "password"}
+                          value={data.vapi_api_key}
+                          onChange={(e) => updateData("vapi_api_key", e.target.value)}
+                          placeholder="vapi_xxxxxxxx..."
+                          className="pr-10"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                          onClick={() => setShowApiKey(!showApiKey)}
+                        >
+                          {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <Label htmlFor="vapi_assistant_id">Assistant ID *</Label>
+                    <Input
+                      id="vapi_assistant_id"
+                      value={data.vapi_assistant_id}
+                      onChange={(e) => updateData("vapi_assistant_id", e.target.value)}
+                      placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="vapi_phone_number_id">Phone Number ID</Label>
+                    <Input
+                      id="vapi_phone_number_id"
+                      value={data.vapi_phone_number_id}
+                      onChange={(e) => updateData("vapi_phone_number_id", e.target.value)}
+                      placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                    />
+                    <p className="text-xs text-muted-foreground">Optional</p>
+                  </div>
+                </>
               )}
 
-              <div className="space-y-2">
-                <Label htmlFor="vapi_assistant_id">Assistant ID *</Label>
-                <Input
-                  id="vapi_assistant_id"
-                  value={data.vapi_assistant_id}
-                  onChange={(e) => updateData("vapi_assistant_id", e.target.value)}
-                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                />
-                <p className="text-xs text-muted-foreground">
-                  The ID of the Vapi assistant that will make calls.
-                </p>
-              </div>
+              {/* AutoCalls Configuration */}
+              {data.call_provider === "autocalls" && (
+                <>
+                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                    <div className="flex gap-3">
+                      <Key className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                      <div className="space-y-1">
+                        <p className="font-medium text-blue-900 dark:text-blue-100">AutoCalls.ai Credentials</p>
+                        <p className="text-sm text-blue-700 dark:text-blue-300">
+                          Get your API key and Assistant ID from{" "}
+                          <a href="https://app.autocalls.ai" target="_blank" rel="noopener noreferrer" className="underline">
+                            app.autocalls.ai <ExternalLink className="inline h-3 w-3" />
+                          </a>
+                        </p>
+                      </div>
+                    </div>
+                  </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="vapi_phone_number_id">Phone Number ID</Label>
-                <Input
-                  id="vapi_phone_number_id"
-                  value={data.vapi_phone_number_id}
-                  onChange={(e) => updateData("vapi_phone_number_id", e.target.value)}
-                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Optional. The Vapi phone number to use for outbound calls.
-                </p>
-              </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="autocalls_api_key">API Key *</Label>
+                    <div className="relative">
+                      <Input
+                        id="autocalls_api_key"
+                        type={showApiKey ? "text" : "password"}
+                        value={data.autocalls_api_key}
+                        onChange={(e) => updateData("autocalls_api_key", e.target.value)}
+                        placeholder="Your AutoCalls API key"
+                        className="pr-10"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                        onClick={() => setShowApiKey(!showApiKey)}
+                      >
+                        {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="autocalls_assistant_id">Assistant ID *</Label>
+                    <Input
+                      id="autocalls_assistant_id"
+                      value={data.autocalls_assistant_id}
+                      onChange={(e) => updateData("autocalls_assistant_id", e.target.value)}
+                      placeholder="123456"
+                    />
+                    <p className="text-xs text-muted-foreground">Numeric ID from your AutoCalls dashboard</p>
+                  </div>
+                </>
+              )}
+
+              {/* Synthflow Configuration */}
+              {data.call_provider === "synthflow" && (
+                <>
+                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                    <div className="flex gap-3">
+                      <Key className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                      <div className="space-y-1">
+                        <p className="font-medium text-blue-900 dark:text-blue-100">Synthflow Credentials</p>
+                        <p className="text-sm text-blue-700 dark:text-blue-300">
+                          Get your API key and Agent ID from{" "}
+                          <a href="https://app.synthflow.ai" target="_blank" rel="noopener noreferrer" className="underline">
+                            app.synthflow.ai <ExternalLink className="inline h-3 w-3" />
+                          </a>
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="synthflow_api_key">API Key *</Label>
+                    <div className="relative">
+                      <Input
+                        id="synthflow_api_key"
+                        type={showApiKey ? "text" : "password"}
+                        value={data.synthflow_api_key}
+                        onChange={(e) => updateData("synthflow_api_key", e.target.value)}
+                        placeholder="Your Synthflow API key"
+                        className="pr-10"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                        onClick={() => setShowApiKey(!showApiKey)}
+                      >
+                        {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="synthflow_model_id">Agent ID (model_id) *</Label>
+                    <Input
+                      id="synthflow_model_id"
+                      value={data.synthflow_model_id}
+                      onChange={(e) => updateData("synthflow_model_id", e.target.value)}
+                      placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                    />
+                    <p className="text-xs text-muted-foreground">Found on your agent&apos;s page in Synthflow</p>
+                  </div>
+                </>
+              )}
 
               {/* Validation error */}
               {vapiValidationError && (

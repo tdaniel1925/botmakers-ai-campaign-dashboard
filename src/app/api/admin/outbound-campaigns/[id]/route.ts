@@ -183,11 +183,21 @@ export async function PUT(
       test_call_limit,
       agent_config,
       structured_data_schema,
+      // Call provider selection
+      call_provider,
       // Vapi credentials
       vapi_key_source,
       vapi_api_key,
       vapi_assistant_id,
       vapi_phone_number_id,
+      // AutoCalls.ai credentials
+      autocalls_assistant_id,
+      // Synthflow credentials
+      synthflow_model_id,
+      // Provider API key (for AutoCalls/Synthflow)
+      provider_api_key,
+      // Variable mapping
+      variable_mapping,
     } = body;
 
     // Build update object (only include provided fields)
@@ -212,12 +222,15 @@ export async function PUT(
     if (structured_data_schema !== undefined)
       updateData.structured_data_schema = structured_data_schema;
 
+    // Call provider selection
+    if (call_provider !== undefined) updateData.call_provider = call_provider;
+
     // Vapi credentials
     if (vapi_key_source !== undefined) updateData.vapi_key_source = vapi_key_source;
     if (vapi_assistant_id !== undefined) updateData.vapi_assistant_id = vapi_assistant_id;
     if (vapi_phone_number_id !== undefined) updateData.vapi_phone_number_id = vapi_phone_number_id;
 
-    // Encrypt API key if provided and using client keys
+    // Encrypt Vapi API key if provided and using client keys
     if (vapi_api_key !== undefined) {
       if (vapi_api_key && vapi_key_source === "client") {
         try {
@@ -233,6 +246,34 @@ export async function PUT(
         updateData.vapi_api_key = null;
       }
     }
+
+    // AutoCalls.ai credentials
+    if (autocalls_assistant_id !== undefined) {
+      updateData.autocalls_assistant_id = autocalls_assistant_id ? parseInt(autocalls_assistant_id, 10) : null;
+    }
+
+    // Synthflow credentials
+    if (synthflow_model_id !== undefined) updateData.synthflow_model_id = synthflow_model_id || null;
+
+    // Provider API key (for AutoCalls/Synthflow)
+    if (provider_api_key !== undefined) {
+      if (provider_api_key && (call_provider === "autocalls" || call_provider === "synthflow")) {
+        try {
+          updateData.provider_api_key = encrypt(provider_api_key);
+        } catch (error) {
+          console.error("Error encrypting provider API key:", error);
+          return NextResponse.json(
+            { error: "Failed to secure provider API key" },
+            { status: 500 }
+          );
+        }
+      } else {
+        updateData.provider_api_key = null;
+      }
+    }
+
+    // Variable mapping
+    if (variable_mapping !== undefined) updateData.variable_mapping = variable_mapping || {};
 
     updateData.updated_at = new Date().toISOString();
 
