@@ -1,13 +1,12 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import {
   Card,
@@ -24,7 +23,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
-import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft,
@@ -33,31 +31,21 @@ import {
   Loader2,
   Building2,
   FileText,
-  Bot,
-  Phone,
+  Key,
   Calendar,
   MessageSquare,
   DollarSign,
   Users,
   Play,
-  Pause,
-  Volume2,
   Settings,
   Upload,
   Plus,
   Trash2,
-  Mic,
-  Sparkles,
-  X,
+  Eye,
+  EyeOff,
+  ExternalLink,
+  AlertCircle,
 } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 
 interface Client {
   id: string;
@@ -71,49 +59,33 @@ interface WizardData {
   // Step 2: Campaign Details
   name: string;
   description: string;
-  // Step 3: AI Agent Configuration
-  system_prompt: string;
-  first_message: string;
-  voice_id: string;
-  voice_provider: string;
-  // Step 4: Structured Data Collection
-  structured_data_schema: Array<{
-    name: string;
-    type: string;
-    description: string;
-    required: boolean;
-  }>;
-  // Step 5: End Call Conditions
-  end_call_conditions: string[];
-  max_duration_seconds: number;
-  silence_timeout_seconds: number;
-  // Step 6: Phone Number
-  phone_number_option: "provision" | "existing" | "manual";
-  area_code: string;
-  existing_phone_id: string;
-  manual_phone_number: string;
-  // Step 7: Schedule
+  // Step 3: Vapi Configuration
+  vapi_key_source: "system" | "client";
+  vapi_api_key: string;
+  vapi_assistant_id: string;
+  vapi_phone_number_id: string;
+  // Step 4: Schedule
   schedule_days: number[];
   schedule_start_time: string;
   schedule_end_time: string;
   schedule_timezone: string;
-  // Step 8: SMS Templates
+  // Step 5: SMS Templates
   sms_templates: Array<{
     name: string;
     trigger_type: string;
     template_body: string;
     link_url: string;
   }>;
-  // Step 9: Contact List (handled separately via upload)
-  // Step 10: Retry Settings
+  // Step 6: Contact List (handled separately via upload)
+  // Step 7: Retry Settings
   retry_enabled: boolean;
   retry_attempts: number;
   retry_delay_minutes: number;
   max_concurrent_calls: number;
-  // Step 11: Billing
+  // Step 8: Billing
   rate_per_minute: string;
   billing_threshold: string;
-  // Step 12: Review & Launch
+  // Step 9: Review & Launch
   is_test_mode: boolean;
   test_call_limit: number;
 }
@@ -138,43 +110,6 @@ const TIMEZONES = [
   "Pacific/Honolulu",
 ];
 
-// Vapi native voices (optimized for conversational AI)
-// Preview URLs from Vapi's voice samples
-const VAPI_VOICES = [
-  { id: "Hana", name: "Hana", description: "American Female, 22", provider: "vapi", previewUrl: "https://static.vapi.ai/voice-previews/Hana.mp3" },
-  { id: "Harry", name: "Harry", description: "American Male, 24", provider: "vapi", previewUrl: "https://static.vapi.ai/voice-previews/Harry.mp3" },
-  { id: "Paige", name: "Paige", description: "American Female, 26", provider: "vapi", previewUrl: "https://static.vapi.ai/voice-previews/Paige.mp3" },
-  { id: "Cole", name: "Cole", description: "American Male, 22", provider: "vapi", previewUrl: "https://static.vapi.ai/voice-previews/Cole.mp3" },
-  { id: "Savannah", name: "Savannah", description: "Southern American Female, 25", provider: "vapi", previewUrl: "https://static.vapi.ai/voice-previews/Savannah.mp3" },
-  { id: "Spencer", name: "Spencer", description: "American Female, 26", provider: "vapi", previewUrl: "https://static.vapi.ai/voice-previews/Spencer.mp3" },
-  { id: "Lily", name: "Lily", description: "Asian American Female, 25", provider: "vapi", previewUrl: "https://static.vapi.ai/voice-previews/Lily.mp3" },
-  { id: "Elliot", name: "Elliot", description: "Canadian Male, 25", provider: "vapi", previewUrl: "https://static.vapi.ai/voice-previews/Elliot.mp3" },
-  { id: "Rohan", name: "Rohan", description: "Indian American Male, 24", provider: "vapi", previewUrl: "https://static.vapi.ai/voice-previews/Rohan.mp3" },
-  { id: "Neha", name: "Neha", description: "Indian American Female, 30", provider: "vapi", previewUrl: "https://static.vapi.ai/voice-previews/Neha.mp3" },
-];
-
-// ElevenLabs preset voices (high quality, natural sounding)
-// Preview URLs from ElevenLabs voice library
-const ELEVENLABS_VOICES = [
-  { id: "21m00Tcm4TlvDq8ikWAM", name: "Rachel", description: "Professional Female", provider: "11labs", previewUrl: "https://storage.googleapis.com/eleven-public-prod/premade/voices/21m00Tcm4TlvDq8ikWAM/df6788f9-5c96-470d-8571-e324afc1f5b2.mp3" },
-  { id: "TxGEqnHWrfWFTfGW9XjX", name: "Josh", description: "Professional Male", provider: "11labs", previewUrl: "https://storage.googleapis.com/eleven-public-prod/premade/voices/TxGEqnHWrfWFTfGW9XjX/c6c80dcd-5fe5-4a4c-8e26-a8a0748e297b.mp3" },
-  { id: "pNInz6obpgDQGcFmaJgB", name: "Adam", description: "Deep Male", provider: "11labs", previewUrl: "https://storage.googleapis.com/eleven-public-prod/premade/voices/pNInz6obpgDQGcFmaJgB/e0b45450-78db-49b9-aaa4-d5358a6871bd.mp3" },
-  { id: "LcfcDJNUP1GQjkzn1xUU", name: "Emily", description: "Friendly Female", provider: "11labs", previewUrl: "https://storage.googleapis.com/eleven-public-prod/premade/voices/LcfcDJNUP1GQjkzn1xUU/e4b994b7-9713-4238-84f3-add8fccb4c6f.mp3" },
-  { id: "TX3LPaxmHKxFdv7VOQHJ", name: "Liam", description: "Conversational Male", provider: "11labs", previewUrl: "https://storage.googleapis.com/eleven-public-prod/premade/voices/TX3LPaxmHKxFdv7VOQHJ/63148076-6363-42db-aea8-31424308b92c.mp3" },
-  { id: "EXAVITQu4vr4xnSDxMaL", name: "Sarah", description: "Soft Female", provider: "11labs", previewUrl: "https://storage.googleapis.com/eleven-public-prod/premade/voices/EXAVITQu4vr4xnSDxMaL/01a3e33c-6e99-4ee7-8543-ff2571fcf5d1.mp3" },
-  { id: "GBv7mTt0atIp3Br8iCZE", name: "Thomas", description: "Calm Male", provider: "11labs", previewUrl: "https://storage.googleapis.com/eleven-public-prod/premade/voices/GBv7mTt0atIp3Br8iCZE/f39e5dd5-c8ab-4029-a3c3-73d6183c2bf7.mp3" },
-];
-
-// Combined voices grouped by provider
-const VOICE_PROVIDERS = [
-  { id: "vapi", name: "Vapi Voices", description: "Optimized for conversational AI" },
-  { id: "11labs", name: "ElevenLabs", description: "High quality, natural sounding" },
-];
-
-const VOICES = [...VAPI_VOICES, ...ELEVENLABS_VOICES];
-
-const DATA_TYPES = ["string", "number", "boolean"];
-
 const SMS_TRIGGER_TYPES = [
   { value: "call_completed", label: "After Call Completed" },
   { value: "positive_outcome", label: "Positive Outcome" },
@@ -186,34 +121,23 @@ const SMS_TRIGGER_TYPES = [
 const STEPS = [
   { id: 1, title: "Client", icon: Building2 },
   { id: 2, title: "Details", icon: FileText },
-  { id: 3, title: "AI Agent", icon: Bot },
-  { id: 4, title: "Data Schema", icon: Settings },
-  { id: 5, title: "Call Settings", icon: Phone },
-  { id: 6, title: "Phone Number", icon: Phone },
-  { id: 7, title: "Schedule", icon: Calendar },
-  { id: 8, title: "SMS", icon: MessageSquare },
-  { id: 9, title: "Contacts", icon: Users },
-  { id: 10, title: "Retry", icon: Settings },
-  { id: 11, title: "Billing", icon: DollarSign },
-  { id: 12, title: "Review", icon: Play },
+  { id: 3, title: "Vapi Config", icon: Key },
+  { id: 4, title: "Schedule", icon: Calendar },
+  { id: 5, title: "SMS", icon: MessageSquare },
+  { id: 6, title: "Contacts", icon: Users },
+  { id: 7, title: "Retry", icon: Settings },
+  { id: 8, title: "Billing", icon: DollarSign },
+  { id: 9, title: "Review", icon: Play },
 ];
 
 const initialData: WizardData = {
   client_id: "",
   name: "",
   description: "",
-  system_prompt: "",
-  first_message: "Hello, this is an AI assistant calling on behalf of {{company_name}}. How are you today?",
-  voice_id: "Hana",
-  voice_provider: "vapi",
-  structured_data_schema: [],
-  end_call_conditions: ["goodbye", "bye", "thank you for your time"],
-  max_duration_seconds: 300,
-  silence_timeout_seconds: 30,
-  phone_number_option: "provision",
-  area_code: "",
-  existing_phone_id: "",
-  manual_phone_number: "",
+  vapi_key_source: "system",
+  vapi_api_key: "",
+  vapi_assistant_id: "",
+  vapi_phone_number_id: "",
   schedule_days: [1, 2, 3, 4, 5], // Mon-Fri
   schedule_start_time: "09:00",
   schedule_end_time: "17:00",
@@ -236,110 +160,12 @@ export default function NewOutboundCampaignPage() {
   const [isLoadingClients, setIsLoadingClients] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [createdCampaignId, setCreatedCampaignId] = useState<string | null>(null);
-  const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-
-  // AI Prompt Generator state
-  const [showAIPromptDialog, setShowAIPromptDialog] = useState(false);
-  const [aiPromptDescription, setAiPromptDescription] = useState("");
-  const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false);
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [isValidatingVapi, setIsValidatingVapi] = useState(false);
+  const [vapiValidationError, setVapiValidationError] = useState<string | null>(null);
 
   const router = useRouter();
   const { toast } = useToast();
-
-  // AI Prompt Generator handler
-  const handleGeneratePrompt = async () => {
-    if (!aiPromptDescription.trim()) {
-      toast({
-        title: "Description required",
-        description: "Please describe what you want the AI agent to do",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsGeneratingPrompt(true);
-    try {
-      const selectedClient = clients.find(c => c.id === data.client_id);
-
-      const response = await fetch("/api/admin/ai/generate-prompt", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          description: aiPromptDescription,
-          campaignType: "outbound calling",
-          companyName: selectedClient?.company_name || selectedClient?.name || "",
-          targetAudience: "",
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to generate prompt");
-      }
-
-      const { prompt } = await response.json();
-      updateData("system_prompt", prompt);
-      setShowAIPromptDialog(false);
-      setAiPromptDescription("");
-
-      toast({
-        title: "Prompt generated",
-        description: "AI has created a system prompt. Feel free to edit it.",
-      });
-    } catch (error) {
-      toast({
-        title: "Generation failed",
-        description: error instanceof Error ? error.message : "Could not generate prompt",
-        variant: "destructive",
-      });
-    } finally {
-      setIsGeneratingPrompt(false);
-    }
-  };
-
-  // Voice preview handler
-  const handleVoicePreview = (voiceId: string, previewUrl: string, e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-
-    // If this voice is already playing, stop it
-    if (playingVoiceId === voiceId && audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
-      setPlayingVoiceId(null);
-      return;
-    }
-
-    // Stop any currently playing audio
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
-    }
-
-    // Create new audio and play
-    const audio = new Audio(previewUrl);
-    audioRef.current = audio;
-    setPlayingVoiceId(voiceId);
-
-    audio.play().catch((err) => {
-      console.error("Failed to play voice preview:", err);
-      setPlayingVoiceId(null);
-    });
-
-    audio.onended = () => {
-      setPlayingVoiceId(null);
-    };
-
-    audio.onerror = () => {
-      setPlayingVoiceId(null);
-      toast({
-        title: "Preview unavailable",
-        description: "Could not load voice preview",
-        variant: "destructive",
-      });
-    };
-  };
 
   useEffect(() => {
     async function fetchClients() {
@@ -364,6 +190,76 @@ export default function NewOutboundCampaignPage() {
 
   const updateData = (field: keyof WizardData, value: unknown) => {
     setData((prev) => ({ ...prev, [field]: value }));
+    if (vapiValidationError) {
+      setVapiValidationError(null);
+    }
+  };
+
+  // Validate Vapi credentials
+  const validateVapiCredentials = async () => {
+    // If using system keys, only validate assistant ID format
+    if (data.vapi_key_source === "system") {
+      if (!data.vapi_assistant_id.trim()) {
+        setVapiValidationError("Assistant ID is required");
+        return false;
+      }
+      return true;
+    }
+
+    // If using client keys, validate all credentials
+    if (!data.vapi_api_key || !data.vapi_assistant_id) {
+      setVapiValidationError("API Key and Assistant ID are required");
+      return false;
+    }
+
+    setIsValidatingVapi(true);
+    setVapiValidationError(null);
+
+    try {
+      const assistantResponse = await fetch(`https://api.vapi.ai/assistant/${data.vapi_assistant_id}`, {
+        headers: {
+          Authorization: `Bearer ${data.vapi_api_key}`,
+        },
+      });
+
+      if (!assistantResponse.ok) {
+        if (assistantResponse.status === 401) {
+          setVapiValidationError("Invalid API Key. Please check your Vapi private key.");
+          return false;
+        }
+        if (assistantResponse.status === 404) {
+          setVapiValidationError("Assistant not found. Please check your Assistant ID.");
+          return false;
+        }
+        setVapiValidationError("Failed to validate credentials.");
+        return false;
+      }
+
+      if (data.vapi_phone_number_id) {
+        const phoneResponse = await fetch(`https://api.vapi.ai/phone-number/${data.vapi_phone_number_id}`, {
+          headers: {
+            Authorization: `Bearer ${data.vapi_api_key}`,
+          },
+        });
+
+        if (!phoneResponse.ok && phoneResponse.status === 404) {
+          setVapiValidationError("Phone Number not found. Please check your Phone Number ID.");
+          return false;
+        }
+      }
+
+      toast({
+        title: "Credentials validated",
+        description: "Your Vapi credentials are valid.",
+      });
+      return true;
+    } catch (error) {
+      console.error("Vapi validation error:", error);
+      setVapiValidationError("Failed to connect to Vapi.");
+      return false;
+    } finally {
+      setIsValidatingVapi(false);
+    }
   };
 
   const canProceed = (): boolean => {
@@ -373,17 +269,13 @@ export default function NewOutboundCampaignPage() {
       case 2:
         return !!data.name;
       case 3:
-        return !!data.system_prompt;
-      case 5:
-        return data.max_duration_seconds > 0;
-      case 6:
-        if (data.phone_number_option === "provision") return true;
-        if (data.phone_number_option === "existing") return !!data.existing_phone_id;
-        if (data.phone_number_option === "manual") return !!data.manual_phone_number;
-        return false;
-      case 7:
+        if (data.vapi_key_source === "system") {
+          return !!data.vapi_assistant_id.trim();
+        }
+        return !!data.vapi_api_key.trim() && !!data.vapi_assistant_id.trim();
+      case 4:
         return data.schedule_days.length > 0 && !!data.schedule_start_time && !!data.schedule_end_time;
-      case 11:
+      case 8:
         return parseFloat(data.rate_per_minute) > 0;
       default:
         return true;
@@ -398,6 +290,12 @@ export default function NewOutboundCampaignPage() {
         variant: "destructive",
       });
       return;
+    }
+
+    // Validate Vapi credentials on step 3
+    if (currentStep === 3) {
+      const isValid = await validateVapiCredentials();
+      if (!isValid) return;
     }
 
     // Create campaign after step 2
@@ -437,7 +335,7 @@ export default function NewOutboundCampaignPage() {
       }
     }
 
-    if (currentStep < 12) {
+    if (currentStep < STEPS.length) {
       setCurrentStep((prev) => prev + 1);
     }
   };
@@ -472,24 +370,16 @@ export default function NewOutboundCampaignPage() {
   const saveCampaignData = async () => {
     if (!createdCampaignId) return;
 
-    const agentConfig = {
-      system_prompt: data.system_prompt,
-      first_message: data.first_message,
-      voice_id: data.voice_id,
-      voice_provider: data.voice_provider,
-      end_call_conditions: data.end_call_conditions,
-      max_duration_seconds: data.max_duration_seconds,
-      silence_timeout_seconds: data.silence_timeout_seconds,
-    };
-
     const response = await fetch(`/api/admin/outbound-campaigns/${createdCampaignId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: data.name,
         description: data.description || null,
-        agent_config: agentConfig,
-        structured_data_schema: data.structured_data_schema,
+        vapi_key_source: data.vapi_key_source,
+        vapi_api_key: data.vapi_key_source === "client" ? data.vapi_api_key : null,
+        vapi_assistant_id: data.vapi_assistant_id,
+        vapi_phone_number_id: data.vapi_phone_number_id || null,
         retry_enabled: data.retry_enabled,
         retry_attempts: data.retry_attempts,
         retry_delay_minutes: data.retry_delay_minutes,
@@ -545,27 +435,6 @@ export default function NewOutboundCampaignPage() {
     }
   };
 
-  // Add structured data field
-  const addDataField = () => {
-    updateData("structured_data_schema", [
-      ...data.structured_data_schema,
-      { name: "", type: "string", description: "", required: false },
-    ]);
-  };
-
-  const removeDataField = (index: number) => {
-    updateData(
-      "structured_data_schema",
-      data.structured_data_schema.filter((_, i) => i !== index)
-    );
-  };
-
-  const updateDataField = (index: number, field: string, value: unknown) => {
-    const updated = [...data.structured_data_schema];
-    updated[index] = { ...updated[index], [field]: value };
-    updateData("structured_data_schema", updated);
-  };
-
   // Add SMS template
   const addSmsTemplate = () => {
     updateData("sms_templates", [
@@ -585,24 +454,6 @@ export default function NewOutboundCampaignPage() {
     const updated = [...data.sms_templates];
     updated[index] = { ...updated[index], [field]: value };
     updateData("sms_templates", updated);
-  };
-
-  // Add end call condition
-  const addEndCallCondition = () => {
-    updateData("end_call_conditions", [...data.end_call_conditions, ""]);
-  };
-
-  const removeEndCallCondition = (index: number) => {
-    updateData(
-      "end_call_conditions",
-      data.end_call_conditions.filter((_, i) => i !== index)
-    );
-  };
-
-  const updateEndCallCondition = (index: number, value: string) => {
-    const updated = [...data.end_call_conditions];
-    updated[index] = value;
-    updateData("end_call_conditions", updated);
   };
 
   const renderStep = () => {
@@ -682,370 +533,149 @@ export default function NewOutboundCampaignPage() {
         return (
           <div className="space-y-6">
             <div>
-              <h2 className="text-xl font-semibold mb-2">AI Agent Configuration</h2>
+              <h2 className="text-xl font-semibold mb-2">Vapi Configuration</h2>
               <p className="text-muted-foreground">
-                Configure the AI agent that will make calls for this campaign.
+                Configure the Vapi assistant that will handle calls for this campaign.
               </p>
             </div>
+
+            {/* API Key Source Selection */}
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="voice">Voice</Label>
-                <div className="flex gap-2">
-                  <Select
-                    value={data.voice_id}
-                    onValueChange={(value) => {
-                      const selectedVoice = VOICES.find(v => v.id === value);
-                      updateData("voice_id", value);
-                      if (selectedVoice) {
-                        updateData("voice_provider", selectedVoice.provider);
-                      }
-                    }}
-                  >
-                    <SelectTrigger className="flex-1">
-                      <SelectValue placeholder="Select a voice" />
-                    </SelectTrigger>
-                    <SelectContent position="popper" side="bottom" align="start" sideOffset={4} className="max-h-[300px]">
-                      <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted sticky top-0">
-                        Vapi Voices (Optimized for AI)
+                <Label>API Key Source</Label>
+                <Select
+                  value={data.vapi_key_source}
+                  onValueChange={(value: "system" | "client") => updateData("vapi_key_source", value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="system">
+                      <div className="flex flex-col">
+                        <span>Use System Keys (Bill to Client)</span>
+                        <span className="text-xs text-muted-foreground">Uses your platform&apos;s Vapi account</span>
                       </div>
-                      {VAPI_VOICES.map((voice) => (
-                        <SelectItem key={voice.id} value={voice.id}>
-                          <div className="flex items-center gap-2 w-full">
-                            <button
-                              type="button"
-                              onClick={(e) => handleVoicePreview(voice.id, voice.previewUrl, e)}
-                              className="p-1 rounded-full hover:bg-primary/10 transition-colors"
-                              title={playingVoiceId === voice.id ? "Stop preview" : "Play preview"}
-                            >
-                              {playingVoiceId === voice.id ? (
-                                <Pause className="h-3 w-3 text-primary" />
-                              ) : (
-                                <Play className="h-3 w-3 text-primary" />
-                              )}
-                            </button>
-                            <Mic className="h-4 w-4 text-primary" />
-                            <span>{voice.name}</span>
-                            <span className="text-xs text-muted-foreground">- {voice.description}</span>
-                          </div>
-                        </SelectItem>
-                      ))}
-                      <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted sticky top-0 mt-1">
-                        ElevenLabs Voices (High Quality)
+                    </SelectItem>
+                    <SelectItem value="client">
+                      <div className="flex flex-col">
+                        <span>Use Client&apos;s Own Keys</span>
+                        <span className="text-xs text-muted-foreground">Client provides their own Vapi credentials</span>
                       </div>
-                      {ELEVENLABS_VOICES.map((voice) => (
-                        <SelectItem key={voice.id} value={voice.id}>
-                          <div className="flex items-center gap-2 w-full">
-                            <button
-                              type="button"
-                              onClick={(e) => handleVoicePreview(voice.id, voice.previewUrl, e)}
-                              className="p-1 rounded-full hover:bg-purple-500/10 transition-colors"
-                              title={playingVoiceId === voice.id ? "Stop preview" : "Play preview"}
-                            >
-                              {playingVoiceId === voice.id ? (
-                                <Pause className="h-3 w-3 text-purple-500" />
-                              ) : (
-                                <Play className="h-3 w-3 text-purple-500" />
-                              )}
-                            </button>
-                            <Mic className="h-4 w-4 text-purple-500" />
-                            <span>{voice.name}</span>
-                            <span className="text-xs text-muted-foreground">- {voice.description}</span>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {/* Preview button for currently selected voice */}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    onClick={(e) => {
-                      const selectedVoice = VOICES.find(v => v.id === data.voice_id);
-                      if (selectedVoice) {
-                        handleVoicePreview(selectedVoice.id, selectedVoice.previewUrl, e);
-                      }
-                    }}
-                    title={playingVoiceId === data.voice_id ? "Stop preview" : "Preview selected voice"}
-                  >
-                    {playingVoiceId === data.voice_id ? (
-                      <Pause className="h-4 w-4" />
-                    ) : (
-                      <Volume2 className="h-4 w-4" />
-                    )}
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Selected: {VOICES.find(v => v.id === data.voice_id)?.name} ({data.voice_provider === "11labs" ? "ElevenLabs" : "Vapi"})
-                  {" "}• Click the speaker icon to preview
-                </p>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
+
+              {/* Help link */}
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                <div className="flex gap-3">
+                  <Key className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                  <div className="space-y-2">
+                    <p className="font-medium text-blue-900 dark:text-blue-100">Where to find Vapi credentials</p>
+                    <ul className="text-sm text-blue-700 dark:text-blue-300 space-y-1">
+                      <li>
+                        <strong>Assistant ID:</strong>{" "}
+                        <a
+                          href="https://dashboard.vapi.ai/assistants"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="underline inline-flex items-center gap-1"
+                        >
+                          Vapi Dashboard → Assistants
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      </li>
+                      <li>
+                        <strong>Phone Number ID:</strong>{" "}
+                        <a
+                          href="https://dashboard.vapi.ai/phone-numbers"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="underline inline-flex items-center gap-1"
+                        >
+                          Vapi Dashboard → Phone Numbers
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              {/* Client API Key (only if using client keys) */}
+              {data.vapi_key_source === "client" && (
+                <div className="space-y-2">
+                  <Label htmlFor="vapi_api_key">Vapi API Key (Private Key) *</Label>
+                  <div className="relative">
+                    <Input
+                      id="vapi_api_key"
+                      type={showApiKey ? "text" : "password"}
+                      value={data.vapi_api_key}
+                      onChange={(e) => updateData("vapi_api_key", e.target.value)}
+                      placeholder="vapi_xxxxxxxx..."
+                      className="pr-10"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                      onClick={() => setShowApiKey(!showApiKey)}
+                    >
+                      {showApiKey ? (
+                        <EyeOff className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <Eye className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Client&apos;s private API key from Vapi dashboard. Will be encrypted.
+                  </p>
+                </div>
+              )}
+
               <div className="space-y-2">
-                <Label htmlFor="first_message">First Message</Label>
-                <Textarea
-                  id="first_message"
-                  value={data.first_message}
-                  onChange={(e) => updateData("first_message", e.target.value)}
-                  placeholder="Hello, this is..."
-                  rows={3}
+                <Label htmlFor="vapi_assistant_id">Assistant ID *</Label>
+                <Input
+                  id="vapi_assistant_id"
+                  value={data.vapi_assistant_id}
+                  onChange={(e) => updateData("vapi_assistant_id", e.target.value)}
+                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Use {"{{contact_name}}"}, {"{{company_name}}"} for dynamic values
+                  The ID of the Vapi assistant that will make calls.
                 </p>
               </div>
+
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="system_prompt">System Prompt *</Label>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowAIPromptDialog(true)}
-                    className="gap-2"
-                  >
-                    <Sparkles className="h-4 w-4" />
-                    Generate with AI
-                  </Button>
-                </div>
-                <Textarea
-                  id="system_prompt"
-                  value={data.system_prompt}
-                  onChange={(e) => updateData("system_prompt", e.target.value)}
-                  placeholder="You are a friendly sales representative calling on behalf of..."
-                  rows={8}
+                <Label htmlFor="vapi_phone_number_id">Phone Number ID</Label>
+                <Input
+                  id="vapi_phone_number_id"
+                  value={data.vapi_phone_number_id}
+                  onChange={(e) => updateData("vapi_phone_number_id", e.target.value)}
+                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Define the AI agent&apos;s personality, goals, and how it should handle the conversation.
-                  Or click &quot;Generate with AI&quot; to create one automatically.
+                  Optional. The Vapi phone number to use for outbound calls.
                 </p>
               </div>
+
+              {/* Validation error */}
+              {vapiValidationError && (
+                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+                  <div className="flex gap-3">
+                    <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
+                    <p className="text-sm text-red-700 dark:text-red-300">{vapiValidationError}</p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         );
 
       case 4:
-        return (
-          <div className="space-y-6">
-            <div>
-              <h2 className="text-xl font-semibold mb-2">Data Collection Schema</h2>
-              <p className="text-muted-foreground">
-                Define what information the AI should collect during calls.
-              </p>
-            </div>
-            <div className="space-y-4">
-              {data.structured_data_schema.map((field, index) => (
-                <Card key={index}>
-                  <CardContent className="pt-4">
-                    <div className="grid gap-4 md:grid-cols-4">
-                      <div className="space-y-2">
-                        <Label>Field Name</Label>
-                        <Input
-                          value={field.name}
-                          onChange={(e) => updateDataField(index, "name", e.target.value)}
-                          placeholder="e.g., interested"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Type</Label>
-                        <Select
-                          value={field.type}
-                          onValueChange={(value) => updateDataField(index, "type", value)}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {DATA_TYPES.map((type) => (
-                              <SelectItem key={type} value={type}>
-                                {type}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Description</Label>
-                        <Input
-                          value={field.description}
-                          onChange={(e) => updateDataField(index, "description", e.target.value)}
-                          placeholder="What to collect"
-                        />
-                      </div>
-                      <div className="flex items-end gap-2">
-                        <div className="flex items-center gap-2">
-                          <Checkbox
-                            checked={field.required}
-                            onCheckedChange={(checked) => updateDataField(index, "required", checked)}
-                          />
-                          <Label className="text-sm">Required</Label>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeDataField(index)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-              <Button variant="outline" onClick={addDataField}>
-                <Plus className="mr-2 h-4 w-4" />
-                Add Field
-              </Button>
-            </div>
-          </div>
-        );
-
-      case 5:
-        return (
-          <div className="space-y-6">
-            <div>
-              <h2 className="text-xl font-semibold mb-2">Call Settings</h2>
-              <p className="text-muted-foreground">
-                Configure call duration and end conditions.
-              </p>
-            </div>
-            <div className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>Max Call Duration (seconds)</Label>
-                  <Input
-                    type="number"
-                    value={data.max_duration_seconds}
-                    onChange={(e) => updateData("max_duration_seconds", parseInt(e.target.value) || 0)}
-                    min={30}
-                    max={3600}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Silence Timeout (seconds)</Label>
-                  <Input
-                    type="number"
-                    value={data.silence_timeout_seconds}
-                    onChange={(e) => updateData("silence_timeout_seconds", parseInt(e.target.value) || 0)}
-                    min={5}
-                    max={120}
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>End Call Phrases</Label>
-                <p className="text-xs text-muted-foreground mb-2">
-                  The AI will end the call when these phrases are detected.
-                </p>
-                {data.end_call_conditions.map((condition, index) => (
-                  <div key={index} className="flex gap-2">
-                    <Input
-                      value={condition}
-                      onChange={(e) => updateEndCallCondition(index, e.target.value)}
-                      placeholder="e.g., goodbye"
-                    />
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => removeEndCallCondition(index)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
-                <Button variant="outline" size="sm" onClick={addEndCallCondition}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Phrase
-                </Button>
-              </div>
-            </div>
-          </div>
-        );
-
-      case 6:
-        return (
-          <div className="space-y-6">
-            <div>
-              <h2 className="text-xl font-semibold mb-2">Phone Number</h2>
-              <p className="text-muted-foreground">
-                Choose how to get a phone number for outbound calls.
-              </p>
-            </div>
-            <div className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-3">
-                <Card
-                  className={`cursor-pointer transition-all ${
-                    data.phone_number_option === "provision"
-                      ? "ring-2 ring-primary"
-                      : "hover:border-primary"
-                  }`}
-                  onClick={() => updateData("phone_number_option", "provision")}
-                >
-                  <CardHeader className="text-center">
-                    <Phone className="h-8 w-8 mx-auto mb-2" />
-                    <CardTitle className="text-base">Auto-Provision</CardTitle>
-                    <CardDescription>Get a new number from Twilio</CardDescription>
-                  </CardHeader>
-                </Card>
-                <Card
-                  className={`cursor-pointer transition-all ${
-                    data.phone_number_option === "existing"
-                      ? "ring-2 ring-primary"
-                      : "hover:border-primary"
-                  }`}
-                  onClick={() => updateData("phone_number_option", "existing")}
-                >
-                  <CardHeader className="text-center">
-                    <Phone className="h-8 w-8 mx-auto mb-2" />
-                    <CardTitle className="text-base">Use Existing</CardTitle>
-                    <CardDescription>Select from your numbers</CardDescription>
-                  </CardHeader>
-                </Card>
-                <Card
-                  className={`cursor-pointer transition-all ${
-                    data.phone_number_option === "manual"
-                      ? "ring-2 ring-primary"
-                      : "hover:border-primary"
-                  }`}
-                  onClick={() => updateData("phone_number_option", "manual")}
-                >
-                  <CardHeader className="text-center">
-                    <Phone className="h-8 w-8 mx-auto mb-2" />
-                    <CardTitle className="text-base">Manual Entry</CardTitle>
-                    <CardDescription>Enter an existing number</CardDescription>
-                  </CardHeader>
-                </Card>
-              </div>
-
-              {data.phone_number_option === "provision" && (
-                <div className="space-y-2">
-                  <Label>Preferred Area Code (optional)</Label>
-                  <Input
-                    value={data.area_code}
-                    onChange={(e) => updateData("area_code", e.target.value)}
-                    placeholder="e.g., 212"
-                    maxLength={3}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Leave blank to auto-select based on your location
-                  </p>
-                </div>
-              )}
-
-              {data.phone_number_option === "manual" && (
-                <div className="space-y-2">
-                  <Label>Phone Number</Label>
-                  <Input
-                    value={data.manual_phone_number}
-                    onChange={(e) => updateData("manual_phone_number", e.target.value)}
-                    placeholder="+1 (555) 123-4567"
-                  />
-                </div>
-              )}
-            </div>
-          </div>
-        );
-
-      case 7:
         return (
           <div className="space-y-6">
             <div>
@@ -1123,7 +753,7 @@ export default function NewOutboundCampaignPage() {
           </div>
         );
 
-      case 8:
+      case 5:
         return (
           <div className="space-y-6">
             <div>
@@ -1201,7 +831,7 @@ export default function NewOutboundCampaignPage() {
           </div>
         );
 
-      case 9:
+      case 6:
         return (
           <div className="space-y-6">
             <div>
@@ -1236,7 +866,7 @@ export default function NewOutboundCampaignPage() {
           </div>
         );
 
-      case 10:
+      case 7:
         return (
           <div className="space-y-6">
             <div>
@@ -1299,7 +929,7 @@ export default function NewOutboundCampaignPage() {
           </div>
         );
 
-      case 11:
+      case 8:
         return (
           <div className="space-y-6">
             <div>
@@ -1338,7 +968,7 @@ export default function NewOutboundCampaignPage() {
           </div>
         );
 
-      case 12:
+      case 9:
         return (
           <div className="space-y-6">
             <div>
@@ -1365,13 +995,14 @@ export default function NewOutboundCampaignPage() {
                       </p>
                     </div>
                     <div>
-                      <Label className="text-muted-foreground">Voice</Label>
+                      <Label className="text-muted-foreground">Vapi Keys</Label>
                       <p className="font-medium">
-                        {VOICES.find((v) => v.id === data.voice_id)?.name || data.voice_id}
-                        <span className="text-sm text-muted-foreground ml-1">
-                          ({data.voice_provider === "11labs" ? "ElevenLabs" : "Vapi"})
-                        </span>
+                        {data.vapi_key_source === "system" ? "System Keys (Bill to Client)" : "Client's Own Keys"}
                       </p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">Assistant ID</Label>
+                      <p className="font-medium font-mono text-sm truncate">{data.vapi_assistant_id || "Not set"}</p>
                     </div>
                     <div>
                       <Label className="text-muted-foreground">Schedule</Label>
@@ -1510,89 +1141,21 @@ export default function NewOutboundCampaignPage() {
               Save Draft
             </Button>
           )}
-          {currentStep === 12 ? (
+          {currentStep === STEPS.length ? (
             <Button onClick={handleLaunch} disabled={isSubmitting || !createdCampaignId}>
               {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               <Play className="mr-2 h-4 w-4" />
               {data.is_test_mode ? "Start Test" : "Launch Campaign"}
             </Button>
           ) : (
-            <Button onClick={handleNext} disabled={isSubmitting || !canProceed()}>
-              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Next
-              <ArrowRight className="ml-2 h-4 w-4" />
+            <Button onClick={handleNext} disabled={isSubmitting || isValidatingVapi || !canProceed()}>
+              {(isSubmitting || isValidatingVapi) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isValidatingVapi ? "Validating..." : "Next"}
+              {!isValidatingVapi && <ArrowRight className="ml-2 h-4 w-4" />}
             </Button>
           )}
         </div>
       </div>
-
-      {/* AI Prompt Generator Dialog */}
-      <Dialog open={showAIPromptDialog} onOpenChange={setShowAIPromptDialog}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-primary" />
-              Generate System Prompt with AI
-            </DialogTitle>
-            <DialogDescription>
-              Describe what you want your AI calling agent to do, and we&apos;ll generate a comprehensive system prompt for you.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="ai-description">What should the AI agent do?</Label>
-              <Textarea
-                id="ai-description"
-                value={aiPromptDescription}
-                onChange={(e) => setAiPromptDescription(e.target.value)}
-                placeholder="Example: Make sales calls to introduce our new software product. Be friendly and professional. Collect contact information from interested leads and schedule follow-up demos."
-                rows={5}
-                className="resize-none"
-              />
-              <p className="text-xs text-muted-foreground">
-                Include details about the purpose, tone, and any specific information you want to collect.
-              </p>
-            </div>
-            {data.client_id && clients.find(c => c.id === data.client_id) && (
-              <div className="rounded-md bg-muted p-3 text-sm">
-                <span className="text-muted-foreground">Company: </span>
-                <span className="font-medium">
-                  {clients.find(c => c.id === data.client_id)?.company_name ||
-                   clients.find(c => c.id === data.client_id)?.name}
-                </span>
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setShowAIPromptDialog(false);
-                setAiPromptDescription("");
-              }}
-              disabled={isGeneratingPrompt}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleGeneratePrompt}
-              disabled={isGeneratingPrompt || !aiPromptDescription.trim()}
-            >
-              {isGeneratingPrompt ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="mr-2 h-4 w-4" />
-                  Generate Prompt
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

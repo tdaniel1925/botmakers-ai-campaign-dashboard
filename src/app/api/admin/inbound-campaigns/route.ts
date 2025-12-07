@@ -97,6 +97,7 @@ export async function POST(request: NextRequest) {
       name,
       description,
       // Vapi credentials
+      vapi_key_source = "system", // "system" or "client"
       vapi_api_key,
       vapi_assistant_id,
       vapi_phone_number_id,
@@ -113,10 +114,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Require Vapi credentials
-    if (!vapi_api_key || !vapi_assistant_id) {
+    // Require Assistant ID always
+    if (!vapi_assistant_id) {
       return NextResponse.json(
-        { error: "Vapi API Key and Assistant ID are required" },
+        { error: "Vapi Assistant ID is required" },
+        { status: 400 }
+      );
+    }
+
+    // Require API key only when using client keys
+    if (vapi_key_source === "client" && !vapi_api_key) {
+      return NextResponse.json(
+        { error: "Vapi API Key is required when using client keys" },
         { status: 400 }
       );
     }
@@ -140,16 +149,18 @@ export async function POST(request: NextRequest) {
     // Generate unique webhook token
     const webhookToken = generateWebhookToken();
 
-    // Encrypt the Vapi API key before storing
+    // Encrypt the Vapi API key before storing (only if using client keys)
     let encryptedApiKey: string | null = null;
-    try {
-      encryptedApiKey = encrypt(vapi_api_key);
-    } catch (error) {
-      console.error("Error encrypting API key:", error);
-      return NextResponse.json(
-        { error: "Failed to secure API key. Please ensure ENCRYPTION_SECRET is configured." },
-        { status: 500 }
-      );
+    if (vapi_key_source === "client" && vapi_api_key) {
+      try {
+        encryptedApiKey = encrypt(vapi_api_key);
+      } catch (error) {
+        console.error("Error encrypting API key:", error);
+        return NextResponse.json(
+          { error: "Failed to secure API key. Please ensure ENCRYPTION_SECRET is configured." },
+          { status: 500 }
+        );
+      }
     }
 
     // Create the inbound campaign
@@ -160,6 +171,7 @@ export async function POST(request: NextRequest) {
         name,
         description: description || null,
         webhook_token: webhookToken,
+        vapi_key_source: vapi_key_source,
         vapi_api_key: encryptedApiKey,
         vapi_assistant_id,
         vapi_phone_number_id: vapi_phone_number_id || null,

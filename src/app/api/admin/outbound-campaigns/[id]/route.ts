@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { verifyAdmin, forbiddenResponse } from "@/lib/admin-auth";
+import { encrypt } from "@/lib/encryption";
 
 /**
  * GET /api/admin/outbound-campaigns/[id]
@@ -182,6 +183,11 @@ export async function PUT(
       test_call_limit,
       agent_config,
       structured_data_schema,
+      // Vapi credentials
+      vapi_key_source,
+      vapi_api_key,
+      vapi_assistant_id,
+      vapi_phone_number_id,
     } = body;
 
     // Build update object (only include provided fields)
@@ -205,6 +211,28 @@ export async function PUT(
     if (agent_config !== undefined) updateData.agent_config = agent_config;
     if (structured_data_schema !== undefined)
       updateData.structured_data_schema = structured_data_schema;
+
+    // Vapi credentials
+    if (vapi_key_source !== undefined) updateData.vapi_key_source = vapi_key_source;
+    if (vapi_assistant_id !== undefined) updateData.vapi_assistant_id = vapi_assistant_id;
+    if (vapi_phone_number_id !== undefined) updateData.vapi_phone_number_id = vapi_phone_number_id;
+
+    // Encrypt API key if provided and using client keys
+    if (vapi_api_key !== undefined) {
+      if (vapi_api_key && vapi_key_source === "client") {
+        try {
+          updateData.vapi_api_key = encrypt(vapi_api_key);
+        } catch (error) {
+          console.error("Error encrypting Vapi API key:", error);
+          return NextResponse.json(
+            { error: "Failed to secure API key" },
+            { status: 500 }
+          );
+        }
+      } else {
+        updateData.vapi_api_key = null;
+      }
+    }
 
     updateData.updated_at = new Date().toISOString();
 

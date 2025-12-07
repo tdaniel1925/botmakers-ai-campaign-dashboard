@@ -48,7 +48,8 @@ interface WizardData {
   client_id: string;
   name: string;
   description: string;
-  // Vapi Credentials
+  // Vapi Configuration
+  vapi_key_source: "system" | "client";
   vapi_api_key: string;
   vapi_assistant_id: string;
   vapi_phone_number_id: string;
@@ -58,6 +59,7 @@ const initialData: WizardData = {
   client_id: "",
   name: "",
   description: "",
+  vapi_key_source: "system",
   vapi_api_key: "",
   vapi_assistant_id: "",
   vapi_phone_number_id: "",
@@ -115,6 +117,16 @@ export default function NewInboundCampaignPage() {
 
   // Validate Vapi credentials
   const validateVapiCredentials = async () => {
+    // If using system keys, only validate assistant ID format
+    if (data.vapi_key_source === "system") {
+      if (!data.vapi_assistant_id.trim()) {
+        setVapiValidationError("Assistant ID is required");
+        return false;
+      }
+      return true;
+    }
+
+    // If using client keys, validate all credentials
     if (!data.vapi_api_key || !data.vapi_assistant_id) {
       setVapiValidationError("API Key and Assistant ID are required");
       return false;
@@ -179,6 +191,9 @@ export default function NewInboundCampaignPage() {
       case 1:
         return data.client_id && data.name.trim();
       case 2:
+        if (data.vapi_key_source === "system") {
+          return !!data.vapi_assistant_id.trim();
+        }
         return data.vapi_api_key.trim() && data.vapi_assistant_id.trim();
       case 3:
         return true;
@@ -218,7 +233,8 @@ export default function NewInboundCampaignPage() {
           client_id: data.client_id,
           name: data.name,
           description: data.description || null,
-          vapi_api_key: data.vapi_api_key,
+          vapi_key_source: data.vapi_key_source,
+          vapi_api_key: data.vapi_key_source === "client" ? data.vapi_api_key : null,
           vapi_assistant_id: data.vapi_assistant_id,
           vapi_phone_number_id: data.vapi_phone_number_id || null,
         }),
@@ -368,90 +384,119 @@ export default function NewInboundCampaignPage() {
             <div>
               <h2 className="text-xl font-semibold mb-2">Vapi Configuration</h2>
               <p className="text-muted-foreground">
-                Enter your Vapi credentials to connect your AI assistant.
+                Configure Vapi credentials to connect your AI assistant.
               </p>
             </div>
 
-            {/* Help link */}
-            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-              <div className="flex gap-3">
-                <Key className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                <div className="space-y-2">
-                  <p className="font-medium text-blue-900 dark:text-blue-100">Where to find your Vapi credentials</p>
-                  <ul className="text-sm text-blue-700 dark:text-blue-300 space-y-1">
-                    <li>
-                      <strong>API Key:</strong> Go to{" "}
-                      <a
-                        href="https://dashboard.vapi.ai/account"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="underline inline-flex items-center gap-1"
-                      >
-                        Vapi Dashboard → Account
-                        <ExternalLink className="h-3 w-3" />
-                      </a>
-                    </li>
-                    <li>
-                      <strong>Assistant ID:</strong> Go to{" "}
-                      <a
-                        href="https://dashboard.vapi.ai/assistants"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="underline inline-flex items-center gap-1"
-                      >
-                        Vapi Dashboard → Assistants
-                        <ExternalLink className="h-3 w-3" />
-                      </a>{" "}
-                      and copy the ID
-                    </li>
-                    <li>
-                      <strong>Phone Number ID:</strong> Go to{" "}
-                      <a
-                        href="https://dashboard.vapi.ai/phone-numbers"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="underline inline-flex items-center gap-1"
-                      >
-                        Vapi Dashboard → Phone Numbers
-                        <ExternalLink className="h-3 w-3" />
-                      </a>{" "}
-                      and copy the ID
-                    </li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-
             <div className="space-y-4">
+              {/* Key Source Selection */}
               <div className="space-y-2">
-                <Label htmlFor="vapi_api_key">Vapi API Key (Private Key) *</Label>
-                <div className="relative">
-                  <Input
-                    id="vapi_api_key"
-                    type={showApiKey ? "text" : "password"}
-                    value={data.vapi_api_key}
-                    onChange={(e) => updateData("vapi_api_key", e.target.value)}
-                    placeholder="vapi_xxxxxxxx..."
-                    className="pr-10"
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-                    onClick={() => setShowApiKey(!showApiKey)}
-                  >
-                    {showApiKey ? (
-                      <EyeOff className="h-4 w-4 text-muted-foreground" />
-                    ) : (
-                      <Eye className="h-4 w-4 text-muted-foreground" />
-                    )}
-                  </Button>
-                </div>
+                <Label htmlFor="vapi_key_source">API Key Source *</Label>
+                <Select
+                  value={data.vapi_key_source}
+                  onValueChange={(v: "system" | "client") => updateData("vapi_key_source", v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select key source" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="system">
+                      System Keys (Bill to Client)
+                    </SelectItem>
+                    <SelectItem value="client">
+                      Client&apos;s Own Keys
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
                 <p className="text-xs text-muted-foreground">
-                  Your private API key from the Vapi dashboard. This will be encrypted and stored securely.
+                  {data.vapi_key_source === "system"
+                    ? "Use platform Vapi account. Usage will be billed to the client."
+                    : "Client provides their own Vapi API key for direct billing."}
                 </p>
               </div>
+
+              {/* Client API Key - only shown when using client keys */}
+              {data.vapi_key_source === "client" && (
+                <>
+                  {/* Help link */}
+                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                    <div className="flex gap-3">
+                      <Key className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                      <div className="space-y-2">
+                        <p className="font-medium text-blue-900 dark:text-blue-100">Where to find Vapi credentials</p>
+                        <ul className="text-sm text-blue-700 dark:text-blue-300 space-y-1">
+                          <li>
+                            <strong>API Key:</strong>{" "}
+                            <a
+                              href="https://dashboard.vapi.ai/account"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="underline inline-flex items-center gap-1"
+                            >
+                              Vapi Dashboard → Account
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          </li>
+                          <li>
+                            <strong>Assistant ID:</strong>{" "}
+                            <a
+                              href="https://dashboard.vapi.ai/assistants"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="underline inline-flex items-center gap-1"
+                            >
+                              Vapi Dashboard → Assistants
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          </li>
+                          <li>
+                            <strong>Phone Number ID:</strong>{" "}
+                            <a
+                              href="https://dashboard.vapi.ai/phone-numbers"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="underline inline-flex items-center gap-1"
+                            >
+                              Vapi Dashboard → Phone Numbers
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          </li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="vapi_api_key">Vapi API Key (Private Key) *</Label>
+                    <div className="relative">
+                      <Input
+                        id="vapi_api_key"
+                        type={showApiKey ? "text" : "password"}
+                        value={data.vapi_api_key}
+                        onChange={(e) => updateData("vapi_api_key", e.target.value)}
+                        placeholder="vapi_xxxxxxxx..."
+                        className="pr-10"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                        onClick={() => setShowApiKey(!showApiKey)}
+                      >
+                        {showApiKey ? (
+                          <EyeOff className="h-4 w-4 text-muted-foreground" />
+                        ) : (
+                          <Eye className="h-4 w-4 text-muted-foreground" />
+                        )}
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Private API key from the Vapi dashboard. Will be encrypted.
+                    </p>
+                  </div>
+                </>
+              )}
 
               <div className="space-y-2">
                 <Label htmlFor="vapi_assistant_id">Assistant ID *</Label>
@@ -475,7 +520,7 @@ export default function NewInboundCampaignPage() {
                   placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Optional. The ID of the Vapi phone number to use for this campaign.
+                  Optional. The ID of the Vapi phone number to use.
                 </p>
               </div>
 
@@ -527,11 +572,21 @@ export default function NewInboundCampaignPage() {
                   <p className="text-sm font-medium mb-3">Vapi Configuration</p>
                   <div className="grid grid-cols-1 gap-3">
                     <div>
-                      <p className="text-sm text-muted-foreground">API Key</p>
-                      <p className="font-medium font-mono text-sm">
-                        {data.vapi_api_key.substring(0, 10)}...{data.vapi_api_key.substring(data.vapi_api_key.length - 4)}
+                      <p className="text-sm text-muted-foreground">API Key Source</p>
+                      <p className="font-medium">
+                        {data.vapi_key_source === "system"
+                          ? "System Keys (Bill to Client)"
+                          : "Client's Own Keys"}
                       </p>
                     </div>
+                    {data.vapi_key_source === "client" && data.vapi_api_key && (
+                      <div>
+                        <p className="text-sm text-muted-foreground">API Key</p>
+                        <p className="font-medium font-mono text-sm">
+                          {data.vapi_api_key.substring(0, 10)}...{data.vapi_api_key.substring(data.vapi_api_key.length - 4)}
+                        </p>
+                      </div>
+                    )}
                     <div>
                       <p className="text-sm text-muted-foreground">Assistant ID</p>
                       <p className="font-medium font-mono text-sm">{data.vapi_assistant_id}</p>
