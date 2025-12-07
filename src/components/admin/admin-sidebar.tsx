@@ -2,11 +2,17 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/shared/logo";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   LayoutDashboard,
   Users,
@@ -25,13 +31,18 @@ import {
   Menu,
   X,
   Contact,
+  ChevronDown,
+  Phone,
+  Send,
+  Activity,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ViewAsClientButton } from "@/components/admin/view-as-client";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 
-const sidebarItems = [
+// Group: Main navigation items (always visible)
+const mainItems = [
   {
     title: "Dashboard",
     href: "/admin",
@@ -42,53 +53,80 @@ const sidebarItems = [
     href: "/admin/clients",
     icon: Users,
   },
-  {
-    title: "Inbound",
-    href: "/admin/inbound",
-    icon: PhoneIncoming,
-  },
-  {
-    title: "Outbound",
-    href: "/admin/outbound",
-    icon: PhoneOutgoing,
-  },
-  {
-    title: "Legacy Campaigns",
-    href: "/admin/campaigns",
-    icon: Megaphone,
-  },
-  {
-    title: "CRM",
-    href: "/admin/crm",
-    icon: Contact,
-  },
-  {
-    title: "Webhook Logs",
-    href: "/admin/webhook-logs",
-    icon: Webhook,
-  },
-  {
-    title: "Email Templates",
-    href: "/admin/email-templates",
-    icon: Mail,
-  },
-  {
-    title: "Email Logs",
-    href: "/admin/email-logs",
-    icon: FileText,
-  },
-  {
-    title: "SMS Logs",
-    href: "/admin/sms-logs",
-    icon: MessageSquare,
-  },
-  {
-    title: "Billing & Plans",
-    href: "/admin/billing",
-    icon: CreditCard,
-  },
 ];
 
+// Group: Campaigns - voice AI campaigns
+const campaignItems = {
+  title: "Campaigns",
+  icon: Phone,
+  items: [
+    {
+      title: "Inbound",
+      href: "/admin/inbound",
+      icon: PhoneIncoming,
+    },
+    {
+      title: "Outbound",
+      href: "/admin/outbound",
+      icon: PhoneOutgoing,
+    },
+    {
+      title: "Legacy Campaigns",
+      href: "/admin/campaigns",
+      icon: Megaphone,
+    },
+  ],
+};
+
+// Group: CRM & Communications
+const crmItems = {
+  title: "CRM & Messaging",
+  icon: Contact,
+  items: [
+    {
+      title: "Contacts",
+      href: "/admin/crm",
+      icon: Contact,
+    },
+    {
+      title: "Email Templates",
+      href: "/admin/email-templates",
+      icon: Mail,
+    },
+  ],
+};
+
+// Group: Logs & Activity
+const logsItems = {
+  title: "Logs & Activity",
+  icon: Activity,
+  items: [
+    {
+      title: "Webhook Logs",
+      href: "/admin/webhook-logs",
+      icon: Webhook,
+    },
+    {
+      title: "Email Logs",
+      href: "/admin/email-logs",
+      icon: FileText,
+    },
+    {
+      title: "SMS Logs",
+      href: "/admin/sms-logs",
+      icon: MessageSquare,
+    },
+  ],
+};
+
+// Group: Billing
+const billingItem = {
+  title: "Billing & Plans",
+  href: "/admin/billing",
+  icon: CreditCard,
+};
+
+// Group: Settings
 const settingsItems = [
   {
     title: "API Keys",
@@ -106,6 +144,73 @@ const settingsItems = [
     icon: Settings,
   },
 ];
+
+interface CollapsibleNavGroupProps {
+  title: string;
+  icon: React.ElementType;
+  items: Array<{ title: string; href: string; icon: React.ElementType }>;
+  pathname: string;
+  onNavigate?: () => void;
+  defaultOpen?: boolean;
+}
+
+function CollapsibleNavGroup({
+  title,
+  icon: GroupIcon,
+  items,
+  pathname,
+  onNavigate,
+  defaultOpen = false,
+}: CollapsibleNavGroupProps) {
+  // Check if any item in this group is active
+  const hasActiveItem = items.some((item) => pathname.startsWith(item.href));
+  const [isOpen, setIsOpen] = useState(defaultOpen || hasActiveItem);
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <CollapsibleTrigger asChild>
+        <Button
+          variant="ghost"
+          className={cn(
+            "w-full justify-between",
+            hasActiveItem && "bg-secondary/50"
+          )}
+        >
+          <span className="flex items-center">
+            <GroupIcon className="mr-2 h-4 w-4" />
+            {title}
+          </span>
+          <ChevronDown
+            className={cn(
+              "h-4 w-4 transition-transform",
+              isOpen && "rotate-180"
+            )}
+          />
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="pl-4 space-y-1 mt-1">
+        {items.map((item) => {
+          const isActive = pathname.startsWith(item.href);
+          return (
+            <Link key={item.href} href={item.href} onClick={onNavigate}>
+              <Button
+                variant={isActive ? "secondary" : "ghost"}
+                size="sm"
+                className={cn(
+                  "w-full justify-start",
+                  isActive && "bg-secondary"
+                )}
+              >
+                <item.icon className="mr-2 h-4 w-4" />
+                {item.title}
+              </Button>
+            </Link>
+          );
+        })}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
 
 interface AdminSidebarProps {
   isOpen?: boolean;
@@ -132,10 +237,12 @@ export function AdminSidebar({ isOpen = true, onToggle }: AdminSidebarProps) {
       )}
 
       {/* Sidebar */}
-      <div className={cn(
-        "fixed lg:static inset-y-0 left-0 z-50 flex h-screen w-64 flex-col border-r bg-background transition-transform duration-300 lg:translate-x-0",
-        isOpen ? "translate-x-0" : "-translate-x-full"
-      )}>
+      <div
+        className={cn(
+          "fixed lg:static inset-y-0 left-0 z-50 flex h-screen w-64 flex-col border-r bg-background transition-transform duration-300 lg:translate-x-0",
+          isOpen ? "translate-x-0" : "-translate-x-full"
+        )}
+      >
         <div className="p-4 flex justify-between items-center">
           <div className="w-[80%]">
             <Logo fillWidth={true} />
@@ -153,11 +260,13 @@ export function AdminSidebar({ isOpen = true, onToggle }: AdminSidebarProps) {
         </div>
         <Separator />
         <ScrollArea className="flex-1 px-3 py-4">
+          {/* Main Items */}
           <nav className="space-y-1">
-            {sidebarItems.map((item) => {
-              const isActive = item.href === "/admin"
-                ? pathname === "/admin"
-                : pathname.startsWith(item.href);
+            {mainItems.map((item) => {
+              const isActive =
+                item.href === "/admin"
+                  ? pathname === "/admin"
+                  : pathname.startsWith(item.href);
               return (
                 <Link key={item.href} href={item.href} onClick={onToggle}>
                   <Button
@@ -174,8 +283,71 @@ export function AdminSidebar({ isOpen = true, onToggle }: AdminSidebarProps) {
               );
             })}
           </nav>
+
           <Separator className="my-4" />
-          <div className="mb-2 px-2 text-xs font-semibold text-muted-foreground">
+
+          {/* Campaigns Group */}
+          <nav className="space-y-1">
+            <CollapsibleNavGroup
+              title={campaignItems.title}
+              icon={campaignItems.icon}
+              items={campaignItems.items}
+              pathname={pathname}
+              onNavigate={onToggle}
+              defaultOpen={true}
+            />
+          </nav>
+
+          <Separator className="my-4" />
+
+          {/* CRM & Messaging Group */}
+          <nav className="space-y-1">
+            <CollapsibleNavGroup
+              title={crmItems.title}
+              icon={crmItems.icon}
+              items={crmItems.items}
+              pathname={pathname}
+              onNavigate={onToggle}
+            />
+          </nav>
+
+          <Separator className="my-4" />
+
+          {/* Logs & Activity Group */}
+          <nav className="space-y-1">
+            <CollapsibleNavGroup
+              title={logsItems.title}
+              icon={logsItems.icon}
+              items={logsItems.items}
+              pathname={pathname}
+              onNavigate={onToggle}
+            />
+          </nav>
+
+          <Separator className="my-4" />
+
+          {/* Billing */}
+          <nav className="space-y-1">
+            <Link href={billingItem.href} onClick={onToggle}>
+              <Button
+                variant={
+                  pathname.startsWith(billingItem.href) ? "secondary" : "ghost"
+                }
+                className={cn(
+                  "w-full justify-start",
+                  pathname.startsWith(billingItem.href) && "bg-secondary"
+                )}
+              >
+                <billingItem.icon className="mr-2 h-4 w-4" />
+                {billingItem.title}
+              </Button>
+            </Link>
+          </nav>
+
+          <Separator className="my-4" />
+
+          {/* Settings Section */}
+          <div className="mb-2 px-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
             Settings
           </div>
           <nav className="space-y-1">
@@ -185,6 +357,7 @@ export function AdminSidebar({ isOpen = true, onToggle }: AdminSidebarProps) {
                 <Link key={item.href} href={item.href} onClick={onToggle}>
                   <Button
                     variant={isActive ? "secondary" : "ghost"}
+                    size="sm"
                     className={cn(
                       "w-full justify-start",
                       isActive && "bg-secondary"
