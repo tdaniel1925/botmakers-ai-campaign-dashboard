@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -40,6 +40,8 @@ import {
   DollarSign,
   Users,
   Play,
+  Pause,
+  Volume2,
   Settings,
   Upload,
   Plus,
@@ -127,28 +129,30 @@ const TIMEZONES = [
 ];
 
 // Vapi native voices (optimized for conversational AI)
+// Preview URLs from Vapi's voice samples
 const VAPI_VOICES = [
-  { id: "Hana", name: "Hana", description: "American Female, 22", provider: "vapi" },
-  { id: "Harry", name: "Harry", description: "American Male, 24", provider: "vapi" },
-  { id: "Paige", name: "Paige", description: "American Female, 26", provider: "vapi" },
-  { id: "Cole", name: "Cole", description: "American Male, 22", provider: "vapi" },
-  { id: "Savannah", name: "Savannah", description: "Southern American Female, 25", provider: "vapi" },
-  { id: "Spencer", name: "Spencer", description: "American Female, 26", provider: "vapi" },
-  { id: "Lily", name: "Lily", description: "Asian American Female, 25", provider: "vapi" },
-  { id: "Elliot", name: "Elliot", description: "Canadian Male, 25", provider: "vapi" },
-  { id: "Rohan", name: "Rohan", description: "Indian American Male, 24", provider: "vapi" },
-  { id: "Neha", name: "Neha", description: "Indian American Female, 30", provider: "vapi" },
+  { id: "Hana", name: "Hana", description: "American Female, 22", provider: "vapi", previewUrl: "https://static.vapi.ai/voice-previews/Hana.mp3" },
+  { id: "Harry", name: "Harry", description: "American Male, 24", provider: "vapi", previewUrl: "https://static.vapi.ai/voice-previews/Harry.mp3" },
+  { id: "Paige", name: "Paige", description: "American Female, 26", provider: "vapi", previewUrl: "https://static.vapi.ai/voice-previews/Paige.mp3" },
+  { id: "Cole", name: "Cole", description: "American Male, 22", provider: "vapi", previewUrl: "https://static.vapi.ai/voice-previews/Cole.mp3" },
+  { id: "Savannah", name: "Savannah", description: "Southern American Female, 25", provider: "vapi", previewUrl: "https://static.vapi.ai/voice-previews/Savannah.mp3" },
+  { id: "Spencer", name: "Spencer", description: "American Female, 26", provider: "vapi", previewUrl: "https://static.vapi.ai/voice-previews/Spencer.mp3" },
+  { id: "Lily", name: "Lily", description: "Asian American Female, 25", provider: "vapi", previewUrl: "https://static.vapi.ai/voice-previews/Lily.mp3" },
+  { id: "Elliot", name: "Elliot", description: "Canadian Male, 25", provider: "vapi", previewUrl: "https://static.vapi.ai/voice-previews/Elliot.mp3" },
+  { id: "Rohan", name: "Rohan", description: "Indian American Male, 24", provider: "vapi", previewUrl: "https://static.vapi.ai/voice-previews/Rohan.mp3" },
+  { id: "Neha", name: "Neha", description: "Indian American Female, 30", provider: "vapi", previewUrl: "https://static.vapi.ai/voice-previews/Neha.mp3" },
 ];
 
 // ElevenLabs preset voices (high quality, natural sounding)
+// Preview URLs from ElevenLabs voice library
 const ELEVENLABS_VOICES = [
-  { id: "21m00Tcm4TlvDq8ikWAM", name: "Rachel", description: "Professional Female", provider: "11labs" },
-  { id: "TxGEqnHWrfWFTfGW9XjX", name: "Josh", description: "Professional Male", provider: "11labs" },
-  { id: "pNInz6obpgDQGcFmaJgB", name: "Adam", description: "Deep Male", provider: "11labs" },
-  { id: "LcfcDJNUP1GQjkzn1xUU", name: "Emily", description: "Friendly Female", provider: "11labs" },
-  { id: "TX3LPaxmHKxFdv7VOQHJ", name: "Liam", description: "Conversational Male", provider: "11labs" },
-  { id: "EXAVITQu4vr4xnSDxMaL", name: "Sarah", description: "Soft Female", provider: "11labs" },
-  { id: "GBv7mTt0atIp3Br8iCZE", name: "Thomas", description: "Calm Male", provider: "11labs" },
+  { id: "21m00Tcm4TlvDq8ikWAM", name: "Rachel", description: "Professional Female", provider: "11labs", previewUrl: "https://storage.googleapis.com/eleven-public-prod/premade/voices/21m00Tcm4TlvDq8ikWAM/df6788f9-5c96-470d-8571-e324afc1f5b2.mp3" },
+  { id: "TxGEqnHWrfWFTfGW9XjX", name: "Josh", description: "Professional Male", provider: "11labs", previewUrl: "https://storage.googleapis.com/eleven-public-prod/premade/voices/TxGEqnHWrfWFTfGW9XjX/c6c80dcd-5fe5-4a4c-8e26-a8a0748e297b.mp3" },
+  { id: "pNInz6obpgDQGcFmaJgB", name: "Adam", description: "Deep Male", provider: "11labs", previewUrl: "https://storage.googleapis.com/eleven-public-prod/premade/voices/pNInz6obpgDQGcFmaJgB/e0b45450-78db-49b9-aaa4-d5358a6871bd.mp3" },
+  { id: "LcfcDJNUP1GQjkzn1xUU", name: "Emily", description: "Friendly Female", provider: "11labs", previewUrl: "https://storage.googleapis.com/eleven-public-prod/premade/voices/LcfcDJNUP1GQjkzn1xUU/e4b994b7-9713-4238-84f3-add8fccb4c6f.mp3" },
+  { id: "TX3LPaxmHKxFdv7VOQHJ", name: "Liam", description: "Conversational Male", provider: "11labs", previewUrl: "https://storage.googleapis.com/eleven-public-prod/premade/voices/TX3LPaxmHKxFdv7VOQHJ/63148076-6363-42db-aea8-31424308b92c.mp3" },
+  { id: "EXAVITQu4vr4xnSDxMaL", name: "Sarah", description: "Soft Female", provider: "11labs", previewUrl: "https://storage.googleapis.com/eleven-public-prod/premade/voices/EXAVITQu4vr4xnSDxMaL/01a3e33c-6e99-4ee7-8543-ff2571fcf5d1.mp3" },
+  { id: "GBv7mTt0atIp3Br8iCZE", name: "Thomas", description: "Calm Male", provider: "11labs", previewUrl: "https://storage.googleapis.com/eleven-public-prod/premade/voices/GBv7mTt0atIp3Br8iCZE/f39e5dd5-c8ab-4029-a3c3-73d6183c2bf7.mp3" },
 ];
 
 // Combined voices grouped by provider
@@ -222,9 +226,54 @@ export default function NewOutboundCampaignPage() {
   const [isLoadingClients, setIsLoadingClients] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [createdCampaignId, setCreatedCampaignId] = useState<string | null>(null);
+  const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const router = useRouter();
   const { toast } = useToast();
+
+  // Voice preview handler
+  const handleVoicePreview = (voiceId: string, previewUrl: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // If this voice is already playing, stop it
+    if (playingVoiceId === voiceId && audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      setPlayingVoiceId(null);
+      return;
+    }
+
+    // Stop any currently playing audio
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+
+    // Create new audio and play
+    const audio = new Audio(previewUrl);
+    audioRef.current = audio;
+    setPlayingVoiceId(voiceId);
+
+    audio.play().catch((err) => {
+      console.error("Failed to play voice preview:", err);
+      setPlayingVoiceId(null);
+    });
+
+    audio.onended = () => {
+      setPlayingVoiceId(null);
+    };
+
+    audio.onerror = () => {
+      setPlayingVoiceId(null);
+      toast({
+        title: "Preview unavailable",
+        description: "Could not load voice preview",
+        variant: "destructive",
+      });
+    };
+  };
 
   useEffect(() => {
     async function fetchClients() {
@@ -575,48 +624,94 @@ export default function NewOutboundCampaignPage() {
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="voice">Voice</Label>
-                <Select
-                  value={data.voice_id}
-                  onValueChange={(value) => {
-                    const selectedVoice = VOICES.find(v => v.id === value);
-                    updateData("voice_id", value);
-                    if (selectedVoice) {
-                      updateData("voice_provider", selectedVoice.provider);
-                    }
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a voice" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted">
-                      Vapi Voices (Optimized for AI)
-                    </div>
-                    {VAPI_VOICES.map((voice) => (
-                      <SelectItem key={voice.id} value={voice.id}>
-                        <div className="flex items-center gap-2">
-                          <Mic className="h-4 w-4 text-primary" />
-                          <span>{voice.name}</span>
-                          <span className="text-xs text-muted-foreground">- {voice.description}</span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                    <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted mt-1">
-                      ElevenLabs Voices (High Quality)
-                    </div>
-                    {ELEVENLABS_VOICES.map((voice) => (
-                      <SelectItem key={voice.id} value={voice.id}>
-                        <div className="flex items-center gap-2">
-                          <Mic className="h-4 w-4 text-purple-500" />
-                          <span>{voice.name}</span>
-                          <span className="text-xs text-muted-foreground">- {voice.description}</span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-2">
+                  <Select
+                    value={data.voice_id}
+                    onValueChange={(value) => {
+                      const selectedVoice = VOICES.find(v => v.id === value);
+                      updateData("voice_id", value);
+                      if (selectedVoice) {
+                        updateData("voice_provider", selectedVoice.provider);
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="flex-1">
+                      <SelectValue placeholder="Select a voice" />
+                    </SelectTrigger>
+                    <SelectContent position="popper" side="bottom" align="start" sideOffset={4} className="max-h-[300px]">
+                      <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted sticky top-0">
+                        Vapi Voices (Optimized for AI)
+                      </div>
+                      {VAPI_VOICES.map((voice) => (
+                        <SelectItem key={voice.id} value={voice.id}>
+                          <div className="flex items-center gap-2 w-full">
+                            <button
+                              type="button"
+                              onClick={(e) => handleVoicePreview(voice.id, voice.previewUrl, e)}
+                              className="p-1 rounded-full hover:bg-primary/10 transition-colors"
+                              title={playingVoiceId === voice.id ? "Stop preview" : "Play preview"}
+                            >
+                              {playingVoiceId === voice.id ? (
+                                <Pause className="h-3 w-3 text-primary" />
+                              ) : (
+                                <Play className="h-3 w-3 text-primary" />
+                              )}
+                            </button>
+                            <Mic className="h-4 w-4 text-primary" />
+                            <span>{voice.name}</span>
+                            <span className="text-xs text-muted-foreground">- {voice.description}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                      <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground bg-muted sticky top-0 mt-1">
+                        ElevenLabs Voices (High Quality)
+                      </div>
+                      {ELEVENLABS_VOICES.map((voice) => (
+                        <SelectItem key={voice.id} value={voice.id}>
+                          <div className="flex items-center gap-2 w-full">
+                            <button
+                              type="button"
+                              onClick={(e) => handleVoicePreview(voice.id, voice.previewUrl, e)}
+                              className="p-1 rounded-full hover:bg-purple-500/10 transition-colors"
+                              title={playingVoiceId === voice.id ? "Stop preview" : "Play preview"}
+                            >
+                              {playingVoiceId === voice.id ? (
+                                <Pause className="h-3 w-3 text-purple-500" />
+                              ) : (
+                                <Play className="h-3 w-3 text-purple-500" />
+                              )}
+                            </button>
+                            <Mic className="h-4 w-4 text-purple-500" />
+                            <span>{voice.name}</span>
+                            <span className="text-xs text-muted-foreground">- {voice.description}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {/* Preview button for currently selected voice */}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={(e) => {
+                      const selectedVoice = VOICES.find(v => v.id === data.voice_id);
+                      if (selectedVoice) {
+                        handleVoicePreview(selectedVoice.id, selectedVoice.previewUrl, e);
+                      }
+                    }}
+                    title={playingVoiceId === data.voice_id ? "Stop preview" : "Preview selected voice"}
+                  >
+                    {playingVoiceId === data.voice_id ? (
+                      <Pause className="h-4 w-4" />
+                    ) : (
+                      <Volume2 className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
                 <p className="text-xs text-muted-foreground">
                   Selected: {VOICES.find(v => v.id === data.voice_id)?.name} ({data.voice_provider === "11labs" ? "ElevenLabs" : "Vapi"})
+                  {" "}• Click the speaker icon to preview
                 </p>
               </div>
               <div className="space-y-2">
