@@ -30,7 +30,7 @@ export async function GET(request: Request) {
           company_name,
           email
         ),
-        campaign_phone_numbers (
+        campaign_phone_numbers!campaign_phone_numbers_campaign_id_fkey (
           id,
           phone_number,
           friendly_name,
