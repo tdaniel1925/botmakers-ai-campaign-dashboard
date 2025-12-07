@@ -63,7 +63,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json(campaigns);
+    return NextResponse.json({ campaigns: campaigns || [] });
   } catch (error) {
     console.error("Error fetching outbound campaigns:", error);
     return NextResponse.json(
