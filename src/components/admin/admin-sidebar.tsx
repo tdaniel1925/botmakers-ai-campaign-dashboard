@@ -12,6 +12,7 @@ import {
   Users,
   Megaphone,
   PhoneOutgoing,
+  PhoneIncoming,
   Webhook,
   Settings,
   Image,
@@ -42,14 +43,19 @@ const sidebarItems = [
     icon: Users,
   },
   {
-    title: "Campaigns",
-    href: "/admin/campaigns",
-    icon: Megaphone,
+    title: "Inbound",
+    href: "/admin/inbound",
+    icon: PhoneIncoming,
   },
   {
     title: "Outbound",
     href: "/admin/outbound",
     icon: PhoneOutgoing,
+  },
+  {
+    title: "Legacy Campaigns",
+    href: "/admin/campaigns",
+    icon: Megaphone,
   },
   {
     title: "CRM",

@@ -1,107 +1,24 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Card,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { useToast } from "@/hooks/use-toast";
-import { Loader2, ArrowLeft } from "lucide-react";
+import { ArrowLeft, PhoneIncoming, PhoneOutgoing, ArrowRight } from "lucide-react";
 import Link from "next/link";
-import type { Client } from "@/lib/db/schema";
 
-export default function NewCampaignPage() {
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [clientId, setClientId] = useState("");
-  const [clients, setClients] = useState<Client[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isLoadingClients, setIsLoadingClients] = useState(true);
+export default function NewCampaignTypePage() {
   const router = useRouter();
-  const { toast } = useToast();
-
-  useEffect(() => {
-    async function fetchClients() {
-      try {
-        const response = await fetch("/api/admin/clients");
-        if (response.ok) {
-          const data = await response.json();
-          setClients(data.filter((c: Client) => c.isActive !== false));
-        }
-      } catch {
-        toast({
-          title: "Error",
-          description: "Failed to load clients",
-          variant: "destructive",
-        });
-      } finally {
-        setIsLoadingClients(false);
-      }
-    }
-
-    fetchClients();
-  }, [toast]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-
-    try {
-      const response = await fetch("/api/admin/campaigns", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name,
-          description: description || null,
-          client_id: clientId,
-        }),
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || "Failed to create campaign");
-      }
-
-      const campaign = await response.json();
-
-      toast({
-        title: "Campaign created",
-        description: `${name} has been created with a webhook URL.`,
-      });
-
-      router.push(`/admin/campaigns/${campaign.id}/webhook`);
-    } catch (error) {
-      toast({
-        title: "Error",
-        description:
-          error instanceof Error ? error.message : "Failed to create campaign",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   return (
     <div className="space-y-6">
       <div className="flex items-center space-x-4">
-        <Link href="/admin/campaigns">
+        <Link href="/admin">
           <Button variant="ghost" size="icon">
             <ArrowLeft className="h-4 w-4" />
           </Button>
@@ -111,77 +28,114 @@ export default function NewCampaignPage() {
             Create New Campaign
           </h1>
           <p className="text-muted-foreground">
-            Set up a new campaign with webhook integration
+            Choose the type of campaign you want to create
           </p>
         </div>
       </div>
 
-      <Card className="max-w-2xl">
-        <form onSubmit={handleSubmit}>
+      <div className="grid gap-6 md:grid-cols-2 max-w-4xl">
+        {/* Inbound Campaign Card */}
+        <Card
+          className="cursor-pointer transition-all hover:border-primary hover:shadow-md group"
+          onClick={() => router.push("/admin/inbound/new")}
+        >
           <CardHeader>
-            <CardTitle>Campaign Details</CardTitle>
+            <div className="flex items-center justify-between">
+              <div className="h-12 w-12 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                <PhoneIncoming className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+              </div>
+              <ArrowRight className="h-5 w-5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+            </div>
+            <CardTitle className="mt-4">Inbound Campaign</CardTitle>
             <CardDescription>
-              Enter the campaign information below
+              Receive and process incoming calls with AI-powered analysis
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="client">Client *</Label>
-              {isLoadingClients ? (
-                <div className="flex items-center space-x-2 text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Loading clients...</span>
-                </div>
-              ) : (
-                <Select value={clientId} onValueChange={setClientId} required>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a client" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {clients.map((client) => (
-                      <SelectItem key={client.id} value={client.id}>
-                        {client.name}
-                        {client.companyName && ` (${client.companyName})`}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="name">Campaign Name *</Label>
-              <Input
-                id="name"
-                placeholder="Q1 Sales Outreach"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="description">Description</Label>
-              <Textarea
-                id="description"
-                placeholder="Brief description of this campaign..."
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                rows={3}
-              />
-            </div>
-          </CardContent>
-          <CardFooter className="flex justify-end space-x-2">
-            <Link href="/admin/campaigns">
-              <Button variant="outline" type="button">
-                Cancel
-              </Button>
-            </Link>
-            <Button type="submit" disabled={isLoading || !clientId}>
-              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Create Campaign
+          <CardContent>
+            <ul className="space-y-2 text-sm text-muted-foreground">
+              <li className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                Webhook endpoint to receive call data
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                AI parses any JSON payload format
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                Phone number for receiving calls
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                Configure AI agent voice and personality
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                Automatic call transcription and analysis
+              </li>
+            </ul>
+            <Button className="w-full mt-6" variant="outline">
+              Create Inbound Campaign
+              <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
-          </CardFooter>
-        </form>
-      </Card>
+          </CardContent>
+        </Card>
+
+        {/* Outbound Campaign Card */}
+        <Card
+          className="cursor-pointer transition-all hover:border-primary hover:shadow-md group"
+          onClick={() => router.push("/admin/outbound/new")}
+        >
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="h-12 w-12 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                <PhoneOutgoing className="h-6 w-6 text-green-600 dark:text-green-400" />
+              </div>
+              <ArrowRight className="h-5 w-5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+            </div>
+            <CardTitle className="mt-4">Outbound Campaign</CardTitle>
+            <CardDescription>
+              Launch AI-powered calling campaigns to reach your contacts
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-2 text-sm text-muted-foreground">
+              <li className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+                Upload contact lists (CSV)
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+                Configure AI agent voice and script
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+                Schedule calling windows by timezone
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+                Provision or import phone numbers
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+                Real-time campaign analytics
+              </li>
+            </ul>
+            <Button className="w-full mt-6" variant="outline">
+              Create Outbound Campaign
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Help text */}
+      <div className="max-w-4xl">
+        <p className="text-sm text-muted-foreground">
+          <strong>Not sure which to choose?</strong> Use <em>Inbound</em> if you want to handle incoming customer calls
+          with AI assistance. Use <em>Outbound</em> if you want to proactively reach out to contacts with automated AI calls.
+        </p>
+      </div>
     </div>
   );
 }

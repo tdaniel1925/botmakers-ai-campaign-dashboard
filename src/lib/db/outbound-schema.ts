@@ -88,6 +88,9 @@ export const outboundCampaigns = pgTable("outbound_campaigns", {
   positiveOutcomes: integer("positive_outcomes").default(0),
   negativeOutcomes: integer("negative_outcomes").default(0),
 
+  // Unique webhook token for receiving call data
+  webhookToken: text("webhook_token").unique().notNull(),
+
   // Timestamps
   launchedAt: timestamp("launched_at"),
   completedAt: timestamp("completed_at"),
@@ -482,6 +485,202 @@ export const clientApiKeysRelations = relations(clientApiKeys, ({ one }) => ({
 }));
 
 // ============================================
+// Inbound Campaigns Schema
+// AI-Powered Inbound Calling Campaign Feature
+// ============================================
+
+// Inbound Campaign Status Type
+export type InboundCampaignStatus = "draft" | "active" | "paused" | "stopped";
+
+// ============================================
+// Inbound Campaigns Table
+// ============================================
+export const inboundCampaigns = pgTable("inbound_campaigns", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  clientId: uuid("client_id").references(() => clients.id, { onDelete: "cascade" }).notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+
+  // Unique webhook token for receiving data
+  webhookToken: text("webhook_token").unique().notNull(),
+
+  // Status
+  status: text("status").notNull().default("draft"), // draft, active, paused, stopped
+
+  // Vapi Integration
+  vapiApiKey: text("vapi_api_key"), // Encrypted Vapi private API key
+  vapiAssistantId: text("vapi_assistant_id"),
+  vapiPhoneNumberId: text("vapi_phone_number_id"),
+
+  // Phone Number (FK to campaign_phone_numbers - internal)
+  phoneNumberId: uuid("phone_number_id"),
+
+  // AI Agent Configuration (legacy - kept for future use)
+  agentConfig: jsonb("agent_config").default({}),
+
+  // Payload Mapping (for AI to parse incoming webhooks)
+  payloadMapping: jsonb("payload_mapping"),
+
+  // Call Settings
+  maxCallDuration: integer("max_call_duration").default(300),
+  silenceTimeout: integer("silence_timeout").default(30),
+
+  // Stats
+  totalCalls: integer("total_calls").default(0),
+  callsCompleted: integer("calls_completed").default(0),
+  positiveOutcomes: integer("positive_outcomes").default(0),
+  negativeOutcomes: integer("negative_outcomes").default(0),
+  totalMinutes: decimal("total_minutes", { precision: 12, scale: 2 }).default("0"),
+
+  // Active
+  isActive: boolean("is_active").default(true),
+
+  // Timestamps
+  launchedAt: timestamp("launched_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// ============================================
+// Inbound Campaign Calls Table
+// ============================================
+export const inboundCampaignCalls = pgTable("inbound_campaign_calls", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  campaignId: uuid("campaign_id").references(() => inboundCampaigns.id, { onDelete: "cascade" }).notNull(),
+
+  // Call identifiers
+  vapiCallId: text("vapi_call_id"),
+  externalCallId: text("external_call_id"),
+
+  // Caller Info
+  callerPhone: text("caller_phone"),
+
+  // Call Status
+  status: text("status").notNull().default("processing"), // processing, completed, failed
+
+  // Call Metrics
+  durationSeconds: integer("duration_seconds").default(0),
+
+  // Call Data
+  transcript: text("transcript"),
+  audioUrl: text("audio_url"),
+  rawPayload: jsonb("raw_payload"),
+  callTimestamp: timestamp("call_timestamp"),
+
+  // AI Analysis
+  aiSummary: text("ai_summary"),
+  aiSentiment: text("ai_sentiment"),
+  aiKeyPoints: jsonb("ai_key_points"),
+  aiCallerIntent: text("ai_caller_intent"),
+  aiResolution: text("ai_resolution"),
+  aiProcessedAt: timestamp("ai_processed_at"),
+
+  // Outcome Tag
+  outcomeTagId: uuid("outcome_tag_id"),
+
+  // Error Handling
+  errorMessage: text("error_message"),
+
+  // Timestamps
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// ============================================
+// Inbound Campaign Outcome Tags Table
+// ============================================
+export const inboundCampaignOutcomeTags = pgTable("inbound_campaign_outcome_tags", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  campaignId: uuid("campaign_id").references(() => inboundCampaigns.id, { onDelete: "cascade" }).notNull(),
+  tagName: text("tag_name").notNull(),
+  tagColor: text("tag_color").default("#6B7280"),
+  isPositive: boolean("is_positive").default(false),
+  sortOrder: integer("sort_order").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// ============================================
+// Inbound Campaign SMS Rules Table
+// ============================================
+export const inboundCampaignSmsRules = pgTable("inbound_campaign_sms_rules", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  campaignId: uuid("campaign_id").references(() => inboundCampaigns.id, { onDelete: "cascade" }).notNull(),
+  name: text("name").notNull(),
+  triggerCondition: text("trigger_condition").notNull(),
+  messageTemplate: text("message_template").notNull(),
+  isActive: boolean("is_active").default(true),
+  priority: integer("priority").default(0),
+  triggerCount: integer("trigger_count").default(0),
+  lastTriggeredAt: timestamp("last_triggered_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// ============================================
+// Inbound Campaign Webhook Logs Table
+// ============================================
+export const inboundCampaignWebhookLogs = pgTable("inbound_campaign_webhook_logs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  campaignId: uuid("campaign_id").references(() => inboundCampaigns.id, { onDelete: "cascade" }),
+  payload: jsonb("payload").notNull(),
+  status: text("status").notNull(),
+  errorMessage: text("error_message"),
+  processingTimeMs: integer("processing_time_ms"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// ============================================
+// Inbound Campaign Relations
+// ============================================
+export const inboundCampaignsRelations = relations(inboundCampaigns, ({ one, many }) => ({
+  client: one(clients, {
+    fields: [inboundCampaigns.clientId],
+    references: [clients.id],
+  }),
+  phoneNumber: one(campaignPhoneNumbers, {
+    fields: [inboundCampaigns.phoneNumberId],
+    references: [campaignPhoneNumbers.id],
+  }),
+  calls: many(inboundCampaignCalls),
+  outcomeTags: many(inboundCampaignOutcomeTags),
+  smsRules: many(inboundCampaignSmsRules),
+  webhookLogs: many(inboundCampaignWebhookLogs),
+}));
+
+export const inboundCampaignCallsRelations = relations(inboundCampaignCalls, ({ one }) => ({
+  campaign: one(inboundCampaigns, {
+    fields: [inboundCampaignCalls.campaignId],
+    references: [inboundCampaigns.id],
+  }),
+  outcomeTag: one(inboundCampaignOutcomeTags, {
+    fields: [inboundCampaignCalls.outcomeTagId],
+    references: [inboundCampaignOutcomeTags.id],
+  }),
+}));
+
+export const inboundCampaignOutcomeTagsRelations = relations(inboundCampaignOutcomeTags, ({ one, many }) => ({
+  campaign: one(inboundCampaigns, {
+    fields: [inboundCampaignOutcomeTags.campaignId],
+    references: [inboundCampaigns.id],
+  }),
+  calls: many(inboundCampaignCalls),
+}));
+
+export const inboundCampaignSmsRulesRelations = relations(inboundCampaignSmsRules, ({ one }) => ({
+  campaign: one(inboundCampaigns, {
+    fields: [inboundCampaignSmsRules.campaignId],
+    references: [inboundCampaigns.id],
+  }),
+}));
+
+export const inboundCampaignWebhookLogsRelations = relations(inboundCampaignWebhookLogs, ({ one }) => ({
+  campaign: one(inboundCampaigns, {
+    fields: [inboundCampaignWebhookLogs.campaignId],
+    references: [inboundCampaigns.id],
+  }),
+}));
+
+// ============================================
 // Types
 // ============================================
 
@@ -513,6 +712,22 @@ export type ClientApiKey = typeof clientApiKeys.$inferSelect;
 export type NewClientApiKey = typeof clientApiKeys.$inferInsert;
 
 export type AreaCodeTimezone = typeof areaCodeTimezones.$inferSelect;
+
+// Inbound Campaign Types
+export type InboundCampaign = typeof inboundCampaigns.$inferSelect;
+export type NewInboundCampaign = typeof inboundCampaigns.$inferInsert;
+
+export type InboundCampaignCall = typeof inboundCampaignCalls.$inferSelect;
+export type NewInboundCampaignCall = typeof inboundCampaignCalls.$inferInsert;
+
+export type InboundCampaignOutcomeTag = typeof inboundCampaignOutcomeTags.$inferSelect;
+export type NewInboundCampaignOutcomeTag = typeof inboundCampaignOutcomeTags.$inferInsert;
+
+export type InboundCampaignSmsRule = typeof inboundCampaignSmsRules.$inferSelect;
+export type NewInboundCampaignSmsRule = typeof inboundCampaignSmsRules.$inferInsert;
+
+export type InboundCampaignWebhookLog = typeof inboundCampaignWebhookLogs.$inferSelect;
+export type NewInboundCampaignWebhookLog = typeof inboundCampaignWebhookLogs.$inferInsert;
 
 // ============================================
 // Agent Config Type
