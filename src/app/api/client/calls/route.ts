@@ -167,6 +167,7 @@ export async function GET(request: Request) {
             duration_seconds,
             transcript,
             audio_url,
+            summary,
             created_at,
             inbound_campaign_outcome_tags (
               tag_name,
@@ -208,7 +209,7 @@ export async function GET(request: Request) {
               duration_seconds: call.duration_seconds || 0,
               transcript: call.transcript,
               audio_url: call.audio_url,
-              summary: null,
+              summary: call.summary,
               created_at: call.created_at,
               outcome_tag: outcomeTag,
             });

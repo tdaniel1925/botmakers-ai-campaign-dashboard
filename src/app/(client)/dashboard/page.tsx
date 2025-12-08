@@ -26,6 +26,8 @@ import {
   Activity,
   BarChart3,
   Zap,
+  PhoneIncoming,
+  PhoneOutgoing,
 } from "lucide-react";
 import {
   PieChart,
@@ -53,6 +55,7 @@ interface Campaign {
   is_active: boolean;
   call_count: number;
   positive_rate: number;
+  campaign_type: "legacy" | "inbound" | "outbound";
 }
 
 interface Stats {
@@ -154,38 +157,159 @@ export default function DashboardPage() {
           companyName: client.company_name,
         });
 
-        const { data: campaigns } = await supabase
-          .from("campaigns")
-          .select("id, name, is_active")
-          .eq("client_id", client.id);
+        // Fetch all campaign types
+        const [legacyCampaignsRes, inboundCampaignsRes, outboundCampaignsRes] = await Promise.all([
+          supabase.from("campaigns").select("id, name, is_active").eq("client_id", client.id),
+          supabase.from("inbound_campaigns").select("id, name, is_active").eq("client_id", client.id),
+          supabase.from("outbound_campaigns").select("id, name, status").eq("client_id", client.id),
+        ]);
 
-        if (!campaigns || campaigns.length === 0) {
+        const legacyCampaigns = legacyCampaignsRes.data || [];
+        const inboundCampaigns = inboundCampaignsRes.data || [];
+        const outboundCampaigns = outboundCampaignsRes.data || [];
+
+        // Combine all campaigns
+        const allCampaigns: { id: string; name: string; is_active: boolean; campaign_type: "legacy" | "inbound" | "outbound" }[] = [
+          ...legacyCampaigns.map(c => ({ ...c, campaign_type: "legacy" as const })),
+          ...inboundCampaigns.map(c => ({ ...c, campaign_type: "inbound" as const })),
+          ...outboundCampaigns.map(c => ({ ...c, is_active: c.status === "active", campaign_type: "outbound" as const })),
+        ];
+
+        if (allCampaigns.length === 0) {
           setIsLoading(false);
           return;
         }
 
-        const campaignIds = campaigns.map((c) => c.id);
+        // Unified call structure
+        interface UnifiedCall {
+          id: string;
+          duration_seconds: number;
+          sentiment: string | null;
+          outcome_tag: { tag_name: string; tag_color: string } | null;
+          created_at: string;
+          campaign_id: string;
+          campaign_type: "legacy" | "inbound" | "outbound";
+        }
 
-        const { data: calls } = await supabase
-          .from("calls")
-          .select(
-            `
-            id,
-            call_duration,
-            ai_sentiment,
-            ai_outcome_tag_id,
-            created_at,
-            campaign_id,
-            campaign_outcome_tags (
-              tag_name,
-              tag_color
-            )
-          `
-          )
-          .in("campaign_id", campaignIds)
-          .eq("status", "completed");
+        const calls: UnifiedCall[] = [];
 
-        if (!calls) {
+        // Fetch legacy calls
+        if (legacyCampaigns.length > 0) {
+          const legacyIds = legacyCampaigns.map(c => c.id);
+          const { data: legacyCalls } = await supabase
+            .from("calls")
+            .select(`
+              id,
+              call_duration,
+              ai_sentiment,
+              created_at,
+              campaign_id,
+              campaign_outcome_tags (
+                tag_name,
+                tag_color
+              )
+            `)
+            .in("campaign_id", legacyIds)
+            .eq("status", "completed");
+
+          if (legacyCalls) {
+            for (const call of legacyCalls) {
+              const tags = call.campaign_outcome_tags as unknown as Array<{ tag_name: string; tag_color: string }>;
+              calls.push({
+                id: call.id,
+                duration_seconds: call.call_duration || 0,
+                sentiment: call.ai_sentiment,
+                outcome_tag: tags?.[0] || null,
+                created_at: call.created_at,
+                campaign_id: call.campaign_id,
+                campaign_type: "legacy",
+              });
+            }
+          }
+        }
+
+        // Fetch inbound calls
+        if (inboundCampaigns.length > 0) {
+          const inboundIds = inboundCampaigns.map(c => c.id);
+          const { data: inboundCalls } = await supabase
+            .from("inbound_campaign_calls")
+            .select(`
+              id,
+              duration_seconds,
+              sentiment,
+              created_at,
+              campaign_id,
+              inbound_campaign_outcome_tags (
+                tag_name,
+                tag_color
+              )
+            `)
+            .in("campaign_id", inboundIds)
+            .eq("status", "completed");
+
+          if (inboundCalls) {
+            for (const call of inboundCalls) {
+              const tags = call.inbound_campaign_outcome_tags as unknown as Array<{ tag_name: string; tag_color: string }>;
+              calls.push({
+                id: call.id,
+                duration_seconds: call.duration_seconds || 0,
+                sentiment: call.sentiment,
+                outcome_tag: tags?.[0] || null,
+                created_at: call.created_at,
+                campaign_id: call.campaign_id,
+                campaign_type: "inbound",
+              });
+            }
+          }
+        }
+
+        // Fetch outbound calls
+        if (outboundCampaigns.length > 0) {
+          const outboundIds = outboundCampaigns.map(c => c.id);
+          const { data: outboundCalls } = await supabase
+            .from("campaign_calls")
+            .select(`
+              id,
+              duration_seconds,
+              outcome,
+              created_at,
+              campaign_id
+            `)
+            .in("campaign_id", outboundIds)
+            .eq("status", "completed");
+
+          if (outboundCalls) {
+            for (const call of outboundCalls) {
+              // Map outcome to sentiment for outbound
+              let sentiment: string | null = null;
+              if (call.outcome === "positive") sentiment = "positive";
+              else if (call.outcome === "negative") sentiment = "negative";
+              else if (call.outcome) sentiment = "neutral";
+
+              calls.push({
+                id: call.id,
+                duration_seconds: call.duration_seconds || 0,
+                sentiment,
+                outcome_tag: null,
+                created_at: call.created_at,
+                campaign_id: call.campaign_id,
+                campaign_type: "outbound",
+              });
+            }
+          }
+        }
+
+        if (calls.length === 0) {
+          // Still show campaigns even if no calls
+          const recentCampaigns: Campaign[] = allCampaigns.slice(0, 5).map((campaign) => ({
+            id: campaign.id,
+            name: campaign.name,
+            is_active: campaign.is_active,
+            call_count: 0,
+            positive_rate: 0,
+            campaign_type: campaign.campaign_type,
+          }));
+          setStats(prev => ({ ...prev, recentCampaigns }));
           setIsLoading(false);
           return;
         }
@@ -200,26 +324,25 @@ export default function DashboardPage() {
         const avgDuration =
           calls.length > 0
             ? Math.round(
-                calls.reduce((sum, c) => sum + (c.call_duration || 0), 0) /
+                calls.reduce((sum, c) => sum + (c.duration_seconds || 0), 0) /
                   calls.length
               )
             : 0;
 
         const positiveCalls = calls.filter(
-          (c) => c.ai_sentiment === "positive"
+          (c) => c.sentiment === "positive"
         ).length;
         const negativeCalls = calls.filter(
-          (c) => c.ai_sentiment === "negative"
+          (c) => c.sentiment === "negative"
         ).length;
         const neutralCalls = calls.filter(
-          (c) => c.ai_sentiment === "neutral"
+          (c) => c.sentiment === "neutral"
         ).length;
 
         const outcomeCounts: Record<string, { count: number; color: string }> = {};
         calls.forEach((call) => {
-          const outcomeTag = call.campaign_outcome_tags as unknown as { tag_name: string; tag_color: string } | null;
-          const tagName = outcomeTag?.tag_name || "Unknown";
-          const tagColor = outcomeTag?.tag_color || "#94a3b8";
+          const tagName = call.outcome_tag?.tag_name || "Unknown";
+          const tagColor = call.outcome_tag?.tag_color || "#94a3b8";
           if (!outcomeCounts[tagName]) {
             outcomeCounts[tagName] = { count: 0, color: tagColor };
           }
@@ -235,10 +358,10 @@ export default function DashboardPage() {
           .sort((a, b) => b.value - a.value);
 
         // Calculate campaign stats
-        const recentCampaigns: Campaign[] = campaigns.slice(0, 5).map((campaign) => {
-          const campaignCalls = calls.filter((c) => c.campaign_id === campaign.id);
+        const recentCampaigns: Campaign[] = allCampaigns.slice(0, 5).map((campaign) => {
+          const campaignCalls = calls.filter((c) => c.campaign_id === campaign.id && c.campaign_type === campaign.campaign_type);
           const positiveCampaignCalls = campaignCalls.filter(
-            (c) => c.ai_sentiment === "positive"
+            (c) => c.sentiment === "positive"
           ).length;
           return {
             id: campaign.id,
@@ -248,6 +371,7 @@ export default function DashboardPage() {
             positive_rate: campaignCalls.length > 0
               ? Math.round((positiveCampaignCalls / campaignCalls.length) * 100)
               : 0,
+            campaign_type: campaign.campaign_type,
           };
         });
 
@@ -289,14 +413,23 @@ export default function DashboardPage() {
 
     fetchStats();
 
+    // Listen to all three call tables for real-time updates
     const channel = supabase
-      .channel("calls-changes")
+      .channel("all-calls-changes")
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "calls" },
-        () => {
-          fetchStats();
-        }
+        () => fetchStats()
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "inbound_campaign_calls" },
+        () => fetchStats()
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "campaign_calls" },
+        () => fetchStats()
       )
       .subscribe();
 
@@ -635,34 +768,55 @@ export default function DashboardPage() {
           <CardContent>
             {stats.recentCampaigns.length > 0 ? (
               <div className="space-y-3">
-                {stats.recentCampaigns.map((campaign) => (
-                  <Link
-                    key={campaign.id}
-                    href={`/dashboard/campaigns/${campaign.id}`}
-                    className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="rounded-full bg-primary/10 p-2">
-                        <Megaphone className="h-4 w-4 text-primary" />
+                {stats.recentCampaigns.map((campaign) => {
+                  // Get correct link and icon based on campaign type
+                  const getCampaignLink = () => {
+                    switch (campaign.campaign_type) {
+                      case "inbound":
+                        return `/dashboard/inbound/${campaign.id}`;
+                      case "outbound":
+                        return `/dashboard/outbound/${campaign.id}`;
+                      case "legacy":
+                      default:
+                        return `/dashboard/campaigns/${campaign.id}`;
+                    }
+                  };
+                  const CampaignIcon = campaign.campaign_type === "inbound"
+                    ? PhoneIncoming
+                    : campaign.campaign_type === "outbound"
+                    ? PhoneOutgoing
+                    : Megaphone;
+                  const typeLabel = campaign.campaign_type === "legacy" ? "Legacy" : campaign.campaign_type.charAt(0).toUpperCase() + campaign.campaign_type.slice(1);
+
+                  return (
+                    <Link
+                      key={`${campaign.campaign_type}-${campaign.id}`}
+                      href={getCampaignLink()}
+                      className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="rounded-full bg-primary/10 p-2">
+                          <CampaignIcon className="h-4 w-4 text-primary" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-sm">{campaign.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {campaign.call_count} calls &bull; {typeLabel}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-medium text-sm">{campaign.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {campaign.call_count} calls
-                        </p>
+                      <div className="flex items-center gap-3">
+                        <Badge variant={campaign.is_active ? "default" : "secondary"}>
+                          {campaign.is_active ? "Active" : "Inactive"}
+                        </Badge>
+                        <div className="text-right">
+                          <p className="text-sm font-medium">{campaign.positive_rate}%</p>
+                          <p className="text-xs text-muted-foreground">positive</p>
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <Badge variant={campaign.is_active ? "default" : "secondary"}>
-                        {campaign.is_active ? "Active" : "Inactive"}
-                      </Badge>
-                      <div className="text-right">
-                        <p className="text-sm font-medium">{campaign.positive_rate}%</p>
-                        <p className="text-xs text-muted-foreground">positive</p>
-                      </div>
-                    </div>
-                  </Link>
-                ))}
+                    </Link>
+                  );
+                })}
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center h-[250px] text-center">
