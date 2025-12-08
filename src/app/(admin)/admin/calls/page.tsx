@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -131,13 +132,32 @@ export default function AdminCallsPage() {
     fetchCalls();
   }, [page, campaignTypeFilter, clientFilter, statusFilter]);
 
-  // Background polling
+  // Real-time subscriptions for instant updates
   useEffect(() => {
-    const intervalId = setInterval(() => {
-      fetchCallsRef.current?.(false);
-    }, 30000); // Refresh every 30 seconds
+    const supabase = createClient();
 
-    return () => clearInterval(intervalId);
+    const channel = supabase
+      .channel("admin-calls-list")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "calls" },
+        () => fetchCallsRef.current?.(false)
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "inbound_campaign_calls" },
+        () => fetchCallsRef.current?.(false)
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "campaign_calls" },
+        () => fetchCallsRef.current?.(false)
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const getCampaignTypeBadge = (type: string) => {

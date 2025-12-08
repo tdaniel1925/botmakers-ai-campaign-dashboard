@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -76,6 +77,27 @@ export default function ClientInboundCampaignsPage() {
 
   useEffect(() => {
     fetchCampaigns();
+
+    // Set up real-time subscriptions for live updates
+    const supabase = createClient();
+
+    const channel = supabase
+      .channel("client-inbound-campaigns-list")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "inbound_campaigns" },
+        () => fetchCampaigns()
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "inbound_campaign_calls" },
+        () => fetchCampaigns()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const filteredCampaigns = campaigns.filter((campaign) => {

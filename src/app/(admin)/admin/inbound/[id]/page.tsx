@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
+import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -213,7 +214,58 @@ export default function InboundCampaignDetailPage() {
     fetchCampaign();
     fetchWebhookLogs();
     fetchCalls();
-  }, [fetchCampaign, fetchWebhookLogs, fetchCalls]);
+
+    // Set up real-time subscriptions for live updates
+    const supabase = createClient();
+
+    const channel = supabase
+      .channel(`inbound-campaign-${campaignId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "inbound_campaign_calls",
+          filter: `campaign_id=eq.${campaignId}`,
+        },
+        () => {
+          // Refresh calls and campaign stats when a call changes
+          fetchCalls(callsPage);
+          fetchCampaign();
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "inbound_campaign_webhook_logs",
+          filter: `campaign_id=eq.${campaignId}`,
+        },
+        () => {
+          // Refresh webhook logs when new log arrives
+          fetchWebhookLogs();
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "inbound_campaigns",
+          filter: `id=eq.${campaignId}`,
+        },
+        () => {
+          // Refresh campaign when it's updated
+          fetchCampaign();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchCampaign, fetchWebhookLogs, fetchCalls, campaignId, callsPage]);
 
   const copyWebhookUrl = () => {
     if (!campaign) return;

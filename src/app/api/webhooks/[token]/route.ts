@@ -88,26 +88,24 @@ export async function POST(
 
     const payload = await request.json();
 
-    // Find campaign by webhook token - check both legacy campaigns and inbound_campaigns tables
+    // Find campaign by webhook token - check BOTH tables (inbound first, then legacy)
     let campaign: { id: string; is_active: boolean; payload_mapping: Record<string, unknown> | null; table: "campaigns" | "inbound_campaigns" } | null = null;
 
-    // Check if it's an inbound campaign token (starts with "ib_")
-    if (token.startsWith("ib_")) {
-      const { data: inboundCampaigns, error: inboundError } = await withTimeout(
-        supabase
-          .from("inbound_campaigns")
-          .select("id, is_active, payload_mapping")
-          .eq("webhook_token", token)
-          .limit(1),
-        DB_TIMEOUT_MS,
-        "Inbound campaign lookup"
-      );
+    // Check inbound_campaigns first
+    const { data: inboundCampaigns, error: inboundError } = await withTimeout(
+      supabase
+        .from("inbound_campaigns")
+        .select("id, is_active, payload_mapping")
+        .eq("webhook_token", token)
+        .limit(1),
+      DB_TIMEOUT_MS,
+      "Inbound campaign lookup"
+    );
 
-      if (!inboundError && inboundCampaigns?.[0]) {
-        campaign = { ...inboundCampaigns[0], table: "inbound_campaigns" };
-      }
+    if (!inboundError && inboundCampaigns?.[0]) {
+      campaign = { ...inboundCampaigns[0], table: "inbound_campaigns" };
     } else {
-      // Legacy campaigns table
+      // If not found in inbound, check legacy campaigns table
       const { data: campaigns, error: campaignError } = await withTimeout(
         supabase
           .from("campaigns")
@@ -341,22 +339,23 @@ export async function GET(
   // Verify the token exists - check both tables
   let campaign: { id: string; name: string } | null = null;
 
-  if (token.startsWith("ib_")) {
-    // Inbound campaign
-    const { data } = await supabase
-      .from("inbound_campaigns")
-      .select("id, name")
-      .eq("webhook_token", token)
-      .single();
-    campaign = data;
+  // Check inbound_campaigns first
+  const { data: inboundData } = await supabase
+    .from("inbound_campaigns")
+    .select("id, name")
+    .eq("webhook_token", token)
+    .single();
+
+  if (inboundData) {
+    campaign = inboundData;
   } else {
-    // Legacy campaign
-    const { data } = await supabase
+    // If not found, check legacy campaigns
+    const { data: legacyData } = await supabase
       .from("campaigns")
       .select("id, name")
       .eq("webhook_token", token)
       .single();
-    campaign = data;
+    campaign = legacyData;
   }
 
   if (!campaign) {

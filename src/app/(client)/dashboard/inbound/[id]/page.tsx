@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, use, useCallback } from "react";
 import Link from "next/link";
+import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -90,7 +91,7 @@ export default function ClientInboundCampaignDetailPage({
 
   const { toast } = useToast();
 
-  const fetchCampaign = async () => {
+  const fetchCampaign = useCallback(async () => {
     try {
       const response = await fetch(`/api/client/inbound-campaigns/${id}`);
       if (!response.ok) throw new Error("Failed to fetch campaign");
@@ -106,11 +107,42 @@ export default function ClientInboundCampaignDetailPage({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [id, toast]);
 
   useEffect(() => {
     fetchCampaign();
-  }, [id]);
+
+    // Set up real-time subscriptions for live updates
+    const supabase = createClient();
+
+    const channel = supabase
+      .channel(`client-inbound-campaign-${id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "inbound_campaign_calls",
+          filter: `campaign_id=eq.${id}`,
+        },
+        () => fetchCampaign()
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "inbound_campaigns",
+          filter: `id=eq.${id}`,
+        },
+        () => fetchCampaign()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [id, fetchCampaign]);
 
   const getOutcomeTag = (call: RecentCall): OutcomeTag | null => {
     if (!call.inbound_campaign_outcome_tags) return null;
