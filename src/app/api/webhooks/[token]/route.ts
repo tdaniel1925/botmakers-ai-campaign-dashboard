@@ -83,20 +83,42 @@ export async function POST(
 
     const payload = await request.json();
 
-    // Find campaign by webhook token - include payload_mapping (with timeout)
-    const { data: campaigns, error: campaignError } = await withTimeout(
-      supabase
-        .from("campaigns")
-        .select("id, is_active, payload_mapping")
-        .eq("webhook_token", token)
-        .limit(1),
-      DB_TIMEOUT_MS,
-      "Campaign lookup"
-    );
+    // Find campaign by webhook token - check both legacy campaigns and inbound_campaigns tables
+    let campaign: { id: string; is_active: boolean; payload_mapping: Record<string, unknown> | null; table: "campaigns" | "inbound_campaigns" } | null = null;
 
-    const campaign = campaigns?.[0];
+    // Check if it's an inbound campaign token (starts with "ib_")
+    if (token.startsWith("ib_")) {
+      const { data: inboundCampaigns, error: inboundError } = await withTimeout(
+        supabase
+          .from("inbound_campaigns")
+          .select("id, is_active, payload_mapping")
+          .eq("webhook_token", token)
+          .limit(1),
+        DB_TIMEOUT_MS,
+        "Inbound campaign lookup"
+      );
 
-    if (campaignError || !campaign) {
+      if (!inboundError && inboundCampaigns?.[0]) {
+        campaign = { ...inboundCampaigns[0], table: "inbound_campaigns" };
+      }
+    } else {
+      // Legacy campaigns table
+      const { data: campaigns, error: campaignError } = await withTimeout(
+        supabase
+          .from("campaigns")
+          .select("id, is_active, payload_mapping")
+          .eq("webhook_token", token)
+          .limit(1),
+        DB_TIMEOUT_MS,
+        "Campaign lookup"
+      );
+
+      if (!campaignError && campaigns?.[0]) {
+        campaign = { ...campaigns[0], table: "campaigns" };
+      }
+    }
+
+    if (!campaign) {
       return NextResponse.json(
         { error: "Invalid webhook token" },
         { status: 404 }
@@ -117,7 +139,7 @@ export async function POST(
 
     if (campaign.payload_mapping && Object.keys(campaign.payload_mapping).length > 0) {
       // Use saved mappings
-      usedMappings = campaign.payload_mapping as FieldMapping;
+      usedMappings = campaign.payload_mapping as unknown as FieldMapping;
       extractedFields = applyMappings(payload, usedMappings);
       logger.debug("Using saved field mappings", { campaignId: campaign.id });
     } else {
@@ -131,7 +153,7 @@ export async function POST(
       // Save the AI-suggested mappings if they have good confidence
       if (aiResult.confidence >= 30) {
         await supabase
-          .from("campaigns")
+          .from(campaign.table)
           .update({ payload_mapping: aiResult.suggestedMappings })
           .eq("id", campaign.id);
         logger.info("Saved AI-suggested mappings", { campaignId: campaign.id, confidence: aiResult.confidence });
@@ -211,10 +233,10 @@ export async function POST(
     }
 
     // Create call record with all extracted data (with timeout)
-    const { data: call, error: callError } = await withTimeout(
-      supabase
-        .from("calls")
-        .insert({
+    // Use the correct table based on campaign type
+    const callTable = campaign.table === "inbound_campaigns" ? "inbound_campaign_calls" : "calls";
+    const callData = campaign.table === "inbound_campaigns"
+      ? {
           campaign_id: campaign.id,
           transcript: extractedFields.transcript,
           audio_url: extractedFields.audioUrl,
@@ -224,7 +246,23 @@ export async function POST(
           raw_payload: payload,
           call_timestamp: parsedTimestamp,
           status: "processing",
-        })
+        }
+      : {
+          campaign_id: campaign.id,
+          transcript: extractedFields.transcript,
+          audio_url: extractedFields.audioUrl,
+          caller_phone: extractedFields.callerPhone,
+          call_duration: extractedFields.callDuration,
+          external_call_id: extractedFields.externalCallId,
+          raw_payload: payload,
+          call_timestamp: parsedTimestamp,
+          status: "processing",
+        };
+
+    const { data: call, error: callError } = await withTimeout(
+      supabase
+        .from(callTable)
+        .insert(callData)
         .select()
         .single(),
       DB_TIMEOUT_MS,
@@ -292,12 +330,26 @@ export async function GET(
   const supabase = getSupabaseClient();
   const { token } = await params;
 
-  // Verify the token exists
-  const { data: campaign } = await supabase
-    .from("campaigns")
-    .select("id, name")
-    .eq("webhook_token", token)
-    .single();
+  // Verify the token exists - check both tables
+  let campaign: { id: string; name: string } | null = null;
+
+  if (token.startsWith("ib_")) {
+    // Inbound campaign
+    const { data } = await supabase
+      .from("inbound_campaigns")
+      .select("id, name")
+      .eq("webhook_token", token)
+      .single();
+    campaign = data;
+  } else {
+    // Legacy campaign
+    const { data } = await supabase
+      .from("campaigns")
+      .select("id, name")
+      .eq("webhook_token", token)
+      .single();
+    campaign = data;
+  }
 
   if (!campaign) {
     return NextResponse.json({ error: "Invalid webhook" }, { status: 404 });
