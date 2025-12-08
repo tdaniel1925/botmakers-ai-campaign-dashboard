@@ -468,8 +468,8 @@ export default function WebhookLogsPage() {
     // Calculate pagination offset
     const offset = (currentPage - 1) * ITEMS_PER_PAGE;
 
-    // Build query - fetch both legacy campaigns and inbound_campaigns
-    let query = supabase
+    // Query legacy webhook_logs (references campaigns table)
+    let legacyQuery = supabase
       .from("webhook_logs")
       .select(`
         *,
@@ -479,7 +479,15 @@ export default function WebhookLogsPage() {
           clients (
             name
           )
-        ),
+        )
+      `, { count: "exact" })
+      .order("created_at", { ascending: false });
+
+    // Query inbound campaign webhook logs (separate table)
+    let inboundQuery = supabase
+      .from("inbound_campaign_webhook_logs")
+      .select(`
+        *,
         inbound_campaigns (
           name,
           webhook_token,
@@ -488,25 +496,46 @@ export default function WebhookLogsPage() {
           )
         )
       `, { count: "exact" })
-      .order("created_at", { ascending: false })
-      .range(offset, offset + ITEMS_PER_PAGE - 1);
+      .order("created_at", { ascending: false });
 
-    // Apply date filter
+    // Apply date filter to both queries
     if (startDate) {
-      query = query.gte("created_at", startDate.toISOString());
+      legacyQuery = legacyQuery.gte("created_at", startDate.toISOString());
+      inboundQuery = inboundQuery.gte("created_at", startDate.toISOString());
     }
 
-    const { data, error, count } = await query;
+    // Fetch both in parallel
+    const [legacyResult, inboundResult] = await Promise.all([
+      legacyQuery,
+      inboundQuery,
+    ]);
 
-    if (error) {
-      console.error("Error fetching logs:", error);
-      setIsLoading(false);
-      return;
+    if (legacyResult.error) {
+      console.error("Error fetching legacy logs:", legacyResult.error);
+    }
+    if (inboundResult.error) {
+      console.error("Error fetching inbound logs:", inboundResult.error);
     }
 
-    const typedLogs = (data || []) as WebhookLog[];
-    setLogs(typedLogs);
-    setTotalCount(count || 0);
+    // Combine and sort results
+    const legacyLogs = (legacyResult.data || []).map(log => ({
+      ...log,
+      inbound_campaigns: null,
+    }));
+    const inboundLogs = (inboundResult.data || []).map(log => ({
+      ...log,
+      campaigns: null,
+    }));
+
+    const allLogs = [...legacyLogs, ...inboundLogs]
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+    // Apply pagination manually after combining
+    const paginatedLogs = allLogs.slice(offset, offset + ITEMS_PER_PAGE);
+    const totalCount = (legacyResult.count || 0) + (inboundResult.count || 0);
+
+    setLogs(paginatedLogs as WebhookLog[]);
+    setTotalCount(totalCount);
 
     // Fetch all campaigns for filter dropdown (from both tables)
     const { data: legacyCampaigns } = await supabase

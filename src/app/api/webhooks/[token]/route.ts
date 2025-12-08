@@ -38,6 +38,11 @@ function withTimeout<T>(promiseLike: PromiseLike<T>, ms: number, operation: stri
   ]);
 }
 
+// Helper to get the correct webhook log table based on campaign type
+function getWebhookLogTable(campaignTable: "campaigns" | "inbound_campaigns"): string {
+  return campaignTable === "inbound_campaigns" ? "inbound_campaign_webhook_logs" : "webhook_logs";
+}
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ token: string }> }
@@ -172,8 +177,9 @@ export async function POST(
     });
 
     // If no transcript, treat as a ping/test request - acknowledge and return success
+    const webhookLogTable = getWebhookLogTable(campaign.table);
     if (!extractedFields.transcript) {
-      await supabase.from("webhook_logs").insert({
+      await supabase.from(webhookLogTable).insert({
         campaign_id: campaign.id,
         payload,
         status: "success",
@@ -206,7 +212,7 @@ export async function POST(
         logger.webhook.duplicate(campaign.id, extractedFields.externalCallId);
 
         // Log as duplicate but don't create a new call
-        await supabase.from("webhook_logs").insert({
+        await supabase.from(webhookLogTable).insert({
           campaign_id: campaign.id,
           payload,
           status: "success",
@@ -270,7 +276,7 @@ export async function POST(
     );
 
     if (callError || !call) {
-      await supabase.from("webhook_logs").insert({
+      await supabase.from(webhookLogTable).insert({
         campaign_id: campaign.id,
         payload,
         status: "failed",
@@ -284,7 +290,7 @@ export async function POST(
     }
 
     // Log success
-    await supabase.from("webhook_logs").insert({
+    await supabase.from(webhookLogTable).insert({
       campaign_id: campaign.id,
       payload,
       status: "success",
