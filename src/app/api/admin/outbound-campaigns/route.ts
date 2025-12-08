@@ -1,14 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { verifyAdmin, forbiddenResponse } from "@/lib/admin-auth";
-import { randomBytes } from "crypto";
 
-/**
- * Generate a unique webhook token for outbound campaigns
- */
-function generateWebhookToken(): string {
-  return "ob_" + randomBytes(16).toString("hex");
-}
 
 /**
  * GET /api/admin/outbound-campaigns
@@ -38,7 +31,7 @@ export async function GET(request: Request) {
           company_name,
           email
         ),
-        campaign_phone_numbers!campaign_phone_numbers_campaign_id_fkey (
+        campaign_phone_numbers (
           id,
           phone_number,
           friendly_name,
@@ -135,9 +128,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Client not found" }, { status: 404 });
     }
 
-    // Generate unique webhook token
-    const webhookToken = generateWebhookToken();
-
     // Create campaign
     const { data: campaign, error } = await supabase
       .from("outbound_campaigns")
@@ -146,7 +136,6 @@ export async function POST(request: Request) {
         description,
         client_id,
         status: "draft",
-        webhook_token: webhookToken,
         rate_per_minute,
         billing_threshold,
         max_concurrent_calls,
