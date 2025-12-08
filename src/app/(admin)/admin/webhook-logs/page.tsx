@@ -562,6 +562,41 @@ export default function WebhookLogsPage() {
     fetchLogs();
   }, [fetchLogs]);
 
+  // Real-time subscription for new webhook logs
+  useEffect(() => {
+    // Subscribe to legacy webhook_logs
+    const legacyChannel = supabase
+      .channel("webhook_logs_realtime")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "webhook_logs" },
+        () => {
+          // Refetch logs when a new webhook arrives
+          fetchLogs();
+        }
+      )
+      .subscribe();
+
+    // Subscribe to inbound campaign webhook logs
+    const inboundChannel = supabase
+      .channel("inbound_webhook_logs_realtime")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "inbound_campaign_webhook_logs" },
+        () => {
+          // Refetch logs when a new webhook arrives
+          fetchLogs();
+        }
+      )
+      .subscribe();
+
+    // Cleanup subscriptions on unmount
+    return () => {
+      supabase.removeChannel(legacyChannel);
+      supabase.removeChannel(inboundChannel);
+    };
+  }, [supabase, fetchLogs]);
+
   // Filter logs
   const filteredLogs = logs.filter(log => {
     const isPing = log.error_message === "Ping received (no transcript)";
