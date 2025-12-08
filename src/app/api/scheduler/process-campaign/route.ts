@@ -7,6 +7,7 @@ import {
   isWithinCallingWindow,
   CampaignScheduleConfig,
 } from "@/lib/scheduler/qstash";
+import { outboundCallRateLimiter } from "@/lib/rate-limiter";
 
 interface ProcessCampaignBody {
   campaignId: string;
@@ -42,6 +43,7 @@ export async function POST(request: NextRequest) {
         id,
         status,
         max_concurrent_calls,
+        calls_per_minute,
         is_test_mode,
         test_call_limit,
         vapi_assistant_id,
@@ -116,6 +118,36 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ status: "slots_full", activeCalls });
     }
 
+    // Check calls-per-minute rate limit
+    const callsPerMinute = campaign.calls_per_minute || 30; // Default to 30 if not set
+    const rateLimitStatus = await outboundCallRateLimiter.canMakeCall(
+      campaignId,
+      callsPerMinute
+    );
+
+    if (!rateLimitStatus.allowed) {
+      // Rate limit reached, wait until reset
+      const waitSeconds = Math.ceil(rateLimitStatus.resetInMs / 1000);
+      console.log(
+        `Campaign ${campaignId} rate limited (${rateLimitStatus.currentCount}/${callsPerMinute} calls/min). ` +
+        `Resets in ${waitSeconds}s`
+      );
+      await scheduleCampaignProcessor(
+        campaignId,
+        getBaseUrl(request),
+        1 // Check again in 1 minute
+      );
+      return NextResponse.json({
+        status: "rate_limited",
+        currentCount: rateLimitStatus.currentCount,
+        maxCalls: callsPerMinute,
+        resetInMs: rateLimitStatus.resetInMs,
+      });
+    }
+
+    // Calculate how many calls we can make within the rate limit
+    const callsAvailableInWindow = rateLimitStatus.remaining;
+
     // Check test mode limit
     let testLimit: number | null = null;
     if (campaign.is_test_mode) {
@@ -138,8 +170,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Get pending contacts that can be called now
+    // Consider: available concurrent slots, rate limit window, and test mode limit
     const contactsToFetch = Math.min(
       availableSlots,
+      callsAvailableInWindow,
       testLimit ?? availableSlots
     );
 
@@ -203,6 +237,11 @@ export async function POST(request: NextRequest) {
     if (callsToSchedule.length > 0) {
       const result = await scheduleCallBatch(callsToSchedule, getBaseUrl(request));
       console.log(`Scheduled ${result.scheduled} calls for campaign ${campaignId}`);
+
+      // Record each scheduled call in the rate limiter
+      for (let i = 0; i < result.scheduled; i++) {
+        await outboundCallRateLimiter.recordCall(campaignId, callsPerMinute);
+      }
     }
 
     // Reschedule processor

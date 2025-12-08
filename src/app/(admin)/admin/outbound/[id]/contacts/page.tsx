@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Progress } from "@/components/ui/progress";
 import {
   Card,
   CardContent,
@@ -66,8 +67,91 @@ import {
   FileSpreadsheet,
   Check,
   X,
+  AlertTriangle,
+  CheckCircle2,
+  XCircle,
+  Globe,
 } from "lucide-react";
-import { format, formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow } from "date-fns";
+
+// File size limit: 1GB
+const MAX_FILE_SIZE = 1024 * 1024 * 1024;
+const MAX_FILE_SIZE_DISPLAY = "1 GB";
+
+// US area code to timezone mapping (simplified for common cases)
+const AREA_CODE_TIMEZONE: Record<string, string> = {
+  // Eastern
+  "201": "America/New_York", "202": "America/New_York", "203": "America/New_York",
+  "212": "America/New_York", "215": "America/New_York", "216": "America/New_York",
+  "267": "America/New_York", "301": "America/New_York", "302": "America/New_York",
+  "304": "America/New_York", "305": "America/New_York", "315": "America/New_York",
+  "332": "America/New_York", "347": "America/New_York", "404": "America/New_York",
+  "407": "America/New_York", "410": "America/New_York", "412": "America/New_York",
+  "470": "America/New_York", "516": "America/New_York", "518": "America/New_York",
+  "561": "America/New_York", "570": "America/New_York", "585": "America/New_York",
+  "610": "America/New_York", "614": "America/New_York", "617": "America/New_York",
+  "631": "America/New_York", "678": "America/New_York", "704": "America/New_York",
+  "716": "America/New_York", "718": "America/New_York", "727": "America/New_York",
+  "754": "America/New_York", "757": "America/New_York", "772": "America/New_York",
+  "774": "America/New_York", "786": "America/New_York", "803": "America/New_York",
+  "804": "America/New_York", "813": "America/New_York", "843": "America/New_York",
+  "845": "America/New_York", "856": "America/New_York", "862": "America/New_York",
+  "863": "America/New_York", "864": "America/New_York", "904": "America/New_York",
+  "908": "America/New_York", "914": "America/New_York", "919": "America/New_York",
+  "941": "America/New_York", "954": "America/New_York", "973": "America/New_York",
+  "980": "America/New_York",
+  // Central
+  "205": "America/Chicago", "210": "America/Chicago", "214": "America/Chicago",
+  "217": "America/Chicago", "224": "America/Chicago", "225": "America/Chicago",
+  "251": "America/Chicago", "254": "America/Chicago", "256": "America/Chicago",
+  "262": "America/Chicago", "281": "America/Chicago", "309": "America/Chicago",
+  "312": "America/Chicago", "314": "America/Chicago", "316": "America/Chicago",
+  "318": "America/Chicago", "319": "America/Chicago", "320": "America/Chicago",
+  "334": "America/Chicago", "361": "America/Chicago", "405": "America/Chicago",
+  "409": "America/Chicago", "414": "America/Chicago", "417": "America/Chicago",
+  "430": "America/Chicago", "432": "America/Chicago", "469": "America/Chicago",
+  "479": "America/Chicago", "501": "America/Chicago", "504": "America/Chicago",
+  "512": "America/Chicago", "513": "America/Chicago", "515": "America/Chicago",
+  "563": "America/Chicago", "573": "America/Chicago", "580": "America/Chicago",
+  "601": "America/Chicago", "612": "America/Chicago", "615": "America/Chicago",
+  "618": "America/Chicago", "630": "America/Chicago", "636": "America/Chicago",
+  "651": "America/Chicago", "662": "America/Chicago", "682": "America/Chicago",
+  "708": "America/Chicago", "713": "America/Chicago", "715": "America/Chicago",
+  "731": "America/Chicago", "737": "America/Chicago", "763": "America/Chicago",
+  "769": "America/Chicago", "773": "America/Chicago", "779": "America/Chicago",
+  "806": "America/Chicago", "816": "America/Chicago", "817": "America/Chicago",
+  "830": "America/Chicago", "832": "America/Chicago", "847": "America/Chicago",
+  "870": "America/Chicago", "901": "America/Chicago", "903": "America/Chicago",
+  "913": "America/Chicago", "918": "America/Chicago", "920": "America/Chicago",
+  "936": "America/Chicago", "940": "America/Chicago", "952": "America/Chicago",
+  "956": "America/Chicago", "972": "America/Chicago", "979": "America/Chicago",
+  // Mountain
+  "303": "America/Denver", "307": "America/Denver", "385": "America/Denver",
+  "406": "America/Denver", "435": "America/Denver", "480": "America/Denver",
+  "505": "America/Denver", "520": "America/Denver", "575": "America/Denver",
+  "602": "America/Denver", "623": "America/Denver", "719": "America/Denver",
+  "720": "America/Denver", "801": "America/Denver", "928": "America/Denver",
+  "970": "America/Denver",
+  // Pacific
+  "206": "America/Los_Angeles", "209": "America/Los_Angeles", "213": "America/Los_Angeles",
+  "253": "America/Los_Angeles", "310": "America/Los_Angeles", "323": "America/Los_Angeles",
+  "360": "America/Los_Angeles", "408": "America/Los_Angeles", "415": "America/Los_Angeles",
+  "424": "America/Los_Angeles", "425": "America/Los_Angeles", "442": "America/Los_Angeles",
+  "503": "America/Los_Angeles", "509": "America/Los_Angeles", "510": "America/Los_Angeles",
+  "530": "America/Los_Angeles", "541": "America/Los_Angeles", "559": "America/Los_Angeles",
+  "562": "America/Los_Angeles", "619": "America/Los_Angeles", "626": "America/Los_Angeles",
+  "650": "America/Los_Angeles", "657": "America/Los_Angeles", "661": "America/Los_Angeles",
+  "669": "America/Los_Angeles", "702": "America/Los_Angeles", "707": "America/Los_Angeles",
+  "714": "America/Los_Angeles", "725": "America/Los_Angeles", "747": "America/Los_Angeles",
+  "760": "America/Los_Angeles", "775": "America/Los_Angeles", "805": "America/Los_Angeles",
+  "818": "America/Los_Angeles", "831": "America/Los_Angeles", "858": "America/Los_Angeles",
+  "909": "America/Los_Angeles", "916": "America/Los_Angeles", "925": "America/Los_Angeles",
+  "949": "America/Los_Angeles", "951": "America/Los_Angeles", "971": "America/Los_Angeles",
+  // Alaska
+  "907": "America/Anchorage",
+  // Hawaii
+  "808": "Pacific/Honolulu",
+};
 
 interface Contact {
   id: string;
@@ -89,6 +173,16 @@ interface ColumnMapping {
   first_name: string;
   last_name: string;
   email: string;
+  timezone: string;
+}
+
+interface UploadReport {
+  totalRows: number;
+  imported: number;
+  duplicates: number;
+  invalid: number;
+  errors: Array<{ row: number; phone: string; error: string }>;
+  timezonesAppended: number;
 }
 
 export default function ContactsPage({
@@ -122,17 +216,22 @@ export default function ContactsPage({
 
   // Upload modal
   const [showUploadModal, setShowUploadModal] = useState(false);
-  const [uploadStep, setUploadStep] = useState<"upload" | "mapping" | "preview">("upload");
+  const [uploadStep, setUploadStep] = useState<"upload" | "mapping" | "processing" | "complete">("upload");
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
+  const [csvData, setCsvData] = useState<Record<string, string>[]>([]);
   const [csvPreview, setCsvPreview] = useState<Record<string, string>[]>([]);
   const [columnMapping, setColumnMapping] = useState<ColumnMapping>({
     phone_number: "",
     first_name: "",
     last_name: "",
     email: "",
+    timezone: "",
   });
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStatus, setUploadStatus] = useState("");
+  const [uploadReport, setUploadReport] = useState<UploadReport | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Delete modal
@@ -225,9 +324,19 @@ export default function ContactsPage({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // Check file size
+    if (file.size > MAX_FILE_SIZE) {
+      toast({
+        title: "File Too Large",
+        description: `Maximum file size is ${MAX_FILE_SIZE_DISPLAY}. Your file is ${formatFileSize(file.size)}.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     setCsvFile(file);
 
-    // Parse CSV headers
+    // Parse CSV
     const reader = new FileReader();
     reader.onload = (event) => {
       const text = event.target?.result as string;
@@ -236,19 +345,20 @@ export default function ContactsPage({
         const headers = lines[0].split(",").map((h) => h.trim().replace(/"/g, ""));
         setCsvHeaders(headers);
 
-        // Parse preview (first 5 rows)
-        const preview: Record<string, string>[] = [];
-        for (let i = 1; i < Math.min(6, lines.length); i++) {
+        // Parse all data rows
+        const allData: Record<string, string>[] = [];
+        for (let i = 1; i < lines.length; i++) {
           if (lines[i].trim()) {
             const values = lines[i].split(",").map((v) => v.trim().replace(/"/g, ""));
             const row: Record<string, string> = {};
             headers.forEach((h, idx) => {
               row[h] = values[idx] || "";
             });
-            preview.push(row);
+            allData.push(row);
           }
         }
-        setCsvPreview(preview);
+        setCsvData(allData);
+        setCsvPreview(allData.slice(0, 5));
 
         // Auto-map common column names
         const autoMapping: ColumnMapping = {
@@ -256,6 +366,7 @@ export default function ContactsPage({
           first_name: "",
           last_name: "",
           email: "",
+          timezone: "",
         };
         headers.forEach((h) => {
           const lower = h.toLowerCase();
@@ -267,6 +378,8 @@ export default function ContactsPage({
             autoMapping.last_name = h;
           } else if (lower.includes("email")) {
             autoMapping.email = h;
+          } else if (lower.includes("timezone") || lower === "tz" || lower === "time_zone") {
+            autoMapping.timezone = h;
           }
         });
         setColumnMapping(autoMapping);
@@ -277,8 +390,37 @@ export default function ContactsPage({
     reader.readAsText(file);
   };
 
+  // Get timezone from phone number area code
+  const getTimezoneFromPhone = (phone: string): string | null => {
+    const digits = phone.replace(/\D/g, "");
+    let areaCode = "";
+
+    if (digits.length === 10) {
+      areaCode = digits.substring(0, 3);
+    } else if (digits.length === 11 && digits.startsWith("1")) {
+      areaCode = digits.substring(1, 4);
+    }
+
+    return AREA_CODE_TIMEZONE[areaCode] || null;
+  };
+
+  // Normalize phone number to E.164 format
+  const normalizePhoneNumber = (phone: string): string | null => {
+    if (!phone) return null;
+    const digits = phone.toString().replace(/\D/g, "");
+
+    if (digits.length === 10) {
+      return `+1${digits}`;
+    } else if (digits.length === 11 && digits.startsWith("1")) {
+      return `+${digits}`;
+    } else if (digits.length >= 11 && digits.length <= 15) {
+      return `+${digits}`;
+    }
+    return null;
+  };
+
   const handleUpload = async () => {
-    if (!csvFile || !columnMapping.phone_number) {
+    if (!csvFile || !columnMapping.phone_number || csvData.length === 0) {
       toast({
         title: "Error",
         description: "Please select a phone number column",
@@ -288,36 +430,139 @@ export default function ContactsPage({
     }
 
     setIsUploading(true);
+    setUploadStep("processing");
+    setUploadProgress(0);
+    setUploadStatus("Preparing contacts...");
+
+    const report: UploadReport = {
+      totalRows: csvData.length,
+      imported: 0,
+      duplicates: 0,
+      invalid: 0,
+      errors: [],
+      timezonesAppended: 0,
+    };
+
     try {
-      const formData = new FormData();
-      formData.append("file", csvFile);
-      formData.append("column_mapping", JSON.stringify(columnMapping));
+      // Process contacts with timezone appending
+      setUploadStatus("Processing and appending timezones...");
+      const processedContacts: Array<{
+        phone_number: string;
+        first_name?: string;
+        last_name?: string;
+        email?: string;
+        timezone?: string;
+        custom_data: Record<string, unknown>;
+      }> = [];
 
-      const response = await fetch(`/api/admin/outbound-campaigns/${id}/contacts/upload`, {
-        method: "POST",
-        body: formData,
-      });
+      for (let i = 0; i < csvData.length; i++) {
+        const row = csvData[i];
+        const rowNumber = i + 1;
 
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || "Failed to upload contacts");
+        // Update progress for processing phase (0-30%)
+        setUploadProgress(Math.floor((i / csvData.length) * 30));
+
+        const rawPhone = row[columnMapping.phone_number] || "";
+        const normalizedPhone = normalizePhoneNumber(rawPhone);
+
+        if (!normalizedPhone) {
+          report.invalid++;
+          report.errors.push({
+            row: rowNumber,
+            phone: rawPhone,
+            error: "Invalid phone number format",
+          });
+          continue;
+        }
+
+        // Get timezone from mapping or derive from phone
+        let timezone = columnMapping.timezone ? row[columnMapping.timezone] : null;
+        if (!timezone) {
+          timezone = getTimezoneFromPhone(normalizedPhone);
+          if (timezone) {
+            report.timezonesAppended++;
+          }
+        }
+
+        // Build custom data
+        const standardFields = [
+          columnMapping.phone_number,
+          columnMapping.first_name,
+          columnMapping.last_name,
+          columnMapping.email,
+          columnMapping.timezone,
+        ].filter(Boolean);
+
+        const customData: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(row)) {
+          if (!standardFields.includes(key) && value) {
+            customData[key] = value;
+          }
+        }
+
+        processedContacts.push({
+          phone_number: normalizedPhone,
+          first_name: columnMapping.first_name ? row[columnMapping.first_name] : undefined,
+          last_name: columnMapping.last_name ? row[columnMapping.last_name] : undefined,
+          email: columnMapping.email ? row[columnMapping.email] : undefined,
+          timezone: timezone || undefined,
+          custom_data: customData,
+        });
       }
 
-      const data = await response.json();
-      toast({
-        title: "Upload Complete",
-        description: `${data.imported} contacts imported, ${data.skipped} skipped`,
-      });
+      // Upload in batches with progress
+      const batchSize = 500;
+      const totalBatches = Math.ceil(processedContacts.length / batchSize);
 
-      setShowUploadModal(false);
-      resetUpload();
-      fetchContacts();
+      setUploadStatus("Uploading contacts to server...");
+
+      for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+        const batch = processedContacts.slice(
+          batchIndex * batchSize,
+          (batchIndex + 1) * batchSize
+        );
+
+        // Update progress for upload phase (30-90%)
+        const uploadProgressPercent = 30 + Math.floor((batchIndex / totalBatches) * 60);
+        setUploadProgress(uploadProgressPercent);
+        setUploadStatus(`Uploading batch ${batchIndex + 1} of ${totalBatches}...`);
+
+        const response = await fetch(`/api/admin/outbound-campaigns/${id}/contacts/upload`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contacts: batch,
+            column_mapping: columnMapping,
+          }),
+        });
+
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || "Failed to upload batch");
+        }
+
+        const result = await response.json();
+        report.imported += result.result.success;
+        report.duplicates += result.result.duplicates;
+        report.invalid += result.result.failed;
+
+        if (result.result.errors) {
+          report.errors.push(...result.result.errors);
+        }
+      }
+
+      setUploadProgress(100);
+      setUploadStatus("Upload complete!");
+      setUploadReport(report);
+      setUploadStep("complete");
+
     } catch (error) {
       toast({
-        title: "Error",
+        title: "Upload Error",
         description: error instanceof Error ? error.message : "Failed to upload contacts",
         variant: "destructive",
       });
+      resetUpload();
     } finally {
       setIsUploading(false);
     }
@@ -326,11 +571,23 @@ export default function ContactsPage({
   const resetUpload = () => {
     setCsvFile(null);
     setCsvHeaders([]);
+    setCsvData([]);
     setCsvPreview([]);
-    setColumnMapping({ phone_number: "", first_name: "", last_name: "", email: "" });
+    setColumnMapping({ phone_number: "", first_name: "", last_name: "", email: "", timezone: "" });
     setUploadStep("upload");
+    setUploadProgress(0);
+    setUploadStatus("");
+    setUploadReport(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
+    }
+  };
+
+  const handleCloseUploadModal = () => {
+    setShowUploadModal(false);
+    resetUpload();
+    if (uploadReport && uploadReport.imported > 0) {
+      fetchContacts();
     }
   };
 
@@ -384,6 +641,13 @@ export default function ContactsPage({
         ? prev.filter((id) => id !== contactId)
         : [...prev, contactId]
     );
+  };
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
   };
 
   const getStatusBadge = (status: string) => {
@@ -693,17 +957,19 @@ export default function ContactsPage({
       </Dialog>
 
       {/* Upload CSV Modal */}
-      <Dialog open={showUploadModal} onOpenChange={(open) => { setShowUploadModal(open); if (!open) resetUpload(); }}>
+      <Dialog open={showUploadModal} onOpenChange={(open) => { if (!open) handleCloseUploadModal(); else setShowUploadModal(true); }}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Upload Contacts</DialogTitle>
             <DialogDescription>
-              {uploadStep === "upload" && "Select a CSV file to upload"}
+              {uploadStep === "upload" && "Select a CSV file to upload (max 1GB)"}
               {uploadStep === "mapping" && "Map your CSV columns to contact fields"}
-              {uploadStep === "preview" && "Preview your data before importing"}
+              {uploadStep === "processing" && "Processing and uploading contacts..."}
+              {uploadStep === "complete" && "Upload complete!"}
             </DialogDescription>
           </DialogHeader>
 
+          {/* Upload Step */}
           {uploadStep === "upload" && (
             <div className="space-y-4">
               <div
@@ -713,7 +979,7 @@ export default function ContactsPage({
                 <FileSpreadsheet className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
                 <p className="font-medium mb-1">Click to select a CSV file</p>
                 <p className="text-sm text-muted-foreground">
-                  or drag and drop here
+                  Maximum file size: {MAX_FILE_SIZE_DISPLAY}
                 </p>
               </div>
               <input
@@ -726,13 +992,14 @@ export default function ContactsPage({
             </div>
           )}
 
+          {/* Mapping Step */}
           {uploadStep === "mapping" && (
             <div className="space-y-4">
               <div className="flex items-center gap-2 p-3 bg-muted rounded-lg">
                 <FileSpreadsheet className="h-5 w-5" />
                 <span className="font-medium">{csvFile?.name}</span>
                 <span className="text-sm text-muted-foreground">
-                  ({csvHeaders.length} columns, {csvPreview.length} preview rows)
+                  ({formatFileSize(csvFile?.size || 0)}, {csvData.length} rows)
                 </span>
               </div>
 
@@ -795,31 +1062,58 @@ export default function ContactsPage({
                     </Select>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Email Column</Label>
-                  <Select
-                    value={columnMapping.email}
-                    onValueChange={(value) => setColumnMapping({ ...columnMapping, email: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select column" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">— None —</SelectItem>
-                      {csvHeaders.map((header) => (
-                        <SelectItem key={header} value={header}>
-                          {header}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Email Column</Label>
+                    <Select
+                      value={columnMapping.email}
+                      onValueChange={(value) => setColumnMapping({ ...columnMapping, email: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select column" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">— None —</SelectItem>
+                        {csvHeaders.map((header) => (
+                          <SelectItem key={header} value={header}>
+                            {header}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <Globe className="h-4 w-4" />
+                      Timezone Column
+                    </Label>
+                    <Select
+                      value={columnMapping.timezone}
+                      onValueChange={(value) => setColumnMapping({ ...columnMapping, timezone: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Auto-detect from phone" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">— Auto-detect from phone —</SelectItem>
+                        {csvHeaders.map((header) => (
+                          <SelectItem key={header} value={header}>
+                            {header}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      If not mapped, timezone will be detected from US phone area codes
+                    </p>
+                  </div>
                 </div>
               </div>
 
               {/* Preview */}
               {csvPreview.length > 0 && columnMapping.phone_number && (
                 <div className="space-y-2">
-                  <Label>Preview</Label>
+                  <Label>Preview (first 5 rows)</Label>
                   <div className="border rounded-lg overflow-auto max-h-40">
                     <Table>
                       <TableHeader>
@@ -828,6 +1122,7 @@ export default function ContactsPage({
                           <TableHead>First Name</TableHead>
                           <TableHead>Last Name</TableHead>
                           <TableHead>Email</TableHead>
+                          <TableHead>Timezone</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -839,6 +1134,11 @@ export default function ContactsPage({
                             <TableCell>{row[columnMapping.first_name] || "—"}</TableCell>
                             <TableCell>{row[columnMapping.last_name] || "—"}</TableCell>
                             <TableCell>{row[columnMapping.email] || "—"}</TableCell>
+                            <TableCell>
+                              {columnMapping.timezone ? row[columnMapping.timezone] : (
+                                <span className="text-muted-foreground italic">Auto-detect</span>
+                              )}
+                            </TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -849,9 +1149,129 @@ export default function ContactsPage({
             </div>
           )}
 
+          {/* Processing Step */}
+          {uploadStep === "processing" && (
+            <div className="space-y-6 py-4">
+              <div className="text-center">
+                <Loader2 className="h-12 w-12 animate-spin mx-auto mb-4 text-primary" />
+                <p className="font-medium">{uploadStatus}</p>
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span>Progress</span>
+                  <span>{uploadProgress}%</span>
+                </div>
+                <Progress value={uploadProgress} className="h-3" />
+              </div>
+              <div className="bg-muted rounded-lg p-3 text-sm">
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4" />
+                  <span>Processing {csvData.length.toLocaleString()} contacts...</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Complete Step - Final Report */}
+          {uploadStep === "complete" && uploadReport && (
+            <div className="space-y-4">
+              <div className="text-center py-4">
+                <CheckCircle2 className="h-16 w-16 text-green-500 mx-auto mb-4" />
+                <h3 className="text-xl font-bold">Upload Complete!</h3>
+              </div>
+
+              {/* Summary Stats */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <Card>
+                  <CardContent className="pt-4 text-center">
+                    <div className="text-2xl font-bold text-green-600">{uploadReport.imported}</div>
+                    <div className="text-sm text-muted-foreground">Imported</div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-4 text-center">
+                    <div className="text-2xl font-bold text-yellow-600">{uploadReport.duplicates}</div>
+                    <div className="text-sm text-muted-foreground">Duplicates</div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-4 text-center">
+                    <div className="text-2xl font-bold text-red-600">{uploadReport.invalid}</div>
+                    <div className="text-sm text-muted-foreground">Invalid</div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-4 text-center">
+                    <div className="text-2xl font-bold text-blue-600">{uploadReport.timezonesAppended}</div>
+                    <div className="text-sm text-muted-foreground">TZ Added</div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Details */}
+              <div className="bg-muted rounded-lg p-4 space-y-2">
+                <div className="flex justify-between">
+                  <span>Total rows processed:</span>
+                  <span className="font-medium">{uploadReport.totalRows.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Successfully imported:</span>
+                  <span className="font-medium text-green-600">{uploadReport.imported.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Duplicates skipped:</span>
+                  <span className="font-medium text-yellow-600">{uploadReport.duplicates.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Invalid/failed:</span>
+                  <span className="font-medium text-red-600">{uploadReport.invalid.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between border-t pt-2 mt-2">
+                  <span>Timezones auto-detected:</span>
+                  <span className="font-medium text-blue-600">{uploadReport.timezonesAppended.toLocaleString()}</span>
+                </div>
+              </div>
+
+              {/* Errors */}
+              {uploadReport.errors.length > 0 && (
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2 text-red-600">
+                    <AlertTriangle className="h-4 w-4" />
+                    Errors ({Math.min(uploadReport.errors.length, 10)} shown)
+                  </Label>
+                  <div className="border border-red-200 dark:border-red-800 rounded-lg overflow-auto max-h-32">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-16">Row</TableHead>
+                          <TableHead>Phone</TableHead>
+                          <TableHead>Error</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {uploadReport.errors.slice(0, 10).map((err, idx) => (
+                          <TableRow key={idx}>
+                            <TableCell>{err.row}</TableCell>
+                            <TableCell className="font-mono text-sm">{err.phone || "—"}</TableCell>
+                            <TableCell className="text-red-600">{err.error}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  {uploadReport.errors.length > 10 && (
+                    <p className="text-xs text-muted-foreground">
+                      ...and {uploadReport.errors.length - 10} more errors
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           <DialogFooter>
             {uploadStep === "upload" && (
-              <Button variant="outline" onClick={() => setShowUploadModal(false)}>
+              <Button variant="outline" onClick={handleCloseUploadModal}>
                 Cancel
               </Button>
             )}
@@ -862,9 +1282,14 @@ export default function ContactsPage({
                 </Button>
                 <Button onClick={handleUpload} disabled={isUploading || !columnMapping.phone_number}>
                   {isUploading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Import Contacts
+                  Import {csvData.length.toLocaleString()} Contacts
                 </Button>
               </>
+            )}
+            {uploadStep === "complete" && (
+              <Button onClick={handleCloseUploadModal}>
+                Done
+              </Button>
             )}
           </DialogFooter>
         </DialogContent>

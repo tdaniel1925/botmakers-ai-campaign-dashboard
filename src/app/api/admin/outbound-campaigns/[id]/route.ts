@@ -176,6 +176,7 @@ export async function PUT(
       rate_per_minute,
       billing_threshold,
       max_concurrent_calls,
+      calls_per_minute,
       retry_enabled,
       retry_attempts,
       retry_delay_minutes,
@@ -210,6 +211,8 @@ export async function PUT(
       updateData.billing_threshold = billing_threshold;
     if (max_concurrent_calls !== undefined)
       updateData.max_concurrent_calls = max_concurrent_calls;
+    if (calls_per_minute !== undefined)
+      updateData.calls_per_minute = calls_per_minute;
     if (retry_enabled !== undefined) updateData.retry_enabled = retry_enabled;
     if (retry_attempts !== undefined)
       updateData.retry_attempts = retry_attempts;

@@ -93,6 +93,7 @@ export async function POST(
       first_name?: string;
       last_name?: string;
       email?: string;
+      timezone?: string;
       custom_data: Record<string, unknown>;
       status: string;
     }> = [];
@@ -150,12 +151,16 @@ export async function POST(
         }
       }
 
+      // Get timezone from the row (client-side already derives from phone if not provided)
+      const timezone = row.timezone || undefined;
+
       validContacts.push({
         campaign_id: id,
         phone_number: normalizedPhone,
         first_name: firstName || undefined,
         last_name: lastName || undefined,
         email: email || undefined,
+        timezone: timezone,
         custom_data: customData,
         status: "pending",
       });

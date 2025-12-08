@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { verifyAdmin, forbiddenResponse } from "@/lib/admin-auth";
 import { randomBytes } from "crypto";
-import { encrypt } from "@/lib/encryption";
 
 /**
  * Generate a unique webhook token
@@ -83,6 +82,9 @@ export async function GET(request: NextRequest) {
 /**
  * POST /api/admin/inbound-campaigns
  * Create a new inbound campaign
+ *
+ * Inbound campaigns are provider-agnostic - they receive call data via webhook
+ * from any AI voice provider (Vapi, Bland, Retell, etc.)
  */
 export async function POST(request: NextRequest) {
   try {
@@ -96,36 +98,11 @@ export async function POST(request: NextRequest) {
       client_id,
       name,
       description,
-      // Vapi credentials
-      vapi_key_source = "system", // "system" or "client"
-      vapi_api_key,
-      vapi_assistant_id,
-      vapi_phone_number_id,
-      // Legacy fields (kept for compatibility)
-      agent_config,
-      max_call_duration,
-      silence_timeout,
     } = body;
 
     if (!client_id || !name) {
       return NextResponse.json(
         { error: "Client ID and name are required" },
-        { status: 400 }
-      );
-    }
-
-    // Require Assistant ID always
-    if (!vapi_assistant_id) {
-      return NextResponse.json(
-        { error: "Vapi Assistant ID is required" },
-        { status: 400 }
-      );
-    }
-
-    // Require API key only when using client keys
-    if (vapi_key_source === "client" && !vapi_api_key) {
-      return NextResponse.json(
-        { error: "Vapi API Key is required when using client keys" },
         { status: 400 }
       );
     }
@@ -149,21 +126,7 @@ export async function POST(request: NextRequest) {
     // Generate unique webhook token
     const webhookToken = generateWebhookToken();
 
-    // Encrypt the Vapi API key before storing (only if using client keys)
-    let encryptedApiKey: string | null = null;
-    if (vapi_key_source === "client" && vapi_api_key) {
-      try {
-        encryptedApiKey = encrypt(vapi_api_key);
-      } catch (error) {
-        console.error("Error encrypting API key:", error);
-        return NextResponse.json(
-          { error: "Failed to secure API key. Please ensure ENCRYPTION_SECRET is configured." },
-          { status: 500 }
-        );
-      }
-    }
-
-    // Create the inbound campaign
+    // Create the inbound campaign (no Vapi fields needed - data comes via webhook)
     const { data: campaign, error: createError } = await supabase
       .from("inbound_campaigns")
       .insert({
@@ -171,14 +134,7 @@ export async function POST(request: NextRequest) {
         name,
         description: description || null,
         webhook_token: webhookToken,
-        vapi_key_source: vapi_key_source,
-        vapi_api_key: encryptedApiKey,
-        vapi_assistant_id,
-        vapi_phone_number_id: vapi_phone_number_id || null,
-        agent_config: agent_config || {},
-        max_call_duration: max_call_duration || 300,
-        silence_timeout: silence_timeout || 30,
-        status: "draft",
+        status: "active", // Inbound campaigns are active immediately
         is_active: true,
       })
       .select()
@@ -201,13 +157,10 @@ export async function POST(request: NextRequest) {
         campaign_name: name,
         client_id,
         webhook_token: webhookToken,
-        has_vapi_credentials: true,
       },
     });
 
-    // Return campaign without sensitive data
-    const { vapi_api_key: _, ...safeCampaign } = campaign;
-    return NextResponse.json(safeCampaign, { status: 201 });
+    return NextResponse.json(campaign, { status: 201 });
   } catch (error) {
     console.error("Error creating inbound campaign:", error);
     return NextResponse.json(

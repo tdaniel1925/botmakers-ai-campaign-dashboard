@@ -28,14 +28,10 @@ import {
   ArrowRight,
   Check,
   Building2,
-  Key,
   Webhook,
   CheckCircle2,
   Copy,
-  Eye,
-  EyeOff,
-  ExternalLink,
-  AlertCircle,
+  Info,
 } from "lucide-react";
 
 interface Client {
@@ -48,27 +44,17 @@ interface WizardData {
   client_id: string;
   name: string;
   description: string;
-  // Vapi Configuration
-  vapi_key_source: "system" | "client";
-  vapi_api_key: string;
-  vapi_assistant_id: string;
-  vapi_phone_number_id: string;
 }
 
 const initialData: WizardData = {
   client_id: "",
   name: "",
   description: "",
-  vapi_key_source: "system",
-  vapi_api_key: "",
-  vapi_assistant_id: "",
-  vapi_phone_number_id: "",
 };
 
 const WIZARD_STEPS = [
   { id: 1, name: "Basics", icon: Building2 },
-  { id: 2, name: "Vapi Config", icon: Key },
-  { id: 3, name: "Review", icon: CheckCircle2 },
+  { id: 2, name: "Review", icon: CheckCircle2 },
 ];
 
 export default function NewInboundCampaignPage() {
@@ -78,9 +64,6 @@ export default function NewInboundCampaignPage() {
   const [isLoadingClients, setIsLoadingClients] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [createdCampaign, setCreatedCampaign] = useState<{ id: string; webhookToken: string } | null>(null);
-  const [showApiKey, setShowApiKey] = useState(false);
-  const [isValidatingVapi, setIsValidatingVapi] = useState(false);
-  const [vapiValidationError, setVapiValidationError] = useState<string | null>(null);
 
   const router = useRouter();
   const { toast } = useToast();
@@ -109,81 +92,6 @@ export default function NewInboundCampaignPage() {
 
   const updateData = (field: keyof WizardData, value: string) => {
     setData((prev) => ({ ...prev, [field]: value }));
-    // Clear validation error when user types
-    if (vapiValidationError) {
-      setVapiValidationError(null);
-    }
-  };
-
-  // Validate Vapi credentials
-  const validateVapiCredentials = async () => {
-    // If using system keys, only validate assistant ID format
-    if (data.vapi_key_source === "system") {
-      if (!data.vapi_assistant_id.trim()) {
-        setVapiValidationError("Assistant ID is required");
-        return false;
-      }
-      return true;
-    }
-
-    // If using client keys, validate all credentials
-    if (!data.vapi_api_key || !data.vapi_assistant_id) {
-      setVapiValidationError("API Key and Assistant ID are required");
-      return false;
-    }
-
-    setIsValidatingVapi(true);
-    setVapiValidationError(null);
-
-    try {
-      // Validate API key by fetching assistants
-      const assistantResponse = await fetch(`https://api.vapi.ai/assistant/${data.vapi_assistant_id}`, {
-        headers: {
-          Authorization: `Bearer ${data.vapi_api_key}`,
-        },
-      });
-
-      if (!assistantResponse.ok) {
-        if (assistantResponse.status === 401) {
-          setVapiValidationError("Invalid API Key. Please check your Vapi private key.");
-          return false;
-        }
-        if (assistantResponse.status === 404) {
-          setVapiValidationError("Assistant not found. Please check your Assistant ID.");
-          return false;
-        }
-        setVapiValidationError("Failed to validate credentials. Please check your API Key and Assistant ID.");
-        return false;
-      }
-
-      // Optionally validate phone number if provided
-      if (data.vapi_phone_number_id) {
-        const phoneResponse = await fetch(`https://api.vapi.ai/phone-number/${data.vapi_phone_number_id}`, {
-          headers: {
-            Authorization: `Bearer ${data.vapi_api_key}`,
-          },
-        });
-
-        if (!phoneResponse.ok) {
-          if (phoneResponse.status === 404) {
-            setVapiValidationError("Phone Number not found. Please check your Phone Number ID.");
-            return false;
-          }
-        }
-      }
-
-      toast({
-        title: "Credentials validated",
-        description: "Your Vapi credentials are valid.",
-      });
-      return true;
-    } catch (error) {
-      console.error("Vapi validation error:", error);
-      setVapiValidationError("Failed to connect to Vapi. Please check your internet connection.");
-      return false;
-    } finally {
-      setIsValidatingVapi(false);
-    }
   };
 
   const canProceed = () => {
@@ -191,11 +99,6 @@ export default function NewInboundCampaignPage() {
       case 1:
         return data.client_id && data.name.trim();
       case 2:
-        if (data.vapi_key_source === "system") {
-          return !!data.vapi_assistant_id.trim();
-        }
-        return data.vapi_api_key.trim() && data.vapi_assistant_id.trim();
-      case 3:
         return true;
       default:
         return false;
@@ -203,12 +106,6 @@ export default function NewInboundCampaignPage() {
   };
 
   const handleNext = async () => {
-    if (currentStep === 2) {
-      // Validate Vapi credentials before proceeding
-      const isValid = await validateVapiCredentials();
-      if (!isValid) return;
-    }
-
     if (currentStep < WIZARD_STEPS.length) {
       setCurrentStep(currentStep + 1);
     } else {
@@ -233,10 +130,6 @@ export default function NewInboundCampaignPage() {
           client_id: data.client_id,
           name: data.name,
           description: data.description || null,
-          vapi_key_source: data.vapi_key_source,
-          vapi_api_key: data.vapi_key_source === "client" ? data.vapi_api_key : null,
-          vapi_assistant_id: data.vapi_assistant_id,
-          vapi_phone_number_id: data.vapi_phone_number_id || null,
         }),
       });
 
@@ -296,7 +189,7 @@ export default function NewInboundCampaignPage() {
                 Webhook URL
               </CardTitle>
               <CardDescription>
-                Send POST requests with call data to this URL
+                Send POST requests with call data to this URL from any AI voice provider
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -308,11 +201,24 @@ export default function NewInboundCampaignPage() {
               </div>
             </CardContent>
           </Card>
+          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 text-left">
+            <div className="flex gap-3">
+              <Info className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+              <div className="space-y-2">
+                <p className="font-medium text-blue-900 dark:text-blue-100">Next Steps</p>
+                <ul className="text-sm text-blue-700 dark:text-blue-300 space-y-1 list-disc list-inside">
+                  <li>Configure your AI voice provider (Vapi, Bland, Retell, etc.) to send webhooks to this URL</li>
+                  <li>The system will automatically parse and store call data</li>
+                  <li>Set up outcome tags and SMS rules from the campaign dashboard</li>
+                </ul>
+              </div>
+            </div>
+          </div>
           <div className="flex gap-4 justify-center">
             <Button variant="outline" onClick={() => router.push("/admin/inbound")}>
               View All Campaigns
             </Button>
-            <Button onClick={() => router.push(`/admin/inbound/${createdCampaign.id}`)}>
+            <Button onClick={() => router.push(`/admin/campaigns/${createdCampaign.id}`)}>
               Go to Campaign
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
@@ -375,169 +281,22 @@ export default function NewInboundCampaignPage() {
                 />
               </div>
             </div>
+            <div className="bg-muted/50 border rounded-lg p-4">
+              <div className="flex gap-3">
+                <Webhook className="h-5 w-5 text-muted-foreground mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="font-medium">Provider-Agnostic Webhooks</p>
+                  <p className="text-sm text-muted-foreground">
+                    This campaign will receive call data via webhook. You can connect any AI voice provider
+                    (Vapi, Bland, Retell, etc.) - the system will automatically parse incoming payloads.
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
         );
 
       case 2:
-        return (
-          <div className="space-y-6">
-            <div>
-              <h2 className="text-xl font-semibold mb-2">Vapi Configuration</h2>
-              <p className="text-muted-foreground">
-                Configure Vapi credentials to connect your AI assistant.
-              </p>
-            </div>
-
-            <div className="space-y-4">
-              {/* Key Source Selection */}
-              <div className="space-y-2">
-                <Label htmlFor="vapi_key_source">API Key Source *</Label>
-                <Select
-                  value={data.vapi_key_source}
-                  onValueChange={(v: "system" | "client") => updateData("vapi_key_source", v)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select key source" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="system">
-                      System Keys (Bill to Client)
-                    </SelectItem>
-                    <SelectItem value="client">
-                      Client&apos;s Own Keys
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  {data.vapi_key_source === "system"
-                    ? "Use platform Vapi account. Usage will be billed to the client."
-                    : "Client provides their own Vapi API key for direct billing."}
-                </p>
-              </div>
-
-              {/* Client API Key - only shown when using client keys */}
-              {data.vapi_key_source === "client" && (
-                <>
-                  {/* Help link */}
-                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                    <div className="flex gap-3">
-                      <Key className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                      <div className="space-y-2">
-                        <p className="font-medium text-blue-900 dark:text-blue-100">Where to find Vapi credentials</p>
-                        <ul className="text-sm text-blue-700 dark:text-blue-300 space-y-1">
-                          <li>
-                            <strong>API Key:</strong>{" "}
-                            <a
-                              href="https://dashboard.vapi.ai/account"
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="underline inline-flex items-center gap-1"
-                            >
-                              Vapi Dashboard → Account
-                              <ExternalLink className="h-3 w-3" />
-                            </a>
-                          </li>
-                          <li>
-                            <strong>Assistant ID:</strong>{" "}
-                            <a
-                              href="https://dashboard.vapi.ai/assistants"
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="underline inline-flex items-center gap-1"
-                            >
-                              Vapi Dashboard → Assistants
-                              <ExternalLink className="h-3 w-3" />
-                            </a>
-                          </li>
-                          <li>
-                            <strong>Phone Number ID:</strong>{" "}
-                            <a
-                              href="https://dashboard.vapi.ai/phone-numbers"
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="underline inline-flex items-center gap-1"
-                            >
-                              Vapi Dashboard → Phone Numbers
-                              <ExternalLink className="h-3 w-3" />
-                            </a>
-                          </li>
-                        </ul>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="vapi_api_key">Vapi API Key (Private Key) *</Label>
-                    <div className="relative">
-                      <Input
-                        id="vapi_api_key"
-                        type={showApiKey ? "text" : "password"}
-                        value={data.vapi_api_key}
-                        onChange={(e) => updateData("vapi_api_key", e.target.value)}
-                        placeholder="vapi_xxxxxxxx..."
-                        className="pr-10"
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-                        onClick={() => setShowApiKey(!showApiKey)}
-                      >
-                        {showApiKey ? (
-                          <EyeOff className="h-4 w-4 text-muted-foreground" />
-                        ) : (
-                          <Eye className="h-4 w-4 text-muted-foreground" />
-                        )}
-                      </Button>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Private API key from the Vapi dashboard. Will be encrypted.
-                    </p>
-                  </div>
-                </>
-              )}
-
-              <div className="space-y-2">
-                <Label htmlFor="vapi_assistant_id">Assistant ID *</Label>
-                <Input
-                  id="vapi_assistant_id"
-                  value={data.vapi_assistant_id}
-                  onChange={(e) => updateData("vapi_assistant_id", e.target.value)}
-                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                />
-                <p className="text-xs text-muted-foreground">
-                  The ID of the Vapi assistant that will handle calls.
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="vapi_phone_number_id">Phone Number ID</Label>
-                <Input
-                  id="vapi_phone_number_id"
-                  value={data.vapi_phone_number_id}
-                  onChange={(e) => updateData("vapi_phone_number_id", e.target.value)}
-                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Optional. The ID of the Vapi phone number to use.
-                </p>
-              </div>
-
-              {/* Validation error */}
-              {vapiValidationError && (
-                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
-                  <div className="flex gap-3">
-                    <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
-                    <p className="text-sm text-red-700 dark:text-red-300">{vapiValidationError}</p>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        );
-
-      case 3:
         const selectedClient = clients.find(c => c.id === data.client_id);
         return (
           <div className="space-y-6">
@@ -568,37 +327,6 @@ export default function NewInboundCampaignPage() {
                     <p className="font-medium">{data.description}</p>
                   </div>
                 )}
-                <div className="pt-4 border-t">
-                  <p className="text-sm font-medium mb-3">Vapi Configuration</p>
-                  <div className="grid grid-cols-1 gap-3">
-                    <div>
-                      <p className="text-sm text-muted-foreground">API Key Source</p>
-                      <p className="font-medium">
-                        {data.vapi_key_source === "system"
-                          ? "System Keys (Bill to Client)"
-                          : "Client's Own Keys"}
-                      </p>
-                    </div>
-                    {data.vapi_key_source === "client" && data.vapi_api_key && (
-                      <div>
-                        <p className="text-sm text-muted-foreground">API Key</p>
-                        <p className="font-medium font-mono text-sm">
-                          {data.vapi_api_key.substring(0, 10)}...{data.vapi_api_key.substring(data.vapi_api_key.length - 4)}
-                        </p>
-                      </div>
-                    )}
-                    <div>
-                      <p className="text-sm text-muted-foreground">Assistant ID</p>
-                      <p className="font-medium font-mono text-sm">{data.vapi_assistant_id}</p>
-                    </div>
-                    {data.vapi_phone_number_id && (
-                      <div>
-                        <p className="text-sm text-muted-foreground">Phone Number ID</p>
-                        <p className="font-medium font-mono text-sm">{data.vapi_phone_number_id}</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
               </CardContent>
             </Card>
             <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
@@ -607,7 +335,8 @@ export default function NewInboundCampaignPage() {
                 <div>
                   <p className="font-medium text-blue-900 dark:text-blue-100">Webhook will be generated</p>
                   <p className="text-sm text-blue-700 dark:text-blue-300">
-                    A unique webhook URL will be created for this campaign. You can use it to receive call data from any source.
+                    A unique webhook URL will be created for this campaign. Configure your AI voice provider
+                    to send call data to this URL.
                   </p>
                 </div>
               </div>
@@ -624,7 +353,7 @@ export default function NewInboundCampaignPage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center space-x-4">
-        <Link href="/admin/campaigns/new">
+        <Link href="/admin/inbound">
           <Button variant="ghost" size="icon">
             <ArrowLeft className="h-4 w-4" />
           </Button>
@@ -632,7 +361,7 @@ export default function NewInboundCampaignPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">New Inbound Campaign</h1>
           <p className="text-muted-foreground">
-            Set up an AI-powered inbound calling campaign
+            Set up a campaign to receive and analyze inbound call data
           </p>
         </div>
       </div>
@@ -692,10 +421,10 @@ export default function NewInboundCampaignPage() {
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back
           </Button>
-          <Button onClick={handleNext} disabled={isSubmitting || isValidatingVapi || !canProceed()}>
-            {(isSubmitting || isValidatingVapi) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {isValidatingVapi ? "Validating..." : currentStep === WIZARD_STEPS.length ? "Create Campaign" : "Next"}
-            {currentStep < WIZARD_STEPS.length && !isValidatingVapi && <ArrowRight className="ml-2 h-4 w-4" />}
+          <Button onClick={handleNext} disabled={isSubmitting || !canProceed()}>
+            {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {currentStep === WIZARD_STEPS.length ? "Create Campaign" : "Next"}
+            {currentStep < WIZARD_STEPS.length && <ArrowRight className="ml-2 h-4 w-4" />}
           </Button>
         </div>
       )}

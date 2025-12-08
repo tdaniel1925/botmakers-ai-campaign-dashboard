@@ -372,6 +372,278 @@ class WebhookDeduplicator {
 
 export const webhookDeduplicator = new WebhookDeduplicator(300000);
 
+// ============= Outbound Call Rate Limiter =============
+
+interface OutboundCallRateLimitEntry {
+  count: number;
+  windowStart: number;
+  maxCalls: number;
+}
+
+/**
+ * Per-campaign outbound call rate limiter
+ * Enforces calls-per-minute limits for outbound campaigns
+ * Supports both Redis (distributed) and in-memory (single-instance) modes
+ */
+class OutboundCallRateLimiter {
+  private redis: Redis | null;
+  private inMemoryCache: Map<string, OutboundCallRateLimitEntry> = new Map();
+  private readonly windowMs: number = 60000; // 1 minute sliding window
+
+  constructor() {
+    this.redis = redis;
+
+    // Cleanup in-memory cache periodically
+    if (typeof setInterval !== "undefined") {
+      setInterval(() => this.cleanupMemory(), 60000);
+    }
+  }
+
+  /**
+   * Check if a campaign can make a call based on its rate limit
+   * @param campaignId - The campaign ID
+   * @param callsPerMinute - The campaign's configured calls per minute limit
+   * @returns Object with allowed status, remaining calls, and reset time
+   */
+  async canMakeCall(
+    campaignId: string,
+    callsPerMinute: number
+  ): Promise<{
+    allowed: boolean;
+    remaining: number;
+    resetInMs: number;
+    currentCount: number;
+  }> {
+    const key = `outbound:rate:${campaignId}`;
+    const now = Date.now();
+
+    // Try Redis first for distributed rate limiting
+    if (this.redis) {
+      try {
+        return await this.checkRedis(key, callsPerMinute, now);
+      } catch (error) {
+        console.warn("Redis outbound rate limit check failed, using memory:", error);
+      }
+    }
+
+    // Fallback to in-memory
+    return this.checkMemory(key, callsPerMinute, now);
+  }
+
+  /**
+   * Record that a call was made (increments the counter)
+   * @param campaignId - The campaign ID
+   * @param callsPerMinute - The campaign's configured calls per minute limit
+   */
+  async recordCall(
+    campaignId: string,
+    callsPerMinute: number
+  ): Promise<{
+    allowed: boolean;
+    remaining: number;
+    resetInMs: number;
+    currentCount: number;
+  }> {
+    const key = `outbound:rate:${campaignId}`;
+    const now = Date.now();
+
+    // Try Redis first
+    if (this.redis) {
+      try {
+        return await this.incrementRedis(key, callsPerMinute, now);
+      } catch (error) {
+        console.warn("Redis outbound rate increment failed, using memory:", error);
+      }
+    }
+
+    // Fallback to in-memory
+    return this.incrementMemory(key, callsPerMinute, now);
+  }
+
+  private async checkRedis(
+    key: string,
+    maxCalls: number,
+    now: number
+  ): Promise<{
+    allowed: boolean;
+    remaining: number;
+    resetInMs: number;
+    currentCount: number;
+  }> {
+    // Use Redis to get current count for this window
+    const windowKey = `${key}:${Math.floor(now / this.windowMs)}`;
+    const currentCount = (await this.redis!.get<number>(windowKey)) || 0;
+    const windowStart = Math.floor(now / this.windowMs) * this.windowMs;
+    const resetInMs = windowStart + this.windowMs - now;
+
+    return {
+      allowed: currentCount < maxCalls,
+      remaining: Math.max(0, maxCalls - currentCount),
+      resetInMs,
+      currentCount,
+    };
+  }
+
+  private async incrementRedis(
+    key: string,
+    maxCalls: number,
+    now: number
+  ): Promise<{
+    allowed: boolean;
+    remaining: number;
+    resetInMs: number;
+    currentCount: number;
+  }> {
+    const windowKey = `${key}:${Math.floor(now / this.windowMs)}`;
+    const windowStart = Math.floor(now / this.windowMs) * this.windowMs;
+    const resetInMs = windowStart + this.windowMs - now;
+
+    // Get current count
+    const currentCount = (await this.redis!.get<number>(windowKey)) || 0;
+
+    if (currentCount >= maxCalls) {
+      return {
+        allowed: false,
+        remaining: 0,
+        resetInMs,
+        currentCount,
+      };
+    }
+
+    // Increment and set TTL
+    const newCount = await this.redis!.incr(windowKey);
+    if (newCount === 1) {
+      // Set expiry on first increment (2 minutes to be safe)
+      await this.redis!.expire(windowKey, 120);
+    }
+
+    return {
+      allowed: true,
+      remaining: Math.max(0, maxCalls - newCount),
+      resetInMs,
+      currentCount: newCount,
+    };
+  }
+
+  private checkMemory(
+    key: string,
+    maxCalls: number,
+    now: number
+  ): {
+    allowed: boolean;
+    remaining: number;
+    resetInMs: number;
+    currentCount: number;
+  } {
+    const entry = this.inMemoryCache.get(key);
+    const windowStart = Math.floor(now / this.windowMs) * this.windowMs;
+    const resetInMs = windowStart + this.windowMs - now;
+
+    // If no entry or window expired, it's a new window
+    if (!entry || entry.windowStart !== windowStart) {
+      return {
+        allowed: true,
+        remaining: maxCalls,
+        resetInMs,
+        currentCount: 0,
+      };
+    }
+
+    return {
+      allowed: entry.count < maxCalls,
+      remaining: Math.max(0, maxCalls - entry.count),
+      resetInMs,
+      currentCount: entry.count,
+    };
+  }
+
+  private incrementMemory(
+    key: string,
+    maxCalls: number,
+    now: number
+  ): {
+    allowed: boolean;
+    remaining: number;
+    resetInMs: number;
+    currentCount: number;
+  } {
+    const entry = this.inMemoryCache.get(key);
+    const windowStart = Math.floor(now / this.windowMs) * this.windowMs;
+    const resetInMs = windowStart + this.windowMs - now;
+
+    // If no entry or window expired, start new window
+    if (!entry || entry.windowStart !== windowStart) {
+      this.inMemoryCache.set(key, {
+        count: 1,
+        windowStart,
+        maxCalls,
+      });
+      return {
+        allowed: true,
+        remaining: maxCalls - 1,
+        resetInMs,
+        currentCount: 1,
+      };
+    }
+
+    // Check if limit reached
+    if (entry.count >= maxCalls) {
+      return {
+        allowed: false,
+        remaining: 0,
+        resetInMs,
+        currentCount: entry.count,
+      };
+    }
+
+    // Increment count
+    entry.count++;
+    return {
+      allowed: true,
+      remaining: Math.max(0, maxCalls - entry.count),
+      resetInMs,
+      currentCount: entry.count,
+    };
+  }
+
+  private cleanupMemory(): void {
+    const now = Date.now();
+    const currentWindow = Math.floor(now / this.windowMs) * this.windowMs;
+
+    for (const [key, entry] of this.inMemoryCache.entries()) {
+      // Remove entries from old windows
+      if (entry.windowStart < currentWindow - this.windowMs) {
+        this.inMemoryCache.delete(key);
+      }
+    }
+  }
+
+  /**
+   * Get current rate limit status for a campaign without incrementing
+   */
+  async getStatus(
+    campaignId: string,
+    callsPerMinute: number
+  ): Promise<{
+    currentCount: number;
+    maxCalls: number;
+    remaining: number;
+    resetInMs: number;
+    utilizationPercent: number;
+  }> {
+    const result = await this.canMakeCall(campaignId, callsPerMinute);
+    return {
+      currentCount: result.currentCount,
+      maxCalls: callsPerMinute,
+      remaining: result.remaining,
+      resetInMs: result.resetInMs,
+      utilizationPercent: Math.round((result.currentCount / callsPerMinute) * 100),
+    };
+  }
+}
+
+export const outboundCallRateLimiter = new OutboundCallRateLimiter();
+
 // ============= Health Check =============
 
 export async function getRateLimiterHealth(): Promise<{

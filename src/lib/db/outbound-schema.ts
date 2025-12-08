@@ -56,6 +56,7 @@ export const outboundCampaigns = pgTable("outbound_campaigns", {
 
   // Call Limits
   maxConcurrentCalls: integer("max_concurrent_calls").default(50),
+  callsPerMinute: integer("calls_per_minute").default(30), // Max calls to initiate per minute
 
   // Retry Settings
   retryEnabled: boolean("retry_enabled").default(true),

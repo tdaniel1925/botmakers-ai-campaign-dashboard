@@ -45,6 +45,9 @@ import {
   EyeOff,
   ExternalLink,
   AlertCircle,
+  TestTube,
+  CheckCircle,
+  Info,
 } from "lucide-react";
 
 interface Client {
@@ -67,9 +70,11 @@ interface WizardData {
   vapi_assistant_id: string;
   vapi_phone_number_id: string;
   // AutoCalls-specific
+  autocalls_key_source: "system" | "client";
   autocalls_api_key: string;
   autocalls_assistant_id: string;
   // Synthflow-specific
+  synthflow_key_source: "system" | "client";
   synthflow_api_key: string;
   synthflow_model_id: string;
   // Step 4: Schedule
@@ -90,6 +95,7 @@ interface WizardData {
   retry_attempts: number;
   retry_delay_minutes: number;
   max_concurrent_calls: number;
+  calls_per_minute: number;
   // Step 8: Billing
   rate_per_minute: string;
   billing_threshold: string;
@@ -153,8 +159,10 @@ const initialData: WizardData = {
   vapi_api_key: "",
   vapi_assistant_id: "",
   vapi_phone_number_id: "",
+  autocalls_key_source: "system",
   autocalls_api_key: "",
   autocalls_assistant_id: "",
+  synthflow_key_source: "system",
   synthflow_api_key: "",
   synthflow_model_id: "",
   schedule_days: [1, 2, 3, 4, 5], // Mon-Fri
@@ -166,6 +174,7 @@ const initialData: WizardData = {
   retry_attempts: 2,
   retry_delay_minutes: 60,
   max_concurrent_calls: 5,
+  calls_per_minute: 30,
   rate_per_minute: "0.15",
   billing_threshold: "100.00",
   is_test_mode: true,
@@ -255,9 +264,17 @@ export default function NewOutboundCampaignPage() {
           break;
 
         case "autocalls":
-          if (!data.autocalls_api_key || !data.autocalls_assistant_id) {
-            setVapiValidationError("API Key and Assistant ID are required for AutoCalls");
-            return false;
+          // If using system keys, only validate assistant ID
+          if (data.autocalls_key_source === "system") {
+            if (!data.autocalls_assistant_id.trim()) {
+              setVapiValidationError("Assistant ID is required");
+              return false;
+            }
+          } else {
+            if (!data.autocalls_api_key || !data.autocalls_assistant_id) {
+              setVapiValidationError("API Key and Assistant ID are required for AutoCalls");
+              return false;
+            }
           }
           // Basic format validation (AutoCalls uses integer IDs)
           if (isNaN(parseInt(data.autocalls_assistant_id))) {
@@ -267,9 +284,17 @@ export default function NewOutboundCampaignPage() {
           break;
 
         case "synthflow":
-          if (!data.synthflow_api_key || !data.synthflow_model_id) {
-            setVapiValidationError("API Key and Agent ID are required for Synthflow");
-            return false;
+          // If using system keys, only validate agent ID
+          if (data.synthflow_key_source === "system") {
+            if (!data.synthflow_model_id.trim()) {
+              setVapiValidationError("Agent ID is required");
+              return false;
+            }
+          } else {
+            if (!data.synthflow_api_key || !data.synthflow_model_id) {
+              setVapiValidationError("API Key and Agent ID are required for Synthflow");
+              return false;
+            }
           }
           break;
       }
@@ -303,8 +328,14 @@ export default function NewOutboundCampaignPage() {
             }
             return !!data.vapi_api_key.trim() && !!data.vapi_assistant_id.trim();
           case "autocalls":
+            if (data.autocalls_key_source === "system") {
+              return !!data.autocalls_assistant_id.trim();
+            }
             return !!data.autocalls_api_key.trim() && !!data.autocalls_assistant_id.trim();
           case "synthflow":
+            if (data.synthflow_key_source === "system") {
+              return !!data.synthflow_model_id.trim();
+            }
             return !!data.synthflow_api_key.trim() && !!data.synthflow_model_id.trim();
           default:
             return false;
@@ -439,6 +470,7 @@ export default function NewOutboundCampaignPage() {
         retry_attempts: data.retry_attempts,
         retry_delay_minutes: data.retry_delay_minutes,
         max_concurrent_calls: data.max_concurrent_calls,
+        calls_per_minute: data.calls_per_minute,
         rate_per_minute: parseFloat(data.rate_per_minute),
         billing_threshold: parseFloat(data.billing_threshold),
         is_test_mode: data.is_test_mode,
@@ -452,37 +484,30 @@ export default function NewOutboundCampaignPage() {
     }
   };
 
-  const handleLaunch = async () => {
-    if (!createdCampaignId) return;
+  const handleCreateCampaign = async () => {
     setIsSubmitting(true);
     try {
+      // Save the campaign (creates if not exists, updates if exists)
       await saveCampaignData();
 
-      const response = await fetch(`/api/admin/outbound-campaigns/${createdCampaignId}/launch`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          test_mode: data.is_test_mode,
-        }),
-      });
+      // Get the campaign ID (either already created or just created)
+      const campaignId = createdCampaignId;
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to launch campaign");
+      if (!campaignId) {
+        throw new Error("Campaign was not created properly");
       }
 
       toast({
-        title: data.is_test_mode ? "Test Mode Started" : "Campaign Launched",
-        description: data.is_test_mode
-          ? `Campaign will make up to ${data.test_call_limit} test calls`
-          : "Campaign is now active and making calls",
+        title: "Campaign Created!",
+        description: "Your campaign has been saved as a draft. You can start it from the campaign details page.",
       });
 
-      router.push(`/admin/outbound/${createdCampaignId}`);
+      // Redirect to the campaign details page
+      router.push(`/admin/outbound/${campaignId}`);
     } catch (error) {
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to launch campaign",
+        description: error instanceof Error ? error.message : "Failed to create campaign",
         variant: "destructive",
       });
     } finally {
@@ -688,43 +713,68 @@ export default function NewOutboundCampaignPage() {
               {/* AutoCalls Configuration */}
               {data.call_provider === "autocalls" && (
                 <>
-                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                    <div className="flex gap-3">
-                      <Key className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                      <div className="space-y-1">
-                        <p className="font-medium text-blue-900 dark:text-blue-100">AutoCalls.ai Credentials</p>
-                        <p className="text-sm text-blue-700 dark:text-blue-300">
-                          Get your API key and Assistant ID from{" "}
-                          <a href="https://app.autocalls.ai" target="_blank" rel="noopener noreferrer" className="underline">
-                            app.autocalls.ai <ExternalLink className="inline h-3 w-3" />
-                          </a>
-                        </p>
-                      </div>
-                    </div>
+                  <div className="space-y-2">
+                    <Label>API Key Source</Label>
+                    <Select
+                      value={data.autocalls_key_source}
+                      onValueChange={(value: "system" | "client") => updateData("autocalls_key_source", value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="system">System Keys (Bill to Client)</SelectItem>
+                        <SelectItem value="client">Client&apos;s Own Keys</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {data.autocalls_key_source === "system" && (
+                      <p className="text-xs text-muted-foreground">
+                        Platform-level API keys from Settings will be used. Usage will be billed to the client.
+                      </p>
+                    )}
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="autocalls_api_key">API Key *</Label>
-                    <div className="relative">
-                      <Input
-                        id="autocalls_api_key"
-                        type={showApiKey ? "text" : "password"}
-                        value={data.autocalls_api_key}
-                        onChange={(e) => updateData("autocalls_api_key", e.target.value)}
-                        placeholder="Your AutoCalls API key"
-                        className="pr-10"
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-                        onClick={() => setShowApiKey(!showApiKey)}
-                      >
-                        {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </Button>
-                    </div>
-                  </div>
+                  {data.autocalls_key_source === "client" && (
+                    <>
+                      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                        <div className="flex gap-3">
+                          <Key className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                          <div className="space-y-1">
+                            <p className="font-medium text-blue-900 dark:text-blue-100">AutoCalls.ai Credentials</p>
+                            <p className="text-sm text-blue-700 dark:text-blue-300">
+                              Get your API key and Assistant ID from{" "}
+                              <a href="https://app.autocalls.ai" target="_blank" rel="noopener noreferrer" className="underline">
+                                app.autocalls.ai <ExternalLink className="inline h-3 w-3" />
+                              </a>
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="autocalls_api_key">API Key *</Label>
+                        <div className="relative">
+                          <Input
+                            id="autocalls_api_key"
+                            type={showApiKey ? "text" : "password"}
+                            value={data.autocalls_api_key}
+                            onChange={(e) => updateData("autocalls_api_key", e.target.value)}
+                            placeholder="Your AutoCalls API key"
+                            className="pr-10"
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                            onClick={() => setShowApiKey(!showApiKey)}
+                          >
+                            {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          </Button>
+                        </div>
+                      </div>
+                    </>
+                  )}
 
                   <div className="space-y-2">
                     <Label htmlFor="autocalls_assistant_id">Assistant ID *</Label>
@@ -742,43 +792,68 @@ export default function NewOutboundCampaignPage() {
               {/* Synthflow Configuration */}
               {data.call_provider === "synthflow" && (
                 <>
-                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                    <div className="flex gap-3">
-                      <Key className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                      <div className="space-y-1">
-                        <p className="font-medium text-blue-900 dark:text-blue-100">Synthflow Credentials</p>
-                        <p className="text-sm text-blue-700 dark:text-blue-300">
-                          Get your API key and Agent ID from{" "}
-                          <a href="https://app.synthflow.ai" target="_blank" rel="noopener noreferrer" className="underline">
-                            app.synthflow.ai <ExternalLink className="inline h-3 w-3" />
-                          </a>
-                        </p>
-                      </div>
-                    </div>
+                  <div className="space-y-2">
+                    <Label>API Key Source</Label>
+                    <Select
+                      value={data.synthflow_key_source}
+                      onValueChange={(value: "system" | "client") => updateData("synthflow_key_source", value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="system">System Keys (Bill to Client)</SelectItem>
+                        <SelectItem value="client">Client&apos;s Own Keys</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {data.synthflow_key_source === "system" && (
+                      <p className="text-xs text-muted-foreground">
+                        Platform-level API keys from Settings will be used. Usage will be billed to the client.
+                      </p>
+                    )}
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="synthflow_api_key">API Key *</Label>
-                    <div className="relative">
-                      <Input
-                        id="synthflow_api_key"
-                        type={showApiKey ? "text" : "password"}
-                        value={data.synthflow_api_key}
-                        onChange={(e) => updateData("synthflow_api_key", e.target.value)}
-                        placeholder="Your Synthflow API key"
-                        className="pr-10"
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-                        onClick={() => setShowApiKey(!showApiKey)}
-                      >
-                        {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </Button>
-                    </div>
-                  </div>
+                  {data.synthflow_key_source === "client" && (
+                    <>
+                      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                        <div className="flex gap-3">
+                          <Key className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                          <div className="space-y-1">
+                            <p className="font-medium text-blue-900 dark:text-blue-100">Synthflow Credentials</p>
+                            <p className="text-sm text-blue-700 dark:text-blue-300">
+                              Get your API key and Agent ID from{" "}
+                              <a href="https://app.synthflow.ai" target="_blank" rel="noopener noreferrer" className="underline">
+                                app.synthflow.ai <ExternalLink className="inline h-3 w-3" />
+                              </a>
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="synthflow_api_key">API Key *</Label>
+                        <div className="relative">
+                          <Input
+                            id="synthflow_api_key"
+                            type={showApiKey ? "text" : "password"}
+                            value={data.synthflow_api_key}
+                            onChange={(e) => updateData("synthflow_api_key", e.target.value)}
+                            placeholder="Your Synthflow API key"
+                            className="pr-10"
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                            onClick={() => setShowApiKey(!showApiKey)}
+                          >
+                            {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          </Button>
+                        </div>
+                      </div>
+                    </>
+                  )}
 
                   <div className="space-y-2">
                     <Label htmlFor="synthflow_model_id">Agent ID (model_id) *</Label>
@@ -1043,18 +1118,33 @@ export default function NewOutboundCampaignPage() {
                   </div>
                 </div>
               )}
-              <div className="space-y-2">
-                <Label>Max Concurrent Calls</Label>
-                <Input
-                  type="number"
-                  value={data.max_concurrent_calls}
-                  onChange={(e) => updateData("max_concurrent_calls", parseInt(e.target.value) || 1)}
-                  min={1}
-                  max={50}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Maximum number of simultaneous calls
-                </p>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Max Concurrent Calls</Label>
+                  <Input
+                    type="number"
+                    value={data.max_concurrent_calls}
+                    onChange={(e) => updateData("max_concurrent_calls", parseInt(e.target.value) || 1)}
+                    min={1}
+                    max={50}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Maximum number of simultaneous calls
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Calls Per Minute</Label>
+                  <Input
+                    type="number"
+                    value={data.calls_per_minute}
+                    onChange={(e) => updateData("calls_per_minute", parseInt(e.target.value) || 1)}
+                    min={1}
+                    max={200}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Rate limit for initiating new calls
+                  </p>
+                </div>
               </div>
             </div>
           </div>
@@ -1103,9 +1193,9 @@ export default function NewOutboundCampaignPage() {
         return (
           <div className="space-y-6">
             <div>
-              <h2 className="text-xl font-semibold mb-2">Review & Launch</h2>
+              <h2 className="text-xl font-semibold mb-2">Review & Create</h2>
               <p className="text-muted-foreground">
-                Review your campaign settings before launching.
+                Review your campaign settings. After creating, you can start the campaign from the campaign details page.
               </p>
             </div>
             <div className="space-y-4">
@@ -1126,19 +1216,22 @@ export default function NewOutboundCampaignPage() {
                       </p>
                     </div>
                     <div>
-                      <Label className="text-muted-foreground">Vapi Keys</Label>
+                      <Label className="text-muted-foreground">Call Provider</Label>
                       <p className="font-medium">
-                        {data.vapi_key_source === "system" ? "System Keys (Bill to Client)" : "Client's Own Keys"}
+                        {data.call_provider === "vapi" ? "Vapi" : data.call_provider === "autocalls" ? "AutoCalls.ai" : "Synthflow"}
+                        {" "}
+                        ({data.call_provider === "vapi"
+                          ? (data.vapi_key_source === "system" ? "System Keys" : "Client Keys")
+                          : data.call_provider === "autocalls"
+                          ? (data.autocalls_key_source === "system" ? "System Keys" : "Client Keys")
+                          : (data.synthflow_key_source === "system" ? "System Keys" : "Client Keys")
+                        })
                       </p>
-                    </div>
-                    <div>
-                      <Label className="text-muted-foreground">Assistant ID</Label>
-                      <p className="font-medium font-mono text-sm truncate">{data.vapi_assistant_id || "Not set"}</p>
                     </div>
                     <div>
                       <Label className="text-muted-foreground">Schedule</Label>
                       <p className="font-medium">
-                        {data.schedule_days.map((d) => DAYS_OF_WEEK.find((day) => day.value === d)?.label).join(", ")}
+                        {data.schedule_days.map((d) => DAYS_OF_WEEK.find((day) => day.value === d)?.label.slice(0,3)).join(", ")}
                         {" "}{data.schedule_start_time} - {data.schedule_end_time}
                       </p>
                     </div>
@@ -1147,25 +1240,29 @@ export default function NewOutboundCampaignPage() {
                       <p className="font-medium">${data.rate_per_minute}/min</p>
                     </div>
                     <div>
-                      <Label className="text-muted-foreground">Retry</Label>
+                      <Label className="text-muted-foreground">Limits</Label>
                       <p className="font-medium">
-                        {data.retry_enabled ? `${data.retry_attempts} attempts` : "Disabled"}
+                        {data.max_concurrent_calls} concurrent, {data.calls_per_minute}/min
                       </p>
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
+              {/* Test Mode Settings */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">Launch Mode</CardTitle>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <TestTube className="h-4 w-4" />
+                    Test Mode Settings
+                  </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <Label>Test Mode</Label>
+                      <Label>Enable Test Mode</Label>
                       <p className="text-sm text-muted-foreground">
-                        Make a limited number of test calls before going live
+                        When enabled, campaign will pause after the test call limit is reached
                       </p>
                     </div>
                     <Switch
@@ -1183,8 +1280,43 @@ export default function NewOutboundCampaignPage() {
                         min={1}
                         max={100}
                       />
+                      <p className="text-xs text-muted-foreground">
+                        Campaign will automatically pause after this many calls. You can then review results and decide to continue.
+                      </p>
                     </div>
                   )}
+                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+                    <div className="flex gap-2">
+                      <Info className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                      <div className="text-sm text-blue-700 dark:text-blue-300">
+                        <strong>Recommended:</strong> Enable test mode for new campaigns. Make 5-10 test calls to verify your AI agent
+                        is working correctly before launching at full scale.
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* What Happens Next */}
+              <Card className="border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/20">
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2 text-green-700 dark:text-green-300">
+                    <CheckCircle className="h-4 w-4" />
+                    What Happens After Creating
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <ol className="list-decimal list-inside space-y-2 text-sm">
+                    <li><strong>Campaign Created as Draft</strong> - Your campaign will be saved but not started yet</li>
+                    <li><strong>Webhook URL Generated</strong> - A unique webhook URL will be created for receiving call data</li>
+                    <li><strong>Upload Contacts</strong> - Add your contact list from the campaign details page</li>
+                    <li><strong>Start Campaign</strong> - When ready, start the campaign from the campaign card or details page</li>
+                  </ol>
+                  <div className="pt-2 border-t border-green-200 dark:border-green-800">
+                    <p className="text-sm text-green-700 dark:text-green-300">
+                      <strong>Note:</strong> Campaigns are created in &quot;draft&quot; status. You control when to start calling from the campaign management page.
+                    </p>
+                  </div>
                 </CardContent>
               </Card>
             </div>
@@ -1273,10 +1405,10 @@ export default function NewOutboundCampaignPage() {
             </Button>
           )}
           {currentStep === STEPS.length ? (
-            <Button onClick={handleLaunch} disabled={isSubmitting || !createdCampaignId}>
+            <Button onClick={handleCreateCampaign} disabled={isSubmitting}>
               {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              <Play className="mr-2 h-4 w-4" />
-              {data.is_test_mode ? "Start Test" : "Launch Campaign"}
+              <CheckCircle className="mr-2 h-4 w-4" />
+              Create Campaign
             </Button>
           ) : (
             <Button onClick={handleNext} disabled={isSubmitting || isValidatingVapi || !canProceed()}>
