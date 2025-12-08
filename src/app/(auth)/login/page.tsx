@@ -87,14 +87,20 @@ export default function LoginPage() {
 
       // Set session in Supabase client
       if (data.session) {
-        await supabase.auth.setSession({
-          access_token: data.session.access_token,
-          refresh_token: data.session.refresh_token,
-        });
+        try {
+          await supabase.auth.setSession({
+            access_token: data.session.access_token,
+            refresh_token: data.session.refresh_token,
+          });
+        } catch (sessionError) {
+          console.error("Session set error:", sessionError);
+          // Continue anyway - the session is valid, just couldn't be set client-side
+        }
       }
 
       window.location.href = "/";
-    } catch {
+    } catch (err) {
+      console.error("Login error:", err);
       toast({
         title: "Error",
         description: "An unexpected error occurred",

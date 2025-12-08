@@ -38,7 +38,10 @@ export async function updateSession(request: NextRequest) {
   // Public routes that don't require authentication
   const publicRoutes = [
     "/login",
+    "/forgot-password",
+    "/reset-password",
     "/accept-invite",
+    "/api/auth", // Auth endpoints (login, logout, etc.)
     "/api/webhooks",
     "/api/setup",
     "/api/admin/clients/accept-invite",

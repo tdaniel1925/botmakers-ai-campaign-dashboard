@@ -71,6 +71,13 @@ interface WebhookLog {
       name: string;
     } | null;
   } | null;
+  inbound_campaigns: {
+    name: string;
+    webhook_token: string;
+    clients: {
+      name: string;
+    } | null;
+  } | null;
 }
 
 // Helper to detect fields from payload
@@ -297,7 +304,7 @@ function LogDetailModal({ log, open, onClose, onReprocess }: { log: WebhookLog |
             </span>
           </DialogTitle>
           <DialogDescription>
-            {log.campaigns?.name} • {log.campaigns?.clients?.name}
+            {getCampaignInfo(log).name} • {getCampaignInfo(log).clientName}
           </DialogDescription>
         </DialogHeader>
 
@@ -425,6 +432,16 @@ function LogDetailModal({ log, open, onClose, onReprocess }: { log: WebhookLog |
 
 const ITEMS_PER_PAGE = 50;
 
+// Helper to get campaign info from either campaigns or inbound_campaigns
+function getCampaignInfo(log: WebhookLog) {
+  const campaign = log.campaigns || log.inbound_campaigns;
+  return {
+    name: campaign?.name || "Unknown Campaign",
+    clientName: campaign?.clients?.name || "Unknown Client",
+    webhookToken: campaign?.webhook_token,
+  };
+}
+
 export default function WebhookLogsPage() {
   const [logs, setLogs] = useState<WebhookLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -451,12 +468,19 @@ export default function WebhookLogsPage() {
     // Calculate pagination offset
     const offset = (currentPage - 1) * ITEMS_PER_PAGE;
 
-    // Build query
+    // Build query - fetch both legacy campaigns and inbound_campaigns
     let query = supabase
       .from("webhook_logs")
       .select(`
         *,
         campaigns (
+          name,
+          webhook_token,
+          clients (
+            name
+          )
+        ),
+        inbound_campaigns (
           name,
           webhook_token,
           clients (
@@ -484,15 +508,23 @@ export default function WebhookLogsPage() {
     setLogs(typedLogs);
     setTotalCount(count || 0);
 
-    // Fetch all campaigns for filter dropdown (separate query)
-    const { data: allCampaigns } = await supabase
+    // Fetch all campaigns for filter dropdown (from both tables)
+    const { data: legacyCampaigns } = await supabase
       .from("campaigns")
       .select("id, name")
       .order("name");
 
-    if (allCampaigns) {
-      setCampaigns(allCampaigns);
-    }
+    const { data: inboundCampaigns } = await supabase
+      .from("inbound_campaigns")
+      .select("id, name")
+      .order("name");
+
+    const allCampaigns = [
+      ...(legacyCampaigns || []),
+      ...(inboundCampaigns || []),
+    ].sort((a, b) => a.name.localeCompare(b.name));
+
+    setCampaigns(allCampaigns);
 
     setIsLoading(false);
   }, [supabase, dateRange, currentPage]);
@@ -517,8 +549,9 @@ export default function WebhookLogsPage() {
     // Search filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
-      const matchesCampaign = log.campaigns?.name?.toLowerCase().includes(query);
-      const matchesClient = log.campaigns?.clients?.name?.toLowerCase().includes(query);
+      const campaignInfo = getCampaignInfo(log);
+      const matchesCampaign = campaignInfo.name.toLowerCase().includes(query);
+      const matchesClient = campaignInfo.clientName.toLowerCase().includes(query);
       const matchesPhone = analysis.phone?.toLowerCase().includes(query);
       if (!matchesCampaign && !matchesClient && !matchesPhone) return false;
     }
@@ -697,6 +730,7 @@ export default function WebhookLogsPage() {
               {filteredLogs.map((log) => {
                 const analysis = analyzePayload(log.payload);
                 const isPing = log.error_message === "Ping received (no transcript)";
+                const campaignInfo = getCampaignInfo(log);
 
                 return (
                   <div
@@ -724,13 +758,13 @@ export default function WebhookLogsPage() {
                     {/* Main Info */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="font-medium truncate">{log.campaigns?.name || "Unknown Campaign"}</span>
+                        <span className="font-medium truncate">{campaignInfo.name}</span>
                         <Badge variant={isPing ? "secondary" : log.status === "success" ? "success" : "destructive"} className="shrink-0">
                           {isPing ? "Ping" : log.status === "success" ? "Call" : "Failed"}
                         </Badge>
                       </div>
                       <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        <span>{log.campaigns?.clients?.name || "Unknown Client"}</span>
+                        <span>{campaignInfo.clientName}</span>
                         {analysis.phone && (
                           <span className="font-mono">{analysis.phone}</span>
                         )}
