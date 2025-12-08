@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Card,
   CardContent,
@@ -27,6 +28,23 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import {
   Plus,
@@ -37,10 +55,17 @@ import {
   Settings,
   Trash2,
   Copy,
-  Webhook,
   Phone,
   Loader2,
+  LayoutGrid,
+  LayoutList,
+  RefreshCw,
+  Pause,
+  Play,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
 
 interface InboundCampaign {
   id: string;
@@ -75,6 +100,11 @@ export default function InboundCampaignsPage() {
   const [campaigns, setCampaigns] = useState<InboundCampaign[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -82,12 +112,13 @@ export default function InboundCampaignsPage() {
   }, []);
 
   const fetchCampaigns = async () => {
+    setIsLoading(true);
     try {
       const response = await fetch("/api/admin/inbound-campaigns");
       if (!response.ok) throw new Error("Failed to fetch campaigns");
       const data = await response.json();
       setCampaigns(data);
-    } catch (error) {
+    } catch {
       toast({
         title: "Error",
         description: "Failed to load campaigns",
@@ -132,11 +163,144 @@ export default function InboundCampaignsPage() {
     }
   };
 
-  const filteredCampaigns = campaigns.filter(
-    (campaign) =>
+  const handleToggleActive = async (id: string, isActive: boolean) => {
+    try {
+      const response = await fetch(`/api/admin/inbound-campaigns/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_active: isActive }),
+      });
+
+      if (!response.ok) throw new Error("Failed to update");
+
+      toast({
+        title: isActive ? "Campaign Activated" : "Campaign Paused",
+        description: isActive ? "Webhooks are now accepted" : "Webhooks are now rejected",
+      });
+
+      fetchCampaigns();
+    } catch {
+      toast({
+        title: "Error",
+        description: "Failed to update campaign",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Bulk actions
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filteredCampaigns.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredCampaigns.map((c) => c.id)));
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    const newSelected = new Set(selectedIds);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedIds(newSelected);
+  };
+
+  const handleBulkActivate = async () => {
+    setIsSubmitting(true);
+    try {
+      await Promise.all(
+        Array.from(selectedIds).map((id) =>
+          fetch(`/api/admin/inbound-campaigns/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ is_active: true }),
+          })
+        )
+      );
+      toast({
+        title: "Campaigns Activated",
+        description: `${selectedIds.size} campaign(s) are now active`,
+      });
+      setSelectedIds(new Set());
+      fetchCampaigns();
+    } catch {
+      toast({
+        title: "Error",
+        description: "Failed to activate some campaigns",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleBulkPause = async () => {
+    setIsSubmitting(true);
+    try {
+      await Promise.all(
+        Array.from(selectedIds).map((id) =>
+          fetch(`/api/admin/inbound-campaigns/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ is_active: false }),
+          })
+        )
+      );
+      toast({
+        title: "Campaigns Paused",
+        description: `${selectedIds.size} campaign(s) are now paused`,
+      });
+      setSelectedIds(new Set());
+      fetchCampaigns();
+    } catch {
+      toast({
+        title: "Error",
+        description: "Failed to pause some campaigns",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    setIsSubmitting(true);
+    try {
+      await Promise.all(
+        Array.from(selectedIds).map((id) =>
+          fetch(`/api/admin/inbound-campaigns/${id}`, { method: "DELETE" })
+        )
+      );
+      toast({
+        title: "Campaigns Deleted",
+        description: `${selectedIds.size} campaign(s) have been deleted`,
+      });
+      setSelectedIds(new Set());
+      setShowBulkDeleteDialog(false);
+      fetchCampaigns();
+    } catch {
+      toast({
+        title: "Error",
+        description: "Failed to delete some campaigns",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const filteredCampaigns = campaigns.filter((campaign) => {
+    const matchesSearch =
       campaign.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      campaign.clients?.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+      campaign.clients?.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesStatus =
+      statusFilter === "all" ||
+      (statusFilter === "active" && campaign.is_active) ||
+      (statusFilter === "paused" && !campaign.is_active);
+    return matchesSearch && matchesStatus;
+  });
 
   return (
     <div className="space-y-6">
@@ -174,7 +338,7 @@ export default function InboundCampaignsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {campaigns.filter((c) => c.status === "active").length}
+              {campaigns.filter((c) => c.is_active).length}
             </div>
           </CardContent>
         </Card>
@@ -202,7 +366,94 @@ export default function InboundCampaignsPage() {
         </Card>
       </div>
 
-      {/* Campaigns Table */}
+      {/* Filters & View Toggle */}
+      <div className="flex flex-col sm:flex-row gap-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search campaigns or clients..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-[150px]">
+            <SelectValue placeholder="Filter status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Status</SelectItem>
+            <SelectItem value="active">Active</SelectItem>
+            <SelectItem value="paused">Paused</SelectItem>
+          </SelectContent>
+        </Select>
+        <div className="flex gap-1 border rounded-md p-1">
+          <Button
+            variant={viewMode === "list" ? "secondary" : "ghost"}
+            size="sm"
+            onClick={() => setViewMode("list")}
+          >
+            <LayoutList className="h-4 w-4" />
+          </Button>
+          <Button
+            variant={viewMode === "grid" ? "secondary" : "ghost"}
+            size="sm"
+            onClick={() => setViewMode("grid")}
+          >
+            <LayoutGrid className="h-4 w-4" />
+          </Button>
+        </div>
+        <Button variant="outline" size="icon" onClick={fetchCampaigns} disabled={isLoading}>
+          <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+        </Button>
+      </div>
+
+      {/* Bulk Actions Bar */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-4 p-3 bg-muted rounded-lg">
+          <span className="text-sm font-medium">
+            {selectedIds.size} selected
+          </span>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleBulkActivate}
+              disabled={isSubmitting}
+            >
+              <Play className="mr-2 h-4 w-4" />
+              Activate
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleBulkPause}
+              disabled={isSubmitting}
+            >
+              <Pause className="mr-2 h-4 w-4" />
+              Pause
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={() => setShowBulkDeleteDialog(true)}
+              disabled={isSubmitting}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete
+            </Button>
+          </div>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setSelectedIds(new Set())}
+          >
+            Clear
+          </Button>
+        </div>
+      )}
+
+      {/* Campaigns List/Grid */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -211,15 +462,6 @@ export default function InboundCampaignsPage() {
               <CardDescription>
                 Click on a campaign to view details and manage settings
               </CardDescription>
-            </div>
-            <div className="relative w-64">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search campaigns..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
-              />
             </div>
           </div>
         </CardHeader>
@@ -233,11 +475,11 @@ export default function InboundCampaignsPage() {
               <PhoneIncoming className="mx-auto h-12 w-12 text-muted-foreground/50" />
               <h3 className="mt-4 text-lg font-semibold">No campaigns found</h3>
               <p className="text-muted-foreground">
-                {searchQuery
+                {searchQuery || statusFilter !== "all"
                   ? "Try adjusting your search"
                   : "Create your first inbound campaign to get started"}
               </p>
-              {!searchQuery && (
+              {!searchQuery && statusFilter === "all" && (
                 <Link href="/admin/inbound/new">
                   <Button className="mt-4">
                     <Plus className="mr-2 h-4 w-4" />
@@ -246,21 +488,34 @@ export default function InboundCampaignsPage() {
                 </Link>
               )}
             </div>
-          ) : (
+          ) : viewMode === "list" ? (
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-12">
+                    <Checkbox
+                      checked={selectedIds.size === filteredCampaigns.length && filteredCampaigns.length > 0}
+                      onCheckedChange={toggleSelectAll}
+                    />
+                  </TableHead>
                   <TableHead>Campaign</TableHead>
                   <TableHead>Client</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Calls</TableHead>
                   <TableHead>Phone Number</TableHead>
+                  <TableHead>Created</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredCampaigns.map((campaign) => (
                   <TableRow key={campaign.id}>
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedIds.has(campaign.id)}
+                        onCheckedChange={() => toggleSelect(campaign.id)}
+                      />
+                    </TableCell>
                     <TableCell>
                       <Link
                         href={`/admin/inbound/${campaign.id}`}
@@ -285,9 +540,9 @@ export default function InboundCampaignsPage() {
                     <TableCell>
                       <Badge
                         variant="secondary"
-                        className={statusColors[campaign.status] || ""}
+                        className={campaign.is_active ? statusColors.active : statusColors.paused}
                       >
-                        {campaign.status}
+                        {campaign.is_active ? "Active" : "Paused"}
                       </Badge>
                     </TableCell>
                     <TableCell>
@@ -300,6 +555,9 @@ export default function InboundCampaignsPage() {
                       {campaign.campaign_phone_numbers?.[0]?.phone_number || (
                         <span className="text-muted-foreground">Not assigned</span>
                       )}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {formatDistanceToNow(new Date(campaign.created_at), { addSuffix: true })}
                     </TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>
@@ -321,12 +579,22 @@ export default function InboundCampaignsPage() {
                             <Copy className="mr-2 h-4 w-4" />
                             Copy Webhook URL
                           </DropdownMenuItem>
-                          <DropdownMenuItem asChild>
-                            <Link href={`/admin/inbound/${campaign.id}/settings`}>
-                              <Settings className="mr-2 h-4 w-4" />
-                              Settings
-                            </Link>
-                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          {campaign.is_active ? (
+                            <DropdownMenuItem
+                              onClick={() => handleToggleActive(campaign.id, false)}
+                            >
+                              <Pause className="mr-2 h-4 w-4" />
+                              Pause Campaign
+                            </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem
+                              onClick={() => handleToggleActive(campaign.id, true)}
+                            >
+                              <Play className="mr-2 h-4 w-4" />
+                              Activate Campaign
+                            </DropdownMenuItem>
+                          )}
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
                             onClick={() => handleDelete(campaign.id, campaign.name)}
@@ -342,9 +610,95 @@ export default function InboundCampaignsPage() {
                 ))}
               </TableBody>
             </Table>
+          ) : (
+            /* Grid View */
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {filteredCampaigns.map((campaign) => (
+                <Card key={campaign.id} className="relative">
+                  <div className="absolute top-3 left-3">
+                    <Checkbox
+                      checked={selectedIds.has(campaign.id)}
+                      onCheckedChange={() => toggleSelect(campaign.id)}
+                    />
+                  </div>
+                  <CardHeader className="pl-10">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <Link href={`/admin/inbound/${campaign.id}`}>
+                          <CardTitle className="text-lg hover:underline cursor-pointer">
+                            {campaign.name}
+                          </CardTitle>
+                        </Link>
+                        <CardDescription>
+                          {campaign.clients?.name}
+                          {campaign.clients?.company_name && ` (${campaign.clients.company_name})`}
+                        </CardDescription>
+                      </div>
+                      <Badge
+                        variant="secondary"
+                        className={campaign.is_active ? statusColors.active : statusColors.paused}
+                      >
+                        {campaign.is_active ? "Active" : "Paused"}
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <p className="text-muted-foreground">Total Calls</p>
+                        <p className="font-medium">{campaign.total_calls || 0}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Completed</p>
+                        <p className="font-medium">{campaign.calls_completed || 0}</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" className="flex-1" asChild>
+                        <Link href={`/admin/inbound/${campaign.id}`}>
+                          <Eye className="mr-2 h-4 w-4" />
+                          View
+                        </Link>
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => copyWebhookUrl(campaign.webhook_token)}
+                      >
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
           )}
         </CardContent>
       </Card>
+
+      {/* Bulk Delete Confirmation */}
+      <AlertDialog open={showBulkDeleteDialog} onOpenChange={setShowBulkDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {selectedIds.size} Campaign(s)</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete {selectedIds.size} campaign(s)? This action cannot
+              be undone and will permanently remove all associated data.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isSubmitting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkDelete}
+              disabled={isSubmitting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
