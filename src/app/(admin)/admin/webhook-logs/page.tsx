@@ -562,40 +562,42 @@ export default function WebhookLogsPage() {
     fetchLogs();
   }, [fetchLogs]);
 
-  // Real-time subscription for new webhook logs
+  // Auto-refresh logs every 5 seconds when page is visible
   useEffect(() => {
-    // Subscribe to legacy webhook_logs
-    const legacyChannel = supabase
-      .channel("webhook_logs_realtime")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "webhook_logs" },
-        () => {
-          // Refetch logs when a new webhook arrives
+    let intervalId: NodeJS.Timeout | null = null;
+
+    const startPolling = () => {
+      // Poll every 5 seconds
+      intervalId = setInterval(() => {
+        if (!document.hidden) {
           fetchLogs();
         }
-      )
-      .subscribe();
-
-    // Subscribe to inbound campaign webhook logs
-    const inboundChannel = supabase
-      .channel("inbound_webhook_logs_realtime")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "inbound_campaign_webhook_logs" },
-        () => {
-          // Refetch logs when a new webhook arrives
-          fetchLogs();
-        }
-      )
-      .subscribe();
-
-    // Cleanup subscriptions on unmount
-    return () => {
-      supabase.removeChannel(legacyChannel);
-      supabase.removeChannel(inboundChannel);
+      }, 5000);
     };
-  }, [supabase, fetchLogs]);
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        // Stop polling when tab is hidden
+        if (intervalId) {
+          clearInterval(intervalId);
+          intervalId = null;
+        }
+      } else {
+        // Resume polling and fetch immediately when tab becomes visible
+        fetchLogs();
+        startPolling();
+      }
+    };
+
+    // Start polling
+    startPolling();
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [fetchLogs]);
 
   // Filter logs
   const filteredLogs = logs.filter(log => {
