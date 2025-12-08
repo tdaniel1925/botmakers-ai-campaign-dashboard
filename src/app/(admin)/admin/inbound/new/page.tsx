@@ -218,7 +218,7 @@ export default function NewInboundCampaignPage() {
             <Button variant="outline" onClick={() => router.push("/admin/inbound")}>
               View All Campaigns
             </Button>
-            <Button onClick={() => router.push(`/admin/campaigns/${createdCampaign.id}`)}>
+            <Button onClick={() => router.push(`/admin/inbound/${createdCampaign.id}`)}>
               Go to Campaign
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
