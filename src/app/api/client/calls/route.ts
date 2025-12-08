@@ -163,11 +163,11 @@ export async function GET(request: Request) {
             campaign_id,
             caller_phone,
             status,
-            sentiment,
+            ai_sentiment,
             duration_seconds,
             transcript,
             audio_url,
-            summary,
+            ai_summary,
             created_at,
             inbound_campaign_outcome_tags (
               tag_name,
@@ -178,7 +178,7 @@ export async function GET(request: Request) {
           .order("created_at", { ascending: false });
 
         if (sentiment && sentiment !== "all") {
-          inboundQuery = inboundQuery.eq("sentiment", sentiment);
+          inboundQuery = inboundQuery.eq("ai_sentiment", sentiment);
         }
 
         if (search) {
@@ -205,11 +205,11 @@ export async function GET(request: Request) {
               caller_phone: call.caller_phone,
               status: call.status || "unknown",
               outcome: null,
-              sentiment: call.sentiment,
+              sentiment: call.ai_sentiment,
               duration_seconds: call.duration_seconds || 0,
               transcript: call.transcript,
               audio_url: call.audio_url,
-              summary: call.summary,
+              summary: call.ai_summary,
               created_at: call.created_at,
               outcome_tag: outcomeTag,
             });
@@ -253,12 +253,13 @@ export async function GET(request: Request) {
           outboundQuery = outboundQuery.ilike("transcript", `%${search}%`);
         }
 
-        const { data: outboundCalls, count: outboundCount, error: outboundError } = await outboundQuery;
+        const { data: outboundCalls, error: outboundError } = await outboundQuery;
 
         if (outboundError) {
           console.error("Error fetching outbound calls:", outboundError);
         } else if (outboundCalls) {
-          totalCount += outboundCount || 0;
+          // Process outbound calls and count after filtering
+          let outboundFilteredCount = 0;
           for (const call of outboundCalls) {
             // Contacts come as arrays from the join
             const contacts = call.campaign_contacts as unknown as Array<{ phone_number: string }>;
@@ -268,11 +269,12 @@ export async function GET(request: Request) {
             if (call.outcome === "positive") callSentiment = "positive";
             else if (call.outcome === "negative") callSentiment = "negative";
 
-            // Apply sentiment filter for outbound calls
+            // Apply sentiment filter for outbound calls - skip if doesn't match
             if (sentiment && sentiment !== "all" && callSentiment !== sentiment) {
               continue;
             }
 
+            outboundFilteredCount++;
             calls.push({
               id: call.id,
               campaign_type: "outbound",
@@ -290,6 +292,7 @@ export async function GET(request: Request) {
               outcome_tag: null,
             });
           }
+          totalCount += outboundFilteredCount;
         }
       }
     }

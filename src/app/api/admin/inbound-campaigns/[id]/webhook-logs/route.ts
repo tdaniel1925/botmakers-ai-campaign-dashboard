@@ -29,7 +29,7 @@ export async function GET(
     }
 
     const { data: logs, error } = await supabase
-      .from("webhook_logs")
+      .from("inbound_campaign_webhook_logs")
       .select("id, status, error_message, created_at")
       .eq("campaign_id", id)
       .order("created_at", { ascending: false })

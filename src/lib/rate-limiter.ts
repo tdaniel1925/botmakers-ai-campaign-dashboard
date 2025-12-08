@@ -193,8 +193,11 @@ export const authRateLimiter = new UnifiedRateLimiter(
 
 // ============= AI Processing Queue with Database Persistence =============
 
+type CallType = "legacy" | "inbound";
+
 interface QueuedJob {
   callId: string;
+  callType: CallType;
   processor: () => Promise<void>;
   retries: number;
   addedAt: number;
@@ -217,9 +220,10 @@ class AIProcessingQueue {
     this.retryDelayMs = retryDelayMs;
   }
 
-  async add(callId: string, processor: () => Promise<void>): Promise<void> {
+  async add(callId: string, processor: () => Promise<void>, callType: CallType = "legacy"): Promise<void> {
     this.queue.push({
       callId,
+      callType,
       processor,
       retries: 0,
       addedAt: Date.now(),
@@ -257,8 +261,8 @@ class AIProcessingQueue {
         }, this.retryDelayMs * job.retries);
       } else {
         console.error(`Max retries exceeded for call ${job.callId}`);
-        // Mark as failed in database
-        await this.markAsFailed(job.callId, error);
+        // Mark as failed in database using the correct table
+        await this.markAsFailed(job.callId, error, job.callType);
       }
     } finally {
       this.processing--;
@@ -267,7 +271,7 @@ class AIProcessingQueue {
     }
   }
 
-  private async markAsFailed(callId: string, error: unknown): Promise<void> {
+  private async markAsFailed(callId: string, error: unknown, callType: CallType = "legacy"): Promise<void> {
     try {
       // Import dynamically to avoid circular dependency
       const { createClient } = await import("@supabase/supabase-js");
@@ -276,12 +280,16 @@ class AIProcessingQueue {
         process.env.SUPABASE_SERVICE_ROLE_KEY!
       );
 
+      // Use the correct table based on call type
+      const table = callType === "inbound" ? "inbound_campaign_calls" : "calls";
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+
       await supabase
-        .from("calls")
+        .from(table)
         .update({
-          status: "ai_failed",
+          status: callType === "inbound" ? "failed" : "ai_failed",
           ai_processed_at: new Date().toISOString(),
-          error_message: error instanceof Error ? error.message : "Unknown error",
+          error_message: errorMessage,
         })
         .eq("id", callId);
     } catch (dbError) {
@@ -330,33 +338,40 @@ class WebhookDeduplicator {
   /**
    * Check if this webhook has been processed recently
    * Returns true if it's a duplicate
+   * Uses atomic SET NX (set-if-not-exists) to prevent race conditions
    */
   async isDuplicate(campaignId: string, externalCallId: string): Promise<boolean> {
     if (!externalCallId) return false;
 
     const key = `webhook:dedup:${campaignId}:${externalCallId}`;
 
-    // Try Redis first
+    // Try Redis first with atomic SET NX EX operation
     if (this.redis) {
       try {
-        const exists = await this.redis.exists(key);
-        if (exists) return true;
+        // Use SET with NX (only set if not exists) and EX (expiry) - this is atomic
+        // Returns "OK" if the key was set, null if the key already exists
+        const result = await this.redis.set(key, Date.now(), {
+          nx: true, // Only set if key does not exist
+          ex: Math.floor(this.ttlMs / 1000), // Expiry in seconds
+        });
 
-        // Set with TTL
-        await this.redis.set(key, Date.now(), { ex: Math.floor(this.ttlMs / 1000) });
-        return false;
+        // If result is null/falsy, key already existed - it's a duplicate
+        // If result is "OK", key was set - it's NOT a duplicate
+        return result === null;
       } catch (error) {
         console.warn("Redis dedup check failed, using memory:", error);
       }
     }
 
-    // Fallback to in-memory
+    // Fallback to in-memory with locking via synchronous Map operations
     const existing = this.inMemoryCache.get(key);
-    if (existing && Date.now() - existing < this.ttlMs) {
+    const now = Date.now();
+    if (existing && now - existing < this.ttlMs) {
       return true;
     }
 
-    this.inMemoryCache.set(key, Date.now());
+    // Set immediately to minimize race window (Map operations are synchronous)
+    this.inMemoryCache.set(key, now);
     return false;
   }
 

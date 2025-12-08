@@ -70,11 +70,6 @@ const campaignItems = {
       href: "/admin/outbound",
       icon: PhoneOutgoing,
     },
-    {
-      title: "Legacy Campaigns",
-      href: "/admin/campaigns",
-      icon: Megaphone,
-    },
   ],
 };
 

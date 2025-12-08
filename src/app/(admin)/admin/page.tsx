@@ -6,50 +6,54 @@ import Link from "next/link";
 export default async function AdminDashboardPage() {
   const supabase = await createClient();
 
-  // Fetch stats
-  const [clientsResult, campaignsResult, callsResult] = await Promise.all([
+  // Fetch stats - include both inbound and outbound campaigns
+  const [clientsResult, inboundCampaignsResult, outboundCampaignsResult, legacyCallsResult, inboundCallsResult] = await Promise.all([
     supabase.from("clients").select("id", { count: "exact", head: true }),
-    supabase.from("campaigns").select("id", { count: "exact", head: true }),
+    supabase.from("inbound_campaigns").select("id", { count: "exact", head: true }),
+    supabase.from("outbound_campaigns").select("id", { count: "exact", head: true }),
     supabase.from("calls").select("id", { count: "exact", head: true }),
+    supabase.from("inbound_campaign_calls").select("id", { count: "exact", head: true }),
   ]);
 
   const totalClients = clientsResult.count || 0;
-  const totalCampaigns = campaignsResult.count || 0;
-  const totalCalls = callsResult.count || 0;
+  const totalCampaigns = (inboundCampaignsResult.count || 0) + (outboundCampaignsResult.count || 0);
+  const totalCalls = (legacyCallsResult.count || 0) + (inboundCallsResult.count || 0);
 
-  // Get today's calls
+  // Get today's calls (including both legacy and inbound)
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const { count: todayCalls } = await supabase
-    .from("calls")
-    .select("id", { count: "exact", head: true })
-    .gte("created_at", today.toISOString());
+  const [todayLegacyCalls, todayInboundCalls] = await Promise.all([
+    supabase.from("calls").select("id", { count: "exact", head: true }).gte("created_at", today.toISOString()),
+    supabase.from("inbound_campaign_calls").select("id", { count: "exact", head: true }).gte("created_at", today.toISOString()),
+  ]);
+  const todayCalls = (todayLegacyCalls.count || 0) + (todayInboundCalls.count || 0);
 
-  // Get failed webhooks in last 24 hours
+  // Get failed webhooks in last 24 hours (both legacy and inbound)
   const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const { count: failedWebhooks } = await supabase
-    .from("webhook_logs")
-    .select("id", { count: "exact", head: true })
-    .eq("status", "failed")
-    .gte("created_at", yesterday.toISOString());
+  const [failedLegacyWebhooks, failedInboundWebhooks] = await Promise.all([
+    supabase.from("webhook_logs").select("id", { count: "exact", head: true }).eq("status", "failed").gte("created_at", yesterday.toISOString()),
+    supabase.from("inbound_campaign_webhook_logs").select("id", { count: "exact", head: true }).eq("status", "failed").gte("created_at", yesterday.toISOString()),
+  ]);
+  const failedWebhooks = (failedLegacyWebhooks.count || 0) + (failedInboundWebhooks.count || 0);
 
-  // Get failed AI processing calls
-  const { count: failedAICalls } = await supabase
-    .from("calls")
-    .select("id", { count: "exact", head: true })
-    .eq("status", "ai_failed");
+  // Get failed AI processing calls (both legacy and inbound)
+  const [failedLegacyAICalls, failedInboundAICalls] = await Promise.all([
+    supabase.from("calls").select("id", { count: "exact", head: true }).eq("status", "ai_failed"),
+    supabase.from("inbound_campaign_calls").select("id", { count: "exact", head: true }).eq("status", "failed"),
+  ]);
+  const failedAICalls = (failedLegacyAICalls.count || 0) + (failedInboundAICalls.count || 0);
 
-  // Get inactive campaigns that have had recent webhook attempts
+  // Get inactive inbound campaigns that have had recent webhook attempts
   const { data: inactiveCampaignsWithActivity } = await supabase
-    .from("campaigns")
+    .from("inbound_campaigns")
     .select(`
       id,
       name,
       is_active,
-      webhook_logs!inner (id)
+      inbound_campaign_webhook_logs!inner (id)
     `)
     .eq("is_active", false)
-    .gte("webhook_logs.created_at", yesterday.toISOString())
+    .gte("inbound_campaign_webhook_logs.created_at", yesterday.toISOString())
     .limit(5);
 
   const hasAlerts = (failedWebhooks || 0) > 0 || (failedAICalls || 0) > 0 || (inactiveCampaignsWithActivity?.length || 0) > 0;
@@ -76,21 +80,21 @@ export default async function AdminDashboardPage() {
           value={totalCampaigns}
           description="Across all clients"
           icon={Megaphone}
-          href="/admin/campaigns"
+          href="/admin/inbound"
         />
         <StatsCard
           title="Total Calls"
           value={totalCalls}
           description="All time"
           icon={Phone}
-          href="/admin/campaigns"
+          href="/admin/calls"
         />
         <StatsCard
           title="Today's Calls"
           value={todayCalls || 0}
           description="Calls received today"
           icon={TrendingUp}
-          href="/admin/campaigns"
+          href="/admin/calls"
         />
       </div>
 
@@ -120,7 +124,7 @@ export default async function AdminDashboardPage() {
             )}
             {(failedAICalls || 0) > 0 && (
               <Link
-                href="/admin/campaigns"
+                href="/admin/calls"
                 className="flex items-center gap-3 p-3 rounded-md bg-white dark:bg-background hover:bg-orange-50 dark:hover:bg-orange-950/30 border border-orange-200 dark:border-orange-900 transition-colors"
               >
                 <AlertTriangle className="h-5 w-5 text-orange-500" />
@@ -136,7 +140,7 @@ export default async function AdminDashboardPage() {
             )}
             {(inactiveCampaignsWithActivity?.length || 0) > 0 && (
               <Link
-                href="/admin/campaigns"
+                href="/admin/inbound"
                 className="flex items-center gap-3 p-3 rounded-md bg-white dark:bg-background hover:bg-yellow-50 dark:hover:bg-yellow-950/30 border border-yellow-200 dark:border-yellow-900 transition-colors"
               >
                 <PauseCircle className="h-5 w-5 text-yellow-600" />
@@ -196,12 +200,12 @@ export default async function AdminDashboardPage() {
               </div>
             </Link>
             <Link
-              href="/admin/campaigns"
+              href="/admin/inbound/new"
               className="block p-3 rounded-md hover:bg-muted transition-colors"
             >
-              <div className="font-medium">Create Campaign</div>
+              <div className="font-medium">Create Inbound Campaign</div>
               <div className="text-sm text-muted-foreground">
-                Set up a new campaign with webhooks
+                Set up a new inbound campaign with webhooks
               </div>
             </Link>
           </div>

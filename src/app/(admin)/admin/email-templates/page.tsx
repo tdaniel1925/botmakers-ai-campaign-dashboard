@@ -66,7 +66,7 @@ const templateVariables: Record<string, string[]> = {
   re_invite: ["{{recipientName}}", "{{username}}", "{{tempPassword}}", "{{loginUrl}}", "{{companyName}}"],
 };
 
-const sampleData: Record<string, Record<string, string>> = {
+const sampleData: Record<string, Record<string, unknown>> = {
   welcome: {
     recipientName: "John Smith",
     username: "john.smith",
@@ -77,17 +77,21 @@ const sampleData: Record<string, Record<string, string>> = {
   campaign_report: {
     recipientName: "John Smith",
     reportPeriod: "November 2024",
-    totalCalls: "156",
-    positiveOutcomes: "89",
-    avgDuration: "3m 45s",
+    totalCalls: 156,
+    totalCampaigns: 3,
+    overallPositiveRate: 72,
     dashboardUrl: "https://app.botmakers.io/dashboard",
     companyName: "BotMakers",
-    reportFrequency: "weekly",
+    campaigns: [
+      { name: "Sales Outreach", totalCalls: 89, positiveRate: 78, avgDuration: "3:45" },
+      { name: "Customer Support", totalCalls: 45, positiveRate: 65, avgDuration: "5:20" },
+      { name: "Follow-up Calls", totalCalls: 22, positiveRate: 68, avgDuration: "2:15" },
+    ],
   },
   password_reset: {
     recipientName: "John Smith",
     username: "john.smith",
-    tempPassword: "New@456#Pass",
+    newTempPassword: "New@456#Pass",
     loginUrl: "https://app.botmakers.io/login",
     companyName: "BotMakers",
   },
@@ -246,12 +250,18 @@ export default function EmailTemplatesPage() {
 
     setPreviewLoading(true);
     try {
+      // Include edited template data (like primaryColor) with sample data
+      const previewProps = {
+        ...(sampleData[selectedTemplate.slug] || sampleData.welcome),
+        primaryColor: editedTemplate.primary_color || selectedTemplate.primary_color,
+      };
+
       const response = await fetch("/api/admin/email/preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           templateType: selectedTemplate.slug,
-          props: sampleData[selectedTemplate.slug] || sampleData.welcome,
+          props: previewProps,
         }),
       });
 
@@ -261,7 +271,7 @@ export default function EmailTemplatesPage() {
         setPreviewHtml(data.html);
         setShowPreview(true);
       } else {
-        showNotification("error", "Failed to generate preview");
+        showNotification("error", data.error || "Failed to generate preview");
       }
     } catch (error) {
       console.error("Error generating preview:", error);

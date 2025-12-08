@@ -207,16 +207,16 @@ async function processInboundCallWithAI(supabase: SupabaseClientType, callId: st
   }
 
   // Update call record with AI results
-  // Note: inbound_campaign_calls uses different column names
+  // Note: inbound_campaign_calls uses ai_ prefixed column names
   const { error: updateError } = await supabase
     .from("inbound_campaign_calls")
     .update({
-      summary: result.summary,
+      ai_summary: result.summary,
       outcome_tag_id: outcomeTagId,
-      sentiment: result.sentiment,
-      key_points: result.keyPoints,
-      caller_intent: result.callerIntent,
-      resolution: result.resolution,
+      ai_sentiment: result.sentiment,
+      ai_key_points: result.keyPoints,
+      ai_caller_intent: result.callerIntent,
+      ai_resolution: result.resolution,
       ai_processed_at: new Date().toISOString(),
       status: "completed",
       updated_at: new Date().toISOString(),

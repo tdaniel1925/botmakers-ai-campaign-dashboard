@@ -43,6 +43,41 @@ function getWebhookLogTable(campaignTable: "campaigns" | "inbound_campaigns"): s
   return campaignTable === "inbound_campaigns" ? "inbound_campaign_webhook_logs" : "webhook_logs";
 }
 
+// Helper to safely insert webhook log - never throws, logs errors instead
+async function safeInsertWebhookLog(
+  supabase: ReturnType<typeof getSupabaseClient>,
+  table: string,
+  data: {
+    campaign_id: string;
+    payload: unknown;
+    status: "success" | "failed";
+    error_message?: string | null;
+  }
+): Promise<void> {
+  try {
+    const { error } = await withTimeout(
+      supabase.from(table).insert(data),
+      5000, // 5 second timeout for logging - don't block main flow
+      "Webhook log insert"
+    );
+    if (error) {
+      logger.error("Failed to insert webhook log", {
+        table,
+        campaignId: data.campaign_id,
+        status: data.status,
+        dbError: error.message,
+      });
+    }
+  } catch (err) {
+    logger.error("Exception inserting webhook log", {
+      table,
+      campaignId: data.campaign_id,
+      status: data.status,
+      error: err instanceof Error ? err.message : "Unknown error",
+    });
+  }
+}
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ token: string }> }
@@ -177,7 +212,8 @@ export async function POST(
     // If no transcript, treat as a ping/test request - acknowledge and return success
     const webhookLogTable = getWebhookLogTable(campaign.table);
     if (!extractedFields.transcript) {
-      await supabase.from(webhookLogTable).insert({
+      // Log ping - don't await, use safe helper
+      safeInsertWebhookLog(supabase, webhookLogTable, {
         campaign_id: campaign.id,
         payload,
         status: "success",
@@ -209,8 +245,8 @@ export async function POST(
       if (isDuplicate) {
         logger.webhook.duplicate(campaign.id, extractedFields.externalCallId);
 
-        // Log as duplicate but don't create a new call
-        await supabase.from(webhookLogTable).insert({
+        // Log as duplicate but don't create a new call - use safe helper
+        safeInsertWebhookLog(supabase, webhookLogTable, {
           campaign_id: campaign.id,
           payload,
           status: "success",
@@ -275,7 +311,8 @@ export async function POST(
     );
 
     if (callError || !call) {
-      await supabase.from(webhookLogTable).insert({
+      // Log failure - use safe helper
+      safeInsertWebhookLog(supabase, webhookLogTable, {
         campaign_id: campaign.id,
         payload,
         status: "failed",
@@ -288,8 +325,8 @@ export async function POST(
       );
     }
 
-    // Log success
-    await supabase.from(webhookLogTable).insert({
+    // Log success - use safe helper (don't block main response)
+    safeInsertWebhookLog(supabase, webhookLogTable, {
       campaign_id: campaign.id,
       payload,
       status: "success",
@@ -297,7 +334,7 @@ export async function POST(
 
     // Queue AI processing with correct call type
     const callType = campaign.table === "inbound_campaigns" ? "inbound" : "legacy";
-    aiQueue.add(call.id, () => processCallWithAI(call.id, callType));
+    aiQueue.add(call.id, () => processCallWithAI(call.id, callType), callType);
 
     const processingTime = Date.now() - startTime;
     logger.webhook.processed(campaign.id, call.id, processingTime);
