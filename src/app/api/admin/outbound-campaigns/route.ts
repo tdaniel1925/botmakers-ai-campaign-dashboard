@@ -20,6 +20,8 @@ export async function GET(request: Request) {
 
     const supabase = await createClient();
 
+    // Query campaigns with related data
+    // Note: campaign_phone_numbers and campaign_schedules are linked via campaign_id FK
     let query = supabase
       .from("outbound_campaigns")
       .select(
@@ -30,20 +32,6 @@ export async function GET(request: Request) {
           name,
           company_name,
           email
-        ),
-        campaign_phone_numbers (
-          id,
-          phone_number,
-          friendly_name,
-          provider
-        ),
-        campaign_schedules (
-          id,
-          days_of_week,
-          start_time,
-          end_time,
-          timezone,
-          is_active
         )
       `
       )

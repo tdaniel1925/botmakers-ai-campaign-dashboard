@@ -240,6 +240,7 @@ export async function POST(
 
     // Create call record with all extracted data (with timeout)
     // Use the correct table based on campaign type
+    // Note: inbound_campaign_calls uses "duration_seconds", legacy calls uses "call_duration"
     const callTable = campaign.table === "inbound_campaigns" ? "inbound_campaign_calls" : "calls";
     const callData = campaign.table === "inbound_campaigns"
       ? {
@@ -247,7 +248,7 @@ export async function POST(
           transcript: extractedFields.transcript,
           audio_url: extractedFields.audioUrl,
           caller_phone: extractedFields.callerPhone,
-          call_duration: extractedFields.callDuration,
+          duration_seconds: extractedFields.callDuration,
           external_call_id: extractedFields.externalCallId,
           raw_payload: payload,
           call_timestamp: parsedTimestamp,
@@ -296,8 +297,9 @@ export async function POST(
       status: "success",
     });
 
-    // Queue AI processing
-    aiQueue.add(call.id, () => processCallWithAI(call.id));
+    // Queue AI processing with correct call type
+    const callType = campaign.table === "inbound_campaigns" ? "inbound" : "legacy";
+    aiQueue.add(call.id, () => processCallWithAI(call.id, callType));
 
     const processingTime = Date.now() - startTime;
     logger.webhook.processed(campaign.id, call.id, processingTime);

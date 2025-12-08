@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -29,21 +28,17 @@ import {
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Search,
-  ChevronLeft,
-  ChevronRight,
-  Download,
-  CheckSquare,
-  XSquare,
+  Loader2,
   Phone,
   Clock,
+  ChevronLeft,
+  ChevronRight,
+  X,
+  FileText,
   PhoneIncoming,
   PhoneOutgoing,
   Megaphone,
   RefreshCw,
-  X,
-  FileText,
-  Loader2,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 
@@ -52,35 +47,47 @@ interface UnifiedCall {
   campaign_type: "legacy" | "inbound" | "outbound";
   campaign_id: string;
   campaign_name: string;
+  client_name: string;
   caller_phone: string | null;
   status: string;
   outcome: string | null;
-  sentiment: string | null;
   duration_seconds: number;
   transcript: string | null;
   audio_url: string | null;
-  summary: string | null;
   created_at: string;
-  outcome_tag?: {
-    tag_name: string;
-    tag_color: string;
-  } | null;
+  summary?: string | null;
 }
 
-export default function CallsPage() {
+interface Client {
+  id: string;
+  name: string;
+}
+
+export default function AdminCallsPage() {
   const [calls, setCalls] = useState<UnifiedCall[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [selectedCall, setSelectedCall] = useState<UnifiedCall | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [sentimentFilter, setSentimentFilter] = useState<string>("all");
   const [campaignTypeFilter, setCampaignTypeFilter] = useState<string>("all");
+  const [clientFilter, setClientFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSelectionMode, setIsSelectionMode] = useState(false);
-  const [selectedCalls, setSelectedCalls] = useState<Set<string>>(new Set());
   const { toast } = useToast();
   const fetchCallsRef = useRef<(showLoading?: boolean) => Promise<void>>();
+
+  const fetchClients = async () => {
+    try {
+      const response = await fetch("/api/admin/clients");
+      if (response.ok) {
+        const data = await response.json();
+        setClients(data.clients || []);
+      }
+    } catch (error) {
+      console.error("Error fetching clients:", error);
+    }
+  };
 
   const fetchCalls = async (showLoading = true) => {
     if (showLoading) setIsLoading(true);
@@ -91,11 +98,10 @@ export default function CallsPage() {
       });
       if (campaignTypeFilter !== "all")
         params.append("campaign_type", campaignTypeFilter);
-      if (sentimentFilter !== "all")
-        params.append("sentiment", sentimentFilter);
-      if (searchQuery) params.append("search", searchQuery);
+      if (clientFilter !== "all") params.append("client_id", clientFilter);
+      if (statusFilter !== "all") params.append("status", statusFilter);
 
-      const response = await fetch(`/api/client/calls?${params}`);
+      const response = await fetch(`/api/admin/calls/unified?${params}`);
       if (!response.ok) throw new Error("Failed to fetch calls");
       const data = await response.json();
       setCalls(data.calls);
@@ -118,14 +124,18 @@ export default function CallsPage() {
   fetchCallsRef.current = fetchCalls;
 
   useEffect(() => {
+    fetchClients();
+  }, []);
+
+  useEffect(() => {
     fetchCalls();
-  }, [page, sentimentFilter, campaignTypeFilter, searchQuery]);
+  }, [page, campaignTypeFilter, clientFilter, statusFilter]);
 
   // Background polling
   useEffect(() => {
     const intervalId = setInterval(() => {
       fetchCallsRef.current?.(false);
-    }, 30000);
+    }, 30000); // Refresh every 30 seconds
 
     return () => clearInterval(intervalId);
   }, []);
@@ -166,7 +176,7 @@ export default function CallsPage() {
         return <Badge variant="success">Completed</Badge>;
       case "in_progress":
       case "processing":
-        return <Badge variant="default">Processing</Badge>;
+        return <Badge variant="default">In Progress</Badge>;
       case "failed":
       case "error":
         return <Badge variant="destructive">Failed</Badge>;
@@ -180,9 +190,9 @@ export default function CallsPage() {
     }
   };
 
-  const getSentimentBadge = (sentiment: string | null) => {
-    if (!sentiment) return null;
-    const normalized = sentiment.toLowerCase();
+  const getOutcomeBadge = (outcome: string | null) => {
+    if (!outcome) return null;
+    const normalized = outcome.toLowerCase();
     switch (normalized) {
       case "positive":
         return <Badge variant="success">Positive</Badge>;
@@ -191,7 +201,7 @@ export default function CallsPage() {
       case "neutral":
         return <Badge variant="secondary">Neutral</Badge>;
       default:
-        return <Badge variant="outline">{sentiment}</Badge>;
+        return <Badge variant="outline">{outcome}</Badge>;
     }
   };
 
@@ -204,148 +214,38 @@ export default function CallsPage() {
 
   const getCampaignLink = (call: UnifiedCall) => {
     switch (call.campaign_type) {
+      case "inbound":
+        return `/admin/inbound/${call.campaign_id}`;
       case "outbound":
-        return `/dashboard/outbound/${call.campaign_id}`;
+        return `/admin/outbound/${call.campaign_id}`;
       case "legacy":
+        return `/admin/campaigns/${call.campaign_id}`;
       default:
-        return `/dashboard/campaigns/${call.campaign_id}`;
+        return "#";
     }
-  };
-
-  const handleSelectCall = (id: string, selected: boolean) => {
-    setSelectedCalls((prev) => {
-      const newSet = new Set(prev);
-      if (selected) {
-        newSet.add(id);
-      } else {
-        newSet.delete(id);
-      }
-      return newSet;
-    });
-  };
-
-  const handleSelectAll = () => {
-    if (selectedCalls.size === calls.length) {
-      setSelectedCalls(new Set());
-    } else {
-      setSelectedCalls(new Set(calls.map((c) => `${c.campaign_type}-${c.id}`)));
-    }
-  };
-
-  const handleExportSelected = () => {
-    const selectedData = calls.filter((c) =>
-      selectedCalls.has(`${c.campaign_type}-${c.id}`)
-    );
-    const csvContent = [
-      [
-        "Date",
-        "Type",
-        "Campaign",
-        "Phone",
-        "Duration",
-        "Status",
-        "Sentiment",
-        "Summary",
-      ].join(","),
-      ...selectedData.map((call) => {
-        return [
-          call.created_at
-            ? new Date(call.created_at).toISOString()
-            : "",
-          call.campaign_type,
-          `"${call.campaign_name.replace(/"/g, '""')}"`,
-          call.caller_phone || "",
-          call.duration_seconds || "",
-          call.status,
-          call.sentiment || "",
-          `"${(call.summary || "").replace(/"/g, '""')}"`,
-        ].join(",");
-      }),
-    ].join("\n");
-
-    const blob = new Blob([csvContent], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `calls-export-${new Date().toISOString().split("T")[0]}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
-
-    toast({
-      title: "Export complete",
-      description: `Exported ${selectedData.length} call(s) to CSV`,
-    });
-  };
-
-  const handleCancelSelection = () => {
-    setIsSelectionMode(false);
-    setSelectedCalls(new Set());
   };
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Calls</h1>
+          <h1 className="text-3xl font-bold tracking-tight">All Calls</h1>
           <p className="text-muted-foreground">
-            View and search through your call history across all campaigns
+            View calls from all campaign types in one place
           </p>
         </div>
-        <div className="flex gap-2">
-          {!isSelectionMode ? (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => fetchCalls()}
-                disabled={isLoading}
-              >
-                <RefreshCw
-                  className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`}
-                />
-                Refresh
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsSelectionMode(true)}
-                disabled={calls.length === 0}
-              >
-                <CheckSquare className="h-4 w-4 mr-2" />
-                Select
-              </Button>
-            </>
-          ) : (
-            <>
-              <span className="text-sm text-muted-foreground self-center">
-                {selectedCalls.size} selected
-              </span>
-              <Button variant="outline" size="sm" onClick={handleSelectAll}>
-                {selectedCalls.size === calls.length
-                  ? "Deselect All"
-                  : "Select All"}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleExportSelected}
-                disabled={selectedCalls.size === 0}
-              >
-                <Download className="h-4 w-4 mr-2" />
-                Export
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleCancelSelection}
-              >
-                <XSquare className="h-4 w-4 mr-2" />
-                Cancel
-              </Button>
-            </>
-          )}
-        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => fetchCalls()}
+          disabled={isLoading}
+        >
+          <RefreshCw
+            className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`}
+          />
+          Refresh
+        </Button>
       </div>
 
       {/* Main Content */}
@@ -362,18 +262,6 @@ export default function CallsPage() {
                   </CardDescription>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Search..."
-                      value={searchQuery}
-                      onChange={(e) => {
-                        setSearchQuery(e.target.value);
-                        setPage(1);
-                      }}
-                      className="pl-10 w-[180px]"
-                    />
-                  </div>
                   <Select
                     value={campaignTypeFilter}
                     onValueChange={(value) => {
@@ -392,20 +280,40 @@ export default function CallsPage() {
                     </SelectContent>
                   </Select>
                   <Select
-                    value={sentimentFilter}
+                    value={clientFilter}
                     onValueChange={(value) => {
-                      setSentimentFilter(value);
+                      setClientFilter(value);
+                      setPage(1);
+                    }}
+                  >
+                    <SelectTrigger className="w-[150px]">
+                      <SelectValue placeholder="Client" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Clients</SelectItem>
+                      {clients.map((client) => (
+                        <SelectItem key={client.id} value={client.id}>
+                          {client.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={statusFilter}
+                    onValueChange={(value) => {
+                      setStatusFilter(value);
                       setPage(1);
                     }}
                   >
                     <SelectTrigger className="w-[130px]">
-                      <SelectValue placeholder="Sentiment" />
+                      <SelectValue placeholder="Status" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Sentiments</SelectItem>
-                      <SelectItem value="positive">Positive</SelectItem>
-                      <SelectItem value="negative">Negative</SelectItem>
-                      <SelectItem value="neutral">Neutral</SelectItem>
+                      <SelectItem value="all">All Statuses</SelectItem>
+                      <SelectItem value="completed">Completed</SelectItem>
+                      <SelectItem value="processing">Processing</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="failed">Failed</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -421,9 +329,8 @@ export default function CallsPage() {
                   <Phone className="h-12 w-12 mx-auto mb-4 opacity-50" />
                   <p>No calls found</p>
                   <p className="text-sm mt-1">
-                    {searchQuery || sentimentFilter !== "all"
-                      ? "No calls match your criteria"
-                      : "Calls will appear here once received"}
+                    Calls will appear here when campaigns start receiving or
+                    making calls
                   </p>
                 </div>
               ) : (
@@ -431,95 +338,73 @@ export default function CallsPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        {isSelectionMode && <TableHead className="w-[40px]" />}
                         <TableHead>Type</TableHead>
                         <TableHead>Campaign</TableHead>
+                        <TableHead>Client</TableHead>
                         <TableHead>Phone</TableHead>
                         <TableHead>Status</TableHead>
-                        <TableHead>Sentiment</TableHead>
+                        <TableHead>Outcome</TableHead>
                         <TableHead>Duration</TableHead>
                         <TableHead>Time</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {calls.map((call) => {
-                        const callKey = `${call.campaign_type}-${call.id}`;
-                        return (
-                          <TableRow
-                            key={callKey}
-                            className={`cursor-pointer hover:bg-muted/50 ${
-                              selectedCall?.id === call.id &&
-                              selectedCall?.campaign_type === call.campaign_type
-                                ? "bg-muted"
-                                : ""
-                            }`}
-                            onClick={() => {
-                              if (isSelectionMode) {
-                                handleSelectCall(
-                                  callKey,
-                                  !selectedCalls.has(callKey)
-                                );
-                              } else {
-                                setSelectedCall(call);
-                              }
-                            }}
-                          >
-                            {isSelectionMode && (
-                              <TableCell>
-                                <input
-                                  type="checkbox"
-                                  checked={selectedCalls.has(callKey)}
-                                  onChange={(e) =>
-                                    handleSelectCall(callKey, e.target.checked)
-                                  }
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="h-4 w-4"
-                                />
-                              </TableCell>
-                            )}
-                            <TableCell>
-                              {getCampaignTypeBadge(call.campaign_type)}
-                            </TableCell>
-                            <TableCell>
-                              <Link
-                                href={getCampaignLink(call)}
-                                className="font-medium hover:underline"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                {call.campaign_name}
-                              </Link>
-                            </TableCell>
-                            <TableCell>
-                              <code className="text-sm">
-                                {call.caller_phone || "—"}
-                              </code>
-                            </TableCell>
-                            <TableCell>{getStatusBadge(call.status)}</TableCell>
-                            <TableCell>
-                              {getSentimentBadge(call.sentiment) || "—"}
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-1">
-                                <Clock className="h-4 w-4 text-muted-foreground" />
-                                {formatDuration(call.duration_seconds)}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <div className="text-sm">
-                                {format(
-                                  new Date(call.created_at),
-                                  "MMM d, h:mm a"
-                                )}
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                {formatDistanceToNow(new Date(call.created_at), {
-                                  addSuffix: true,
-                                })}
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
+                      {calls.map((call) => (
+                        <TableRow
+                          key={`${call.campaign_type}-${call.id}`}
+                          className={`cursor-pointer hover:bg-muted/50 ${
+                            selectedCall?.id === call.id &&
+                            selectedCall?.campaign_type === call.campaign_type
+                              ? "bg-muted"
+                              : ""
+                          }`}
+                          onClick={() => setSelectedCall(call)}
+                        >
+                          <TableCell>
+                            {getCampaignTypeBadge(call.campaign_type)}
+                          </TableCell>
+                          <TableCell>
+                            <Link
+                              href={getCampaignLink(call)}
+                              className="font-medium hover:underline"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {call.campaign_name}
+                            </Link>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {call.client_name}
+                          </TableCell>
+                          <TableCell>
+                            <code className="text-sm">
+                              {call.caller_phone || "—"}
+                            </code>
+                          </TableCell>
+                          <TableCell>{getStatusBadge(call.status)}</TableCell>
+                          <TableCell>
+                            {getOutcomeBadge(call.outcome) || "—"}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1">
+                              <Clock className="h-4 w-4 text-muted-foreground" />
+                              {formatDuration(call.duration_seconds)}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="text-sm">
+                              {format(
+                                new Date(call.created_at),
+                                "MMM d, h:mm a"
+                              )}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {formatDistanceToNow(new Date(call.created_at), {
+                                addSuffix: true,
+                              })}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
                     </TableBody>
                   </Table>
 
@@ -587,6 +472,9 @@ export default function CallsPage() {
                     >
                       {selectedCall.campaign_name}
                     </Link>
+                    <p className="text-sm text-muted-foreground">
+                      {selectedCall.client_name}
+                    </p>
                   </div>
                 </div>
 
@@ -600,7 +488,7 @@ export default function CallsPage() {
                   </div>
                 )}
 
-                {/* Status & Sentiment */}
+                {/* Status & Outcome */}
                 <div className="flex gap-4">
                   <div>
                     <h4 className="text-sm font-medium text-muted-foreground mb-1">
@@ -610,30 +498,13 @@ export default function CallsPage() {
                   </div>
                   <div>
                     <h4 className="text-sm font-medium text-muted-foreground mb-1">
-                      Sentiment
+                      Outcome
                     </h4>
-                    {getSentimentBadge(selectedCall.sentiment) || (
+                    {getOutcomeBadge(selectedCall.outcome) || (
                       <span className="text-sm text-muted-foreground">—</span>
                     )}
                   </div>
                 </div>
-
-                {/* Outcome Tag */}
-                {selectedCall.outcome_tag && (
-                  <div>
-                    <h4 className="text-sm font-medium text-muted-foreground mb-1">
-                      Outcome
-                    </h4>
-                    <Badge
-                      style={{
-                        backgroundColor: selectedCall.outcome_tag.tag_color,
-                        color: "#fff",
-                      }}
-                    >
-                      {selectedCall.outcome_tag.tag_name}
-                    </Badge>
-                  </div>
-                )}
 
                 {/* Call Metrics */}
                 <div className="grid grid-cols-2 gap-4">
@@ -650,10 +521,7 @@ export default function CallsPage() {
                       Time
                     </h4>
                     <p className="font-medium text-sm">
-                      {format(
-                        new Date(selectedCall.created_at),
-                        "MMM d, h:mm a"
-                      )}
+                      {format(new Date(selectedCall.created_at), "MMM d, h:mm a")}
                     </p>
                   </div>
                 </div>
@@ -701,7 +569,7 @@ export default function CallsPage() {
                   </div>
                 )}
 
-                {/* View Campaign Link */}
+                {/* View in Campaign Link */}
                 <div className="pt-2">
                   <Button asChild variant="outline" className="w-full">
                     <Link href={getCampaignLink(selectedCall)}>

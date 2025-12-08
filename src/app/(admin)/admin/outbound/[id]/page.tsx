@@ -464,6 +464,12 @@ export default function OutboundCampaignDetailPage({
               Contacts
             </Link>
           </TabsTrigger>
+          <TabsTrigger value="calls" asChild>
+            <Link href={`/admin/outbound/${id}/calls`}>
+              <Phone className="mr-2 h-4 w-4" />
+              Calls
+            </Link>
+          </TabsTrigger>
           <TabsTrigger value="analytics" asChild>
             <Link href={`/admin/outbound/${id}/analytics`}>
               <BarChart3 className="mr-2 h-4 w-4" />

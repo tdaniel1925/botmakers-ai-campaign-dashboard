@@ -453,10 +453,11 @@ export default function WebhookLogsPage() {
   const [dateRange, setDateRange] = useState<"7" | "14" | "30" | "90" | "all">("7");
   const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
-  const supabase = createClient();
+  const supabaseRef = useRef(createClient());
+  const supabase = supabaseRef.current;
 
-  const fetchLogs = useCallback(async () => {
-    setIsLoading(true);
+  const fetchLogs = useCallback(async (showLoading = true) => {
+    if (showLoading) setIsLoading(true);
 
     // Calculate date range filter
     let startDate: Date | null = null;
@@ -532,45 +533,60 @@ export default function WebhookLogsPage() {
 
     // Apply pagination manually after combining
     const paginatedLogs = allLogs.slice(offset, offset + ITEMS_PER_PAGE);
-    const totalCount = (legacyResult.count || 0) + (inboundResult.count || 0);
+    const newTotalCount = (legacyResult.count || 0) + (inboundResult.count || 0);
 
-    setLogs(paginatedLogs as WebhookLog[]);
-    setTotalCount(totalCount);
+    // Only update state if data actually changed (prevents unnecessary re-renders)
+    setLogs(prevLogs => {
+      const newLogsJson = JSON.stringify(paginatedLogs.map(l => l.id));
+      const prevLogsJson = JSON.stringify(prevLogs.map(l => l.id));
+      if (newLogsJson !== prevLogsJson) {
+        return paginatedLogs as WebhookLog[];
+      }
+      return prevLogs;
+    });
 
-    // Fetch all campaigns for filter dropdown (from both tables)
-    const { data: legacyCampaigns } = await supabase
-      .from("campaigns")
-      .select("id, name")
-      .order("name");
+    setTotalCount(prevCount => prevCount !== newTotalCount ? newTotalCount : prevCount);
 
-    const { data: inboundCampaigns } = await supabase
-      .from("inbound_campaigns")
-      .select("id, name")
-      .order("name");
+    // Only fetch campaigns on initial load (when showLoading is true)
+    if (showLoading) {
+      const { data: legacyCampaigns } = await supabase
+        .from("campaigns")
+        .select("id, name")
+        .order("name");
 
-    const allCampaigns = [
-      ...(legacyCampaigns || []),
-      ...(inboundCampaigns || []),
-    ].sort((a, b) => a.name.localeCompare(b.name));
+      const { data: inboundCampaigns } = await supabase
+        .from("inbound_campaigns")
+        .select("id, name")
+        .order("name");
 
-    setCampaigns(allCampaigns);
+      const allCampaigns = [
+        ...(legacyCampaigns || []),
+        ...(inboundCampaigns || []),
+      ].sort((a, b) => a.name.localeCompare(b.name));
 
-    setIsLoading(false);
+      setCampaigns(allCampaigns);
+      setIsLoading(false);
+    }
   }, [supabase, dateRange, currentPage]);
 
-  useEffect(() => {
-    fetchLogs();
-  }, [fetchLogs]);
+  // Store fetchLogs in a ref to avoid dependency array issues with polling
+  const fetchLogsRef = useRef(fetchLogs);
+  fetchLogsRef.current = fetchLogs;
 
-  // Auto-refresh logs every 5 seconds when page is visible
+  // Initial fetch
+  useEffect(() => {
+    fetchLogsRef.current();
+  }, [dateRange, currentPage]);
+
+  // Auto-refresh logs every 5 seconds when page is visible (background refresh - no loading flash)
   useEffect(() => {
     let intervalId: NodeJS.Timeout | null = null;
 
     const startPolling = () => {
-      // Poll every 5 seconds
+      // Poll every 5 seconds - use false to not show loading state
       intervalId = setInterval(() => {
         if (!document.hidden) {
-          fetchLogs();
+          fetchLogsRef.current(false);
         }
       }, 5000);
     };
@@ -583,8 +599,8 @@ export default function WebhookLogsPage() {
           intervalId = null;
         }
       } else {
-        // Resume polling and fetch immediately when tab becomes visible
-        fetchLogs();
+        // Resume polling and fetch immediately when tab becomes visible (background)
+        fetchLogsRef.current(false);
         startPolling();
       }
     };
@@ -597,7 +613,7 @@ export default function WebhookLogsPage() {
       if (intervalId) clearInterval(intervalId);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [fetchLogs]);
+  }, []);
 
   // Filter logs
   const filteredLogs = logs.filter(log => {
@@ -643,7 +659,7 @@ export default function WebhookLogsPage() {
             Monitor incoming webhooks across all campaigns
           </p>
         </div>
-        <Button onClick={fetchLogs} variant="outline" disabled={isLoading}>
+        <Button onClick={() => fetchLogs()} variant="outline" disabled={isLoading}>
           <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
           Refresh
         </Button>

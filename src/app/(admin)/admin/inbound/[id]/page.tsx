@@ -101,6 +101,30 @@ interface WebhookLog {
   created_at: string;
 }
 
+interface InboundCall {
+  id: string;
+  campaign_id: string;
+  vapi_call_id: string | null;
+  external_call_id: string | null;
+  caller_phone: string | null;
+  status: string;
+  duration_seconds: number | null;
+  transcript: string | null;
+  audio_url: string | null;
+  ai_summary: string | null;
+  ai_sentiment: string | null;
+  ai_key_points: string[] | null;
+  outcome_tag_id: string | null;
+  error_message: string | null;
+  created_at: string;
+  inbound_campaign_outcome_tags?: {
+    id: string;
+    tag_name: string;
+    tag_color: string | null;
+    is_positive: boolean | null;
+  } | null;
+}
+
 export default function InboundCampaignDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -117,6 +141,11 @@ export default function InboundCampaignDetailPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [webhookLogs, setWebhookLogs] = useState<WebhookLog[]>([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState(false);
+  const [calls, setCalls] = useState<InboundCall[]>([]);
+  const [isLoadingCalls, setIsLoadingCalls] = useState(false);
+  const [callsTotal, setCallsTotal] = useState(0);
+  const [callsPage, setCallsPage] = useState(1);
+  const [selectedCall, setSelectedCall] = useState<InboundCall | null>(null);
 
   const fetchCampaign = useCallback(async () => {
     try {
@@ -163,10 +192,28 @@ export default function InboundCampaignDetailPage() {
     }
   }, [campaignId]);
 
+  const fetchCalls = useCallback(async (page = 1) => {
+    setIsLoadingCalls(true);
+    try {
+      const response = await fetch(`/api/admin/inbound-campaigns/${campaignId}/calls?page=${page}&limit=20`);
+      if (response.ok) {
+        const data = await response.json();
+        setCalls(data.calls);
+        setCallsTotal(data.total);
+        setCallsPage(page);
+      }
+    } catch (error) {
+      console.error("Error fetching calls:", error);
+    } finally {
+      setIsLoadingCalls(false);
+    }
+  }, [campaignId]);
+
   useEffect(() => {
     fetchCampaign();
     fetchWebhookLogs();
-  }, [fetchCampaign, fetchWebhookLogs]);
+    fetchCalls();
+  }, [fetchCampaign, fetchWebhookLogs, fetchCalls]);
 
   const copyWebhookUrl = () => {
     if (!campaign) return;
@@ -418,8 +465,11 @@ export default function InboundCampaignDetailPage() {
       </div>
 
       {/* Main Content Tabs */}
-      <Tabs defaultValue="webhook" className="space-y-4">
+      <Tabs defaultValue="calls" className="space-y-4">
         <TabsList>
+          <TabsTrigger value="calls">
+            <Phone className="mr-2 h-4 w-4" /> Calls
+          </TabsTrigger>
           <TabsTrigger value="webhook">
             <Webhook className="mr-2 h-4 w-4" /> Webhook
           </TabsTrigger>
@@ -433,6 +483,210 @@ export default function InboundCampaignDetailPage() {
             <MessageSquare className="mr-2 h-4 w-4" /> SMS Rules
           </TabsTrigger>
         </TabsList>
+
+        {/* Calls Tab */}
+        <TabsContent value="calls" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Call History</CardTitle>
+                  <CardDescription>
+                    {callsTotal} total calls received via webhook
+                  </CardDescription>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => fetchCalls(callsPage)}>
+                  <RefreshCw className={`mr-2 h-4 w-4 ${isLoadingCalls ? "animate-spin" : ""}`} />
+                  Refresh
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {isLoadingCalls && calls.length === 0 ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
+              ) : calls.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Phone className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p>No calls received yet</p>
+                  <p className="text-sm">Calls will appear here when webhooks are received</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {calls.map((call) => (
+                    <div
+                      key={call.id}
+                      onClick={() => setSelectedCall(call)}
+                      className="flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-muted/50 cursor-pointer transition-colors"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="shrink-0">
+                          {call.status === "completed" ? (
+                            <CheckCircle2 className="h-5 w-5 text-green-500" />
+                          ) : call.status === "failed" ? (
+                            <XCircle className="h-5 w-5 text-red-500" />
+                          ) : (
+                            <Clock className="h-5 w-5 text-yellow-500" />
+                          )}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">
+                              {call.caller_phone || "Unknown Caller"}
+                            </span>
+                            {call.inbound_campaign_outcome_tags && (
+                              <Badge
+                                style={{
+                                  backgroundColor: call.inbound_campaign_outcome_tags.tag_color || "#6b7280",
+                                  color: "#fff",
+                                }}
+                              >
+                                {call.inbound_campaign_outcome_tags.tag_name}
+                              </Badge>
+                            )}
+                            {call.ai_sentiment && (
+                              <Badge variant={
+                                call.ai_sentiment === "positive" ? "default" :
+                                call.ai_sentiment === "negative" ? "destructive" : "secondary"
+                              }>
+                                {call.ai_sentiment}
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-4 text-sm text-muted-foreground mt-1">
+                            {call.duration_seconds !== null && (
+                              <span>{Math.floor(call.duration_seconds / 60)}:{String(call.duration_seconds % 60).padStart(2, "0")}</span>
+                            )}
+                            <span>{formatDistanceToNow(new Date(call.created_at), { addSuffix: true })}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {call.transcript && (
+                          <Badge variant="outline">Has Transcript</Badge>
+                        )}
+                        {call.audio_url && (
+                          <Badge variant="outline">Has Audio</Badge>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Pagination */}
+              {callsTotal > 20 && (
+                <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                  <span className="text-sm text-muted-foreground">
+                    Page {callsPage} of {Math.ceil(callsTotal / 20)}
+                  </span>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={callsPage <= 1}
+                      onClick={() => fetchCalls(callsPage - 1)}
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={callsPage >= Math.ceil(callsTotal / 20)}
+                      onClick={() => fetchCalls(callsPage + 1)}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Call Detail Modal */}
+          {selectedCall && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle>Call Details</CardTitle>
+                  <Button variant="ghost" size="icon" onClick={() => setSelectedCall(null)}>
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-muted-foreground">Caller Phone</Label>
+                    <p className="font-mono">{selectedCall.caller_phone || "Unknown"}</p>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground">Status</Label>
+                    <p className="capitalize">{selectedCall.status}</p>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground">Duration</Label>
+                    <p>{selectedCall.duration_seconds ? `${Math.floor(selectedCall.duration_seconds / 60)}:${String(selectedCall.duration_seconds % 60).padStart(2, "0")}` : "N/A"}</p>
+                  </div>
+                  <div>
+                    <Label className="text-muted-foreground">Received</Label>
+                    <p>{format(new Date(selectedCall.created_at), "PPpp")}</p>
+                  </div>
+                </div>
+
+                {selectedCall.ai_summary && (
+                  <div>
+                    <Label className="text-muted-foreground">AI Summary</Label>
+                    <p className="mt-1 p-3 bg-muted rounded-lg text-sm">{selectedCall.ai_summary}</p>
+                  </div>
+                )}
+
+                {selectedCall.ai_key_points && selectedCall.ai_key_points.length > 0 && (
+                  <div>
+                    <Label className="text-muted-foreground">Key Points</Label>
+                    <ul className="mt-1 space-y-1">
+                      {selectedCall.ai_key_points.map((point, i) => (
+                        <li key={i} className="text-sm flex items-start gap-2">
+                          <span className="text-muted-foreground">•</span>
+                          {point}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {selectedCall.transcript && (
+                  <div>
+                    <Label className="text-muted-foreground">Transcript</Label>
+                    <div className="mt-1 p-3 bg-muted rounded-lg text-sm max-h-48 overflow-y-auto whitespace-pre-wrap font-mono">
+                      {selectedCall.transcript}
+                    </div>
+                  </div>
+                )}
+
+                {selectedCall.audio_url && (
+                  <div>
+                    <Label className="text-muted-foreground">Recording</Label>
+                    <audio controls className="w-full mt-1">
+                      <source src={selectedCall.audio_url} type="audio/mpeg" />
+                      Your browser does not support the audio element.
+                    </audio>
+                  </div>
+                )}
+
+                {selectedCall.error_message && (
+                  <div>
+                    <Label className="text-muted-foreground text-red-600">Error</Label>
+                    <p className="mt-1 p-3 bg-red-50 dark:bg-red-950/30 rounded-lg text-sm text-red-600">
+                      {selectedCall.error_message}
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
 
         {/* Webhook Tab */}
         <TabsContent value="webhook" className="space-y-4">

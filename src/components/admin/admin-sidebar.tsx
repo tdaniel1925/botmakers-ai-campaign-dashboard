@@ -102,6 +102,11 @@ const logsItems = {
   icon: Activity,
   items: [
     {
+      title: "All Calls",
+      href: "/admin/calls",
+      icon: Phone,
+    },
+    {
       title: "Webhook Logs",
       href: "/admin/webhook-logs",
       icon: Webhook,
