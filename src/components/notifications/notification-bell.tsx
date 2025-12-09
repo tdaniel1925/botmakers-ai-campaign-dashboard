@@ -33,12 +33,15 @@ export function NotificationBell() {
     try {
       const response = await fetch("/api/notifications?limit=20");
       if (response.ok) {
-        const data = await response.json();
-        setNotifications(data.notifications);
-        setUnreadCount(data.unreadCount);
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          const data = await response.json();
+          setNotifications(data.notifications || []);
+          setUnreadCount(data.unreadCount || 0);
+        }
       }
-    } catch (error) {
-      console.error("Error fetching notifications:", error);
+    } catch {
+      // Silently fail - notifications are not critical
     }
   };
 
