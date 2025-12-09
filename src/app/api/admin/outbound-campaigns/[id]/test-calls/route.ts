@@ -291,8 +291,8 @@ async function initiateVapiCall(
     };
   }
 
-  // Add webhook URL
-  payload.serverUrl = webhookUrl;
+  // Note: Webhook URL must be configured on the Vapi assistant itself.
+  // The webhook URL shown in the UI is: ${webhookUrl}
 
   const response = await fetch("https://api.vapi.ai/call", {
     method: "POST",
