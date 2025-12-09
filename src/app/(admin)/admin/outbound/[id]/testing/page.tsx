@@ -21,6 +21,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -37,9 +42,13 @@ import {
   XCircle,
   Clock,
   RefreshCw,
-  ExternalLink,
   PlayCircle,
   Eye,
+  ChevronDown,
+  ChevronUp,
+  FileText,
+  Braces,
+  Volume2,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 
@@ -65,11 +74,13 @@ interface TestCall {
   duration_seconds: number | null;
   cost: string | null;
   transcript: string | null;
+  summary: string | null;
   recording_url: string | null;
   structured_data: Record<string, unknown> | null;
   created_at: string;
   ended_at: string | null;
   vapi_call_id: string | null;
+  vapi_ended_reason: string | null;
 }
 
 export default function OutboundCampaignTestingPage({
@@ -83,6 +94,7 @@ export default function OutboundCampaignTestingPage({
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingCalls, setIsLoadingCalls] = useState(false);
   const [isMakingCall, setIsMakingCall] = useState(false);
+  const [expandedCallId, setExpandedCallId] = useState<string | null>(null);
 
   // Test call form
   const [phoneNumber, setPhoneNumber] = useState("");
@@ -482,71 +494,203 @@ export default function OutboundCampaignTestingPage({
               <p>No test calls yet. Make your first test call above!</p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Phone Number</TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Outcome</TableHead>
-                  <TableHead>Duration</TableHead>
-                  <TableHead>Time</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {testCalls.map((call) => (
-                  <TableRow
+            <div className="space-y-2">
+              {testCalls.map((call) => {
+                const isExpanded = expandedCallId === call.id;
+                const hasDetails = call.recording_url || call.transcript || call.summary || call.structured_data;
+
+                return (
+                  <Collapsible
                     key={call.id}
-                    className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => window.location.href = `/admin/outbound/${id}/testing/${call.id}`}
+                    open={isExpanded}
+                    onOpenChange={() => setExpandedCallId(isExpanded ? null : call.id)}
                   >
-                    <TableCell className="font-mono">{call.phone_number}</TableCell>
-                    <TableCell>{call.first_name || "-"}</TableCell>
-                    <TableCell>{getStatusBadge(call.status)}</TableCell>
-                    <TableCell>{getOutcomeBadge(call.outcome)}</TableCell>
-                    <TableCell>
-                      {call.duration_seconds
-                        ? `${Math.floor(call.duration_seconds / 60)}:${String(
-                            call.duration_seconds % 60
-                          ).padStart(2, "0")}`
-                        : "-"}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {formatDistanceToNow(new Date(call.created_at), { addSuffix: true })}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          asChild
-                          title="View details"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <Link href={`/admin/outbound/${id}/testing/${call.id}`}>
-                            <Eye className="h-4 w-4" />
-                          </Link>
-                        </Button>
-                        {call.recording_url && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            asChild
-                            title="Listen to recording"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <a href={call.recording_url} target="_blank" rel="noopener noreferrer">
-                              <ExternalLink className="h-4 w-4" />
-                            </a>
-                          </Button>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                    <div className="border rounded-lg overflow-hidden">
+                      <CollapsibleTrigger asChild>
+                        <div className="flex items-center justify-between p-4 hover:bg-muted/50 cursor-pointer">
+                          <div className="flex items-center gap-4 flex-1">
+                            <div className="flex-shrink-0">
+                              {isExpanded ? (
+                                <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                              ) : (
+                                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                              )}
+                            </div>
+                            <div>
+                              <Link
+                                href={`/admin/outbound/${id}/testing/${call.id}`}
+                                className="font-mono text-xs text-primary hover:underline"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                #{call.id.substring(0, 8)}
+                              </Link>
+                            </div>
+                            <div className="min-w-[140px]">
+                              <span className="font-mono text-sm">{call.phone_number}</span>
+                              {call.first_name && (
+                                <span className="text-muted-foreground text-sm ml-2">({call.first_name})</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {getStatusBadge(call.status)}
+                              {getOutcomeBadge(call.outcome)}
+                            </div>
+                            <div className="text-sm text-muted-foreground">
+                              {call.duration_seconds
+                                ? `${Math.floor(call.duration_seconds / 60)}:${String(
+                                    call.duration_seconds % 60
+                                  ).padStart(2, "0")}`
+                                : "-"}
+                            </div>
+                            <div className="text-sm text-muted-foreground">
+                              {formatDistanceToNow(new Date(call.created_at), { addSuffix: true })}
+                            </div>
+                            {/* Indicator icons for available data */}
+                            <div className="flex items-center gap-1 ml-auto">
+                              {call.recording_url && (
+                                <span title="Recording available">
+                                  <Volume2 className="h-4 w-4 text-muted-foreground" />
+                                </span>
+                              )}
+                              {call.transcript && (
+                                <span title="Transcript available">
+                                  <FileText className="h-4 w-4 text-muted-foreground" />
+                                </span>
+                              )}
+                              {call.structured_data && Object.keys(call.structured_data).length > 0 && (
+                                <span title="Structured data available">
+                                  <Braces className="h-4 w-4 text-muted-foreground" />
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 ml-4">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              asChild
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <Link href={`/admin/outbound/${id}/testing/${call.id}`}>
+                                <Eye className="h-4 w-4 mr-1" />
+                                Full Details
+                              </Link>
+                            </Button>
+                          </div>
+                        </div>
+                      </CollapsibleTrigger>
+
+                      <CollapsibleContent>
+                        <div className="border-t bg-muted/30 p-4 space-y-4">
+                          {/* Recording */}
+                          {call.recording_url && (
+                            <div>
+                              <Label className="text-sm font-medium flex items-center gap-2 mb-2">
+                                <Volume2 className="h-4 w-4" />
+                                Recording
+                              </Label>
+                              <audio controls className="w-full max-w-md">
+                                <source src={call.recording_url} type="audio/mpeg" />
+                                Your browser does not support the audio element.
+                              </audio>
+                            </div>
+                          )}
+
+                          {/* Summary */}
+                          {call.summary && (
+                            <div>
+                              <Label className="text-sm font-medium flex items-center gap-2 mb-2">
+                                <FileText className="h-4 w-4" />
+                                AI Summary
+                              </Label>
+                              <p className="text-sm bg-background p-3 rounded-md border">{call.summary}</p>
+                            </div>
+                          )}
+
+                          {/* Structured Data */}
+                          {call.structured_data && Object.keys(call.structured_data).length > 0 && (
+                            <div>
+                              <Label className="text-sm font-medium flex items-center gap-2 mb-2">
+                                <Braces className="h-4 w-4" />
+                                Collected Data
+                              </Label>
+                              <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
+                                {Object.entries(call.structured_data).map(([key, value]) => (
+                                  <div key={key} className="bg-background p-3 rounded-md border">
+                                    <div className="text-xs font-medium text-muted-foreground capitalize">
+                                      {key.replace(/_/g, " ")}
+                                    </div>
+                                    <div className="font-medium">
+                                      {typeof value === "boolean" ? (
+                                        value ? (
+                                          <Badge variant="success">Yes</Badge>
+                                        ) : (
+                                          <Badge variant="secondary">No</Badge>
+                                        )
+                                      ) : value === null || value === undefined ? (
+                                        <span className="text-muted-foreground">-</span>
+                                      ) : (
+                                        String(value)
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Transcript Preview */}
+                          {call.transcript && (
+                            <div>
+                              <Label className="text-sm font-medium flex items-center gap-2 mb-2">
+                                <FileText className="h-4 w-4" />
+                                Transcript Preview
+                              </Label>
+                              <div className="bg-background p-3 rounded-md border max-h-40 overflow-y-auto">
+                                <pre className="whitespace-pre-wrap text-xs font-mono">
+                                  {call.transcript.length > 500
+                                    ? call.transcript.substring(0, 500) + "..."
+                                    : call.transcript}
+                                </pre>
+                              </div>
+                              {call.transcript.length > 500 && (
+                                <Link
+                                  href={`/admin/outbound/${id}/testing/${call.id}`}
+                                  className="text-xs text-primary hover:underline mt-1 inline-block"
+                                >
+                                  View full transcript
+                                </Link>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Technical Info */}
+                          {call.vapi_ended_reason && (
+                            <div className="text-xs text-muted-foreground">
+                              End reason: {call.vapi_ended_reason}
+                            </div>
+                          )}
+
+                          {/* No details message */}
+                          {!hasDetails && (
+                            <div className="text-center py-4 text-muted-foreground">
+                              <p className="text-sm">No call details available yet.</p>
+                              {call.status === "initiated" || call.status === "ringing" || call.status === "answered" ? (
+                                <p className="text-xs">Details will appear after the call completes.</p>
+                              ) : (
+                                <p className="text-xs">
+                                  Make sure your Vapi assistant webhook is configured to send data to this campaign.
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </CollapsibleContent>
+                    </div>
+                  </Collapsible>
+                );
+              })}
+            </div>
           )}
         </CardContent>
       </Card>
