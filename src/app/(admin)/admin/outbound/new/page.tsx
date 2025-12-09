@@ -195,7 +195,7 @@ const AREA_CODE_TIMEZONES: Record<string, string> = {
   "571": "America/New_York", "585": "America/New_York", "586": "America/New_York", "607": "America/New_York",
   "609": "America/New_York", "610": "America/New_York", "614": "America/New_York", "617": "America/New_York",
   "631": "America/New_York", "646": "America/New_York", "678": "America/New_York", "680": "America/New_York",
-  "681": "America/New_York", "682": "America/New_York", "689": "America/New_York", "704": "America/New_York",
+  "681": "America/New_York", "689": "America/New_York", "704": "America/New_York",
   "706": "America/New_York", "716": "America/New_York", "717": "America/New_York", "718": "America/New_York",
   "724": "America/New_York", "727": "America/New_York", "732": "America/New_York", "740": "America/New_York",
   "754": "America/New_York", "757": "America/New_York", "770": "America/New_York", "772": "America/New_York",
