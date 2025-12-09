@@ -59,7 +59,14 @@ export default async function ClientsPage() {
             {clients && clients.length > 0 ? (
               clients.map((client) => (
                 <TableRow key={client.id}>
-                  <TableCell className="font-medium">{client.name}</TableCell>
+                  <TableCell className="font-medium">
+                    <Link
+                      href={`/admin/clients/${client.id}`}
+                      className="hover:underline text-primary"
+                    >
+                      {client.name}
+                    </Link>
+                  </TableCell>
                   <TableCell>{client.email}</TableCell>
                   <TableCell>{client.company_name || "-"}</TableCell>
                   <TableCell>

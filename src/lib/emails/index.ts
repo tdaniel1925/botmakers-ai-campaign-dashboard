@@ -101,9 +101,16 @@ export async function sendWelcomeEmail(
     const html = await render(WelcomeEmail(emailProps));
     const subject = `Welcome to ${props.companyName || "BotMakers"} - Your Login Credentials`;
 
+    // Determine recipient email - use explicit recipientEmail, or fall back to username if it's an email
+    const recipientEmail = props.recipientEmail || (props.username.includes("@") ? props.username : null);
+
+    if (!recipientEmail) {
+      return { success: false, error: "No recipient email address provided" };
+    }
+
     const { data, error } = await resend.emails.send({
       from: getSenderEmail(),
-      to: props.username.includes("@") ? props.username : `${props.recipientName} <${props.loginUrl.includes("email=") ? new URL(props.loginUrl).searchParams.get("email") : ""}>`,
+      to: recipientEmail,
       subject,
       html,
     });
@@ -112,7 +119,7 @@ export async function sendWelcomeEmail(
       await logEmail({
         clientId: props.clientId,
         templateSlug: "welcome",
-        recipientEmail: props.username,
+        recipientEmail,
         recipientName: props.recipientName,
         subject,
         status: "failed",
@@ -124,7 +131,7 @@ export async function sendWelcomeEmail(
     await logEmail({
       clientId: props.clientId,
       templateSlug: "welcome",
-      recipientEmail: props.username,
+      recipientEmail,
       recipientName: props.recipientName,
       subject,
       status: "sent",

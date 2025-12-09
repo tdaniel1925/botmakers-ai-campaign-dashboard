@@ -59,6 +59,7 @@ export default function NewClientPage() {
     password: string;
   } | null>(null);
   const [copied, setCopied] = useState<"username" | "password" | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
   const router = useRouter();
   const { toast } = useToast();
 
@@ -118,6 +119,8 @@ export default function NewClientPage() {
       return;
     }
 
+    // Clear any previous email error
+    setEmailError(null);
     setIsLoading(true);
 
     try {
@@ -137,6 +140,13 @@ export default function NewClientPage() {
 
       if (!response.ok) {
         const data = await response.json();
+
+        // Check if this is an email exists error - show inline
+        if (data.code === "email_exists" || response.status === 409) {
+          setEmailError(data.error || "A user with this email already exists");
+          return;
+        }
+
         throw new Error(data.error || "Failed to create client");
       }
 
@@ -149,7 +159,7 @@ export default function NewClientPage() {
           password: data.temp_password,
         });
         toast({
-          title: "Client saved as draft",
+          title: "Client created",
           description: "You can send the invitation later from the client details page.",
         });
       } else {
@@ -220,9 +230,16 @@ export default function NewClientPage() {
                 type="email"
                 placeholder="john@example.com"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (emailError) setEmailError(null);
+                }}
+                className={emailError ? "border-destructive" : ""}
                 required
               />
+              {emailError && (
+                <p className="text-sm text-destructive">{emailError}</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="companyName">Company Name</Label>
@@ -271,18 +288,18 @@ export default function NewClientPage() {
               <Button
                 variant="outline"
                 onClick={() => handleSubmit("draft")}
-                disabled={isLoading || !name || !email}
+                disabled={isLoading || !name || !email || !!emailError}
               >
                 {isLoading ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
                   <Save className="mr-2 h-4 w-4" />
                 )}
-                Save as Draft
+                Create Client Only
               </Button>
               <Button
                 onClick={() => handleSubmit("send")}
-                disabled={isLoading || !name || !email}
+                disabled={isLoading || !name || !email || !!emailError}
               >
                 {isLoading ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -314,7 +331,7 @@ export default function NewClientPage() {
                 </ul>
               </div>
               <div>
-                <h4 className="font-medium">Save as Draft?</h4>
+                <h4 className="font-medium">Create Client Only?</h4>
                 <p className="mt-1 text-muted-foreground">
                   Creates the client but doesn&apos;t send the email yet. You can send the
                   invite later from the client details page.

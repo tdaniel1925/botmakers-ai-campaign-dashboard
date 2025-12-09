@@ -41,7 +41,7 @@ export interface CampaignReportEmailProps {
 export const CampaignReportEmail: React.FC<CampaignReportEmailProps> = ({
   recipientName,
   reportPeriod,
-  campaigns,
+  campaigns = [],
   totalCalls,
   totalCampaigns,
   overallPositiveRate,

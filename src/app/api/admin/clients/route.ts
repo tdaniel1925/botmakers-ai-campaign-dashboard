@@ -54,17 +54,30 @@ export async function POST(request: Request) {
     const supabase = await createClient();
     const serviceClient = await createServiceClient();
 
-    // Check if client already exists
-    const { data: existing } = await supabase
+    // Check if client already exists in clients table
+    const { data: existingClient } = await supabase
       .from("clients")
       .select("id")
       .eq("email", email)
       .single();
 
-    if (existing) {
+    if (existingClient) {
       return NextResponse.json(
-        { error: "A client with this email already exists" },
-        { status: 400 }
+        { error: "A client with this email already exists", code: "email_exists" },
+        { status: 409 }
+      );
+    }
+
+    // Check if user already exists in Supabase Auth
+    const { data: authUsers } = await serviceClient.auth.admin.listUsers();
+    const existingAuthUser = authUsers?.users?.find(
+      (u) => u.email?.toLowerCase() === email.toLowerCase()
+    );
+
+    if (existingAuthUser) {
+      return NextResponse.json(
+        { error: "A user with this email address has already been registered", code: "email_exists" },
+        { status: 409 }
       );
     }
 
@@ -135,6 +148,7 @@ export async function POST(request: Request) {
         const emailResult = await sendWelcomeEmail({
           clientId: client.id,
           recipientName: name,
+          recipientEmail: email,
           username,
           tempPassword,
           loginUrl: `${process.env.NEXT_PUBLIC_APP_URL}/login`,

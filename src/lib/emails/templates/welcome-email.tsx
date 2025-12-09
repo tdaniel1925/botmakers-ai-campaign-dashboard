@@ -16,6 +16,7 @@ import * as React from "react";
 
 export interface WelcomeEmailProps {
   recipientName: string;
+  recipientEmail?: string;
   username: string;
   tempPassword: string;
   loginUrl: string;

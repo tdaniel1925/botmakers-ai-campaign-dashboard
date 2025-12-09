@@ -102,6 +102,7 @@ export async function POST(
       emailResult = await sendWelcomeEmail({
         clientId: client.id,
         recipientName: client.name,
+        recipientEmail: client.email,
         username,
         tempPassword,
         loginUrl,
