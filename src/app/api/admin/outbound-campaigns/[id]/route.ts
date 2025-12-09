@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { verifyAdmin, forbiddenResponse } from "@/lib/admin-auth";
 import { encrypt } from "@/lib/encryption";
 
@@ -19,7 +19,7 @@ export async function GET(
       return forbiddenResponse(authResult.error);
     }
 
-    const supabase = await createClient();
+    const supabase = await createServiceClient();
 
     const { data: campaign, error } = await supabase
       .from("outbound_campaigns")
@@ -32,7 +32,7 @@ export async function GET(
           company_name,
           email
         ),
-        campaign_phone_numbers (
+        campaign_phone_numbers!campaign_phone_numbers_campaign_id_fkey (
           id,
           phone_number,
           friendly_name,
@@ -64,6 +64,7 @@ export async function GET(
       .single();
 
     if (error) {
+      console.error("Error fetching campaign:", error);
       if (error.code === "PGRST116") {
         return NextResponse.json(
           { error: "Campaign not found" },
@@ -176,7 +177,6 @@ export async function PUT(
       rate_per_minute,
       billing_threshold,
       max_concurrent_calls,
-      calls_per_minute,
       retry_enabled,
       retry_attempts,
       retry_delay_minutes,
@@ -211,8 +211,6 @@ export async function PUT(
       updateData.billing_threshold = billing_threshold;
     if (max_concurrent_calls !== undefined)
       updateData.max_concurrent_calls = max_concurrent_calls;
-    if (calls_per_minute !== undefined)
-      updateData.calls_per_minute = calls_per_minute;
     if (retry_enabled !== undefined) updateData.retry_enabled = retry_enabled;
     if (retry_attempts !== undefined)
       updateData.retry_attempts = retry_attempts;

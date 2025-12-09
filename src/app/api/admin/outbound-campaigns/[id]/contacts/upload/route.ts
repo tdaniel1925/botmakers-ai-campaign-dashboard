@@ -1,16 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 import { verifyAdmin, forbiddenResponse } from "@/lib/admin-auth";
 
-interface CSVRow {
+interface ContactInput {
   phone_number?: string;
-  phone?: string;
   first_name?: string;
-  firstName?: string;
   last_name?: string;
-  lastName?: string;
   email?: string;
-  [key: string]: string | undefined;
+  timezone?: string;
+  custom_data?: Record<string, unknown>;
 }
 
 interface UploadResult {
@@ -49,14 +47,8 @@ export async function POST(
       );
     }
 
-    if (contacts.length > 10000) {
-      return NextResponse.json(
-        { error: "Maximum 10,000 contacts per upload" },
-        { status: 400 }
-      );
-    }
-
-    const supabase = await createClient();
+    // Use service client to bypass RLS and potentially problematic triggers
+    const supabase = await createServiceClient();
 
     // Verify campaign exists and is in draft status
     const { data: campaign, error: campaignError } = await supabase
@@ -99,24 +91,19 @@ export async function POST(
     }> = [];
 
     for (let i = 0; i < contacts.length; i++) {
-      const row = contacts[i] as CSVRow;
+      const contact = contacts[i] as ContactInput;
       const rowNumber = i + 1;
 
-      // Extract fields using column mapping or default field names
-      const phoneField = column_mapping?.phone_number || "phone_number";
-      const firstNameField = column_mapping?.first_name || "first_name";
-      const lastNameField = column_mapping?.last_name || "last_name";
-      const emailField = column_mapping?.email || "email";
+      // The frontend already maps columns and sends normalized field names
+      // So we just read the direct properties
+      const rawPhone = contact.phone_number || "";
+      const firstName = contact.first_name || "";
+      const lastName = contact.last_name || "";
+      const email = contact.email || "";
+      const timezone = contact.timezone || undefined;
+      const customData = contact.custom_data || {};
 
-      const rawPhone =
-        row[phoneField] || row.phone_number || row.phone || "";
-      const firstName =
-        row[firstNameField] || row.first_name || row.firstName || "";
-      const lastName =
-        row[lastNameField] || row.last_name || row.lastName || "";
-      const email = row[emailField] || row.email || "";
-
-      // Normalize phone number
+      // Normalize phone number (in case frontend didn't normalize it)
       const normalizedPhone = normalizePhoneNumber(rawPhone);
 
       if (!normalizedPhone) {
@@ -128,31 +115,6 @@ export async function POST(
         });
         continue;
       }
-
-      // Build custom data (all fields not in standard mapping)
-      const standardFields = [
-        phoneField,
-        firstNameField,
-        lastNameField,
-        emailField,
-        "phone_number",
-        "phone",
-        "first_name",
-        "firstName",
-        "last_name",
-        "lastName",
-        "email",
-      ];
-
-      const customData: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(row)) {
-        if (!standardFields.includes(key) && value) {
-          customData[key] = value;
-        }
-      }
-
-      // Get timezone from the row (client-side already derives from phone if not provided)
-      const timezone = row.timezone || undefined;
 
       validContacts.push({
         campaign_id: id,
@@ -240,12 +202,21 @@ export async function POST(
 
 /**
  * Normalize phone number to E.164 format (+1XXXXXXXXXX)
+ * More lenient validation to handle various input formats
  */
 function normalizePhoneNumber(phone: string): string | null {
   if (!phone) return null;
 
-  // Remove all non-numeric characters
-  const digits = phone.toString().replace(/\D/g, "");
+  // Convert to string and trim
+  const phoneStr = phone.toString().trim();
+  if (!phoneStr) return null;
+
+  // Remove all non-numeric characters except leading +
+  const hasPlus = phoneStr.startsWith('+');
+  const digits = phoneStr.replace(/\D/g, "");
+
+  // Need at least 7 digits for a valid phone number
+  if (digits.length < 7) return null;
 
   // Handle different formats
   if (digits.length === 10) {
@@ -254,9 +225,13 @@ function normalizePhoneNumber(phone: string): string | null {
   } else if (digits.length === 11 && digits.startsWith("1")) {
     // US number with country code
     return `+${digits}`;
-  } else if (digits.length >= 11 && digits.length <= 15) {
-    // International number
-    return `+${digits}`;
+  } else if (digits.length >= 7 && digits.length <= 15) {
+    // International number or shorter number - accept it
+    if (hasPlus || digits.length >= 10) {
+      return `+${digits}`;
+    }
+    // Assume US for 7-digit numbers (local)
+    return `+1${digits}`;
   }
 
   return null;

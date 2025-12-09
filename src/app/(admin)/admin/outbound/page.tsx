@@ -67,6 +67,8 @@ import {
   LayoutList,
   LayoutGrid,
   MoreHorizontal,
+  AlertTriangle,
+  Settings,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
@@ -81,6 +83,11 @@ interface OutboundCampaign {
   is_test_mode: boolean;
   created_at: string;
   launched_at: string | null;
+  call_provider: string | null;
+  vapi_assistant_id: string | null;
+  autocalls_assistant_id: number | null;
+  synthflow_model_id: string | null;
+  campaign_schedules: Array<{ id: string }>;
   clients: {
     id: string;
     name: string;
@@ -91,6 +98,24 @@ interface OutboundCampaign {
     positiveCalls: number;
     positiveRate: number;
   };
+}
+
+// Check if a campaign setup is complete
+function isSetupComplete(campaign: OutboundCampaign): boolean {
+  // Must have a call provider configured
+  if (!campaign.call_provider) return false;
+
+  // Must have provider-specific assistant ID
+  switch (campaign.call_provider) {
+    case "vapi":
+      return !!campaign.vapi_assistant_id;
+    case "autocalls":
+      return !!campaign.autocalls_assistant_id;
+    case "synthflow":
+      return !!campaign.synthflow_model_id;
+    default:
+      return false;
+  }
 }
 
 const statusColors: Record<string, string> = {
@@ -568,13 +593,21 @@ export default function OutboundCampaignsPage() {
                       </TableCell>
                       <TableCell>
                         <Link
-                          href={`/admin/outbound/${campaign.id}`}
+                          href={campaign.status === "draft" && !isSetupComplete(campaign)
+                            ? `/admin/outbound/new?resume=${campaign.id}`
+                            : `/admin/outbound/${campaign.id}`}
                           className="font-medium hover:underline"
                         >
                           {campaign.name}
                         </Link>
                         {campaign.is_test_mode && (
                           <Badge variant="outline" className="ml-2 text-xs">Test</Badge>
+                        )}
+                        {campaign.status === "draft" && !isSetupComplete(campaign) && (
+                          <Badge variant="warning" className="ml-2 text-xs bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400">
+                            <AlertTriangle className="mr-1 h-3 w-3" />
+                            Pending Setup
+                          </Badge>
                         )}
                         {campaign.description && (
                           <p className="text-sm text-muted-foreground line-clamp-1">
@@ -621,12 +654,21 @@ export default function OutboundCampaignsPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem asChild>
-                              <Link href={`/admin/outbound/${campaign.id}`}>
-                                <Edit className="mr-2 h-4 w-4" />
-                                Edit Campaign
-                              </Link>
-                            </DropdownMenuItem>
+                            {campaign.status === "draft" && !isSetupComplete(campaign) ? (
+                              <DropdownMenuItem asChild>
+                                <Link href={`/admin/outbound/new?resume=${campaign.id}`}>
+                                  <Settings className="mr-2 h-4 w-4" />
+                                  Continue Setup
+                                </Link>
+                              </DropdownMenuItem>
+                            ) : (
+                              <DropdownMenuItem asChild>
+                                <Link href={`/admin/outbound/${campaign.id}`}>
+                                  <Edit className="mr-2 h-4 w-4" />
+                                  Edit Campaign
+                                </Link>
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem asChild>
                               <Link href={`/admin/outbound/${campaign.id}/contacts`}>
                                 <Users className="mr-2 h-4 w-4" />
@@ -834,20 +876,31 @@ export default function OutboundCampaignsPage() {
                   {/* Action Buttons */}
                   <div className="grid grid-cols-2 gap-2 pt-2">
                     {campaign.status === "draft" ? (
-                      <>
-                        <Button variant="outline" size="sm" className="w-full" asChild>
-                          <Link href={`/admin/outbound/${campaign.id}`}>
-                            <Edit className="mr-2 h-4 w-4" />
-                            Edit
-                          </Link>
-                        </Button>
-                        <Button size="sm" className="w-full" asChild>
-                          <Link href={`/admin/outbound/${campaign.id}`}>
-                            <Play className="mr-2 h-4 w-4" />
-                            Launch
-                          </Link>
-                        </Button>
-                      </>
+                      !isSetupComplete(campaign) ? (
+                        <>
+                          <Button variant="outline" size="sm" className="w-full col-span-2" asChild>
+                            <Link href={`/admin/outbound/new?resume=${campaign.id}`}>
+                              <Settings className="mr-2 h-4 w-4" />
+                              Continue Setup
+                            </Link>
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <Button variant="outline" size="sm" className="w-full" asChild>
+                            <Link href={`/admin/outbound/${campaign.id}`}>
+                              <Edit className="mr-2 h-4 w-4" />
+                              Edit
+                            </Link>
+                          </Button>
+                          <Button size="sm" className="w-full" asChild>
+                            <Link href={`/admin/outbound/${campaign.id}`}>
+                              <Play className="mr-2 h-4 w-4" />
+                              Launch
+                            </Link>
+                          </Button>
+                        </>
+                      )
                     ) : (
                       <>
                         <Button variant="outline" size="sm" className="w-full" asChild>

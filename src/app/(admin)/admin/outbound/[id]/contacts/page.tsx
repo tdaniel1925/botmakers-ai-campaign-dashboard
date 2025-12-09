@@ -71,6 +71,8 @@ import {
   CheckCircle2,
   XCircle,
   Globe,
+  Settings,
+  Info,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
@@ -176,6 +178,33 @@ interface ColumnMapping {
   timezone: string;
 }
 
+interface VariableMapping {
+  csv_column: string;
+  variable_name: string;
+}
+
+// Provider-specific variable info
+const PROVIDER_VARIABLE_INFO = {
+  vapi: {
+    name: "Vapi",
+    description: "Variables are passed to the assistant via assistantOverrides.variableValues",
+    format: "key: value (JSON object)",
+    examples: ["company_name", "appointment_date", "product_name"],
+  },
+  autocalls: {
+    name: "AutoCalls.ai",
+    description: "Variables are passed in the 'variables' object when making calls",
+    format: "key: value (JSON object)",
+    examples: ["company", "interest", "callback_time"],
+  },
+  synthflow: {
+    name: "Synthflow",
+    description: "Variables are passed as custom_variables array in 'Key: Value' format",
+    format: "Key: Value (array of strings)",
+    examples: ["Company", "Product", "Meeting_Date"],
+  },
+};
+
 interface UploadReport {
   totalRows: number;
   imported: number;
@@ -234,11 +263,31 @@ export default function ContactsPage({
   const [uploadReport, setUploadReport] = useState<UploadReport | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Variable mapping for provider
+  const [variableMappings, setVariableMappings] = useState<VariableMapping[]>([]);
+  const [campaignProvider, setCampaignProvider] = useState<"vapi" | "autocalls" | "synthflow" | null>(null);
+
   // Delete modal
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
   const { toast } = useToast();
+
+  // Fetch campaign to get provider info
+  useEffect(() => {
+    async function fetchCampaignProvider() {
+      try {
+        const response = await fetch(`/api/admin/outbound-campaigns/${id}`);
+        if (response.ok) {
+          const campaign = await response.json();
+          setCampaignProvider(campaign.call_provider || null);
+        }
+      } catch (error) {
+        console.error("Error fetching campaign:", error);
+      }
+    }
+    fetchCampaignProvider();
+  }, [id]);
 
   const fetchContacts = async () => {
     setIsLoading(true);
@@ -494,9 +543,22 @@ export default function ContactsPage({
         ].filter(Boolean);
 
         const customData: Record<string, unknown> = {};
+
+        // Add variable mappings (renamed columns for provider)
+        for (const mapping of variableMappings) {
+          if (mapping.csv_column && mapping.variable_name && row[mapping.csv_column]) {
+            customData[mapping.variable_name] = row[mapping.csv_column];
+          }
+        }
+
+        // Add any remaining unmapped columns with their original names
         for (const [key, value] of Object.entries(row)) {
-          if (!standardFields.includes(key) && value) {
-            customData[key] = value;
+          if (!standardFields.includes(key) && value && !customData[key]) {
+            // Check if this column is mapped to a variable
+            const isVariableMapped = variableMappings.some(m => m.csv_column === key);
+            if (!isVariableMapped) {
+              customData[key] = value;
+            }
           }
         }
 
@@ -574,6 +636,7 @@ export default function ContactsPage({
     setCsvData([]);
     setCsvPreview([]);
     setColumnMapping({ phone_number: "", first_name: "", last_name: "", email: "", timezone: "" });
+    setVariableMappings([]);
     setUploadStep("upload");
     setUploadProgress(0);
     setUploadStatus("");
@@ -581,6 +644,36 @@ export default function ContactsPage({
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
+  };
+
+  // Variable mapping helpers
+  const addVariableMapping = () => {
+    setVariableMappings(prev => [...prev, { csv_column: "", variable_name: "" }]);
+  };
+
+  const removeVariableMapping = (index: number) => {
+    setVariableMappings(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const updateVariableMapping = (index: number, field: "csv_column" | "variable_name", value: string) => {
+    setVariableMappings(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
+  };
+
+  // Get unmapped CSV columns (columns not used in standard mapping)
+  const getUnmappedColumns = () => {
+    const standardMapped = [
+      columnMapping.phone_number,
+      columnMapping.first_name,
+      columnMapping.last_name,
+      columnMapping.email,
+      columnMapping.timezone,
+    ].filter(Boolean);
+    const variableMapped = variableMappings.map(m => m.csv_column).filter(Boolean);
+    return csvHeaders.filter(h => !standardMapped.includes(h) && !variableMapped.includes(h));
   };
 
   const handleCloseUploadModal = () => {
@@ -1109,6 +1202,105 @@ export default function ContactsPage({
                   </div>
                 </div>
               </div>
+
+              {/* Variable Mapping Section */}
+              {getUnmappedColumns().length > 0 && (
+                <div className="space-y-4 pt-4 border-t">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="flex items-center gap-2">
+                        <Settings className="h-4 w-4" />
+                        Custom Variable Mapping
+                      </Label>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Map CSV columns to provider variables for use during calls
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={addVariableMapping}
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      Add Variable
+                    </Button>
+                  </div>
+
+                  {/* Provider Info */}
+                  {campaignProvider && PROVIDER_VARIABLE_INFO[campaignProvider] && (
+                    <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+                      <div className="flex gap-2">
+                        <Info className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                        <div className="text-sm text-blue-700 dark:text-blue-300">
+                          <strong>{PROVIDER_VARIABLE_INFO[campaignProvider].name}:</strong>{" "}
+                          {PROVIDER_VARIABLE_INFO[campaignProvider].description}
+                          <div className="mt-1 text-xs">
+                            Example variable names: {PROVIDER_VARIABLE_INFO[campaignProvider].examples.join(", ")}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Variable Mapping List */}
+                  {variableMappings.length > 0 && (
+                    <div className="space-y-2">
+                      {variableMappings.map((mapping, index) => (
+                        <div key={index} className="flex gap-2 items-center">
+                          <Select
+                            value={mapping.csv_column}
+                            onValueChange={(value) => updateVariableMapping(index, "csv_column", value)}
+                          >
+                            <SelectTrigger className="flex-1">
+                              <SelectValue placeholder="Select CSV column" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {getUnmappedColumns().map((col) => (
+                                <SelectItem key={col} value={col}>
+                                  {col}
+                                </SelectItem>
+                              ))}
+                              {mapping.csv_column && !getUnmappedColumns().includes(mapping.csv_column) && (
+                                <SelectItem value={mapping.csv_column}>
+                                  {mapping.csv_column}
+                                </SelectItem>
+                              )}
+                            </SelectContent>
+                          </Select>
+                          <span className="text-muted-foreground">→</span>
+                          <Input
+                            value={mapping.variable_name}
+                            onChange={(e) => updateVariableMapping(index, "variable_name", e.target.value)}
+                            placeholder="Variable name"
+                            className="flex-1"
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeVariableMapping(index)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Unmapped Columns Info */}
+                  {getUnmappedColumns().length > 0 && variableMappings.length === 0 && (
+                    <div className="text-sm text-muted-foreground">
+                      <span className="font-medium">Unmapped columns:</span>{" "}
+                      {getUnmappedColumns().slice(0, 5).join(", ")}
+                      {getUnmappedColumns().length > 5 && ` +${getUnmappedColumns().length - 5} more`}
+                      <p className="text-xs mt-1">
+                        These will be stored as custom data with their original column names.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Preview */}
               {csvPreview.length > 0 && columnMapping.phone_number && (
