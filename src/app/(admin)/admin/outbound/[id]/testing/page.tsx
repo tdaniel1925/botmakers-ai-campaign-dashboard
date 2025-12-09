@@ -39,6 +39,7 @@ import {
   RefreshCw,
   ExternalLink,
   PlayCircle,
+  Eye,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 
@@ -495,7 +496,11 @@ export default function OutboundCampaignTestingPage({
               </TableHeader>
               <TableBody>
                 {testCalls.map((call) => (
-                  <TableRow key={call.id}>
+                  <TableRow
+                    key={call.id}
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => window.location.href = `/admin/outbound/${id}/testing/${call.id}`}
+                  >
                     <TableCell className="font-mono">{call.phone_number}</TableCell>
                     <TableCell>{call.first_name || "-"}</TableCell>
                     <TableCell>{getStatusBadge(call.status)}</TableCell>
@@ -512,12 +517,24 @@ export default function OutboundCampaignTestingPage({
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          asChild
+                          title="View details"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Link href={`/admin/outbound/${id}/testing/${call.id}`}>
+                            <Eye className="h-4 w-4" />
+                          </Link>
+                        </Button>
                         {call.recording_url && (
                           <Button
                             variant="ghost"
                             size="icon"
                             asChild
                             title="Listen to recording"
+                            onClick={(e) => e.stopPropagation()}
                           >
                             <a href={call.recording_url} target="_blank" rel="noopener noreferrer">
                               <ExternalLink className="h-4 w-4" />
