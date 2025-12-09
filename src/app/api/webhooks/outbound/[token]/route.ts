@@ -158,22 +158,72 @@ async function handleVapiEndOfCall(
   console.log(`[Vapi End of Call] Processing for call record: ${callRecordId}`);
   console.log(`[Vapi End of Call] Full message:`, JSON.stringify(message, null, 2));
 
+  // Vapi can send data at different levels depending on version
+  // Try multiple paths to find the data
   const call = message.call as Record<string, unknown> || {};
   const analysis = message.analysis as Record<string, unknown> || {};
   const artifact = message.artifact as Record<string, unknown> || {};
 
+  // Also check top-level message for data (some Vapi versions put it there)
+  const topLevelAnalysis = message as Record<string, unknown>;
+
+  console.log(`[Vapi End of Call] Message keys: ${Object.keys(message).join(", ")}`);
   console.log(`[Vapi End of Call] Call object keys: ${Object.keys(call).join(", ")}`);
   console.log(`[Vapi End of Call] Analysis object keys: ${Object.keys(analysis).join(", ")}`);
   console.log(`[Vapi End of Call] Artifact object keys: ${Object.keys(artifact).join(", ")}`);
 
-  // Extract call data
-  const endedReason = call.endedReason as string || "unknown";
-  const durationSeconds = typeof call.duration === "number" ? call.duration : null;
-  const cost = typeof call.cost === "number" ? call.cost : null;
-  const recordingUrl = artifact.recordingUrl as string || null;
-  const transcript = artifact.transcript as string || null;
-  const structuredData = analysis.structuredData as Record<string, unknown> || null;
-  const summary = analysis.summary as string || null;
+  // Extract call data - try multiple paths
+  const endedReason = (call.endedReason as string) || (message.endedReason as string) || "unknown";
+
+  // Duration can be in different places
+  let durationSeconds: number | null = null;
+  if (typeof call.duration === "number") durationSeconds = call.duration;
+  else if (typeof message.duration === "number") durationSeconds = message.duration;
+  else if (typeof call.durationSeconds === "number") durationSeconds = call.durationSeconds;
+  else if (typeof message.durationSeconds === "number") durationSeconds = message.durationSeconds;
+
+  // Cost
+  let cost: number | null = null;
+  if (typeof call.cost === "number") cost = call.cost;
+  else if (typeof message.cost === "number") cost = message.cost;
+
+  // Recording URL - check multiple paths
+  const recordingUrl = (artifact.recordingUrl as string)
+    || (artifact.recording as string)
+    || (message.recordingUrl as string)
+    || (call.recordingUrl as string)
+    || null;
+
+  // Transcript - check multiple paths including messages array
+  let transcript: string | null = null;
+  if (artifact.transcript) {
+    transcript = artifact.transcript as string;
+  } else if (message.transcript) {
+    transcript = message.transcript as string;
+  } else if (artifact.messages && Array.isArray(artifact.messages)) {
+    // Build transcript from messages array
+    const messages = artifact.messages as Array<{ role: string; message?: string; content?: string }>;
+    transcript = messages
+      .map(m => `${m.role}: ${m.message || m.content || ""}`)
+      .join("\n");
+  } else if (message.messages && Array.isArray(message.messages)) {
+    const messages = message.messages as Array<{ role: string; message?: string; content?: string }>;
+    transcript = messages
+      .map(m => `${m.role}: ${m.message || m.content || ""}`)
+      .join("\n");
+  }
+
+  // Structured data - check multiple paths
+  const structuredData = (analysis.structuredData as Record<string, unknown>)
+    || (message.structuredData as Record<string, unknown>)
+    || (topLevelAnalysis.structuredData as Record<string, unknown>)
+    || null;
+
+  // Summary - check multiple paths
+  const summary = (analysis.summary as string)
+    || (message.summary as string)
+    || (topLevelAnalysis.summary as string)
+    || null;
 
   console.log(`[Vapi End of Call] Extracted data:`, {
     endedReason,
