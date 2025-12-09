@@ -8,6 +8,11 @@ interface VerifyResult {
     id: string;
     name: string;
   };
+  phoneNumber?: {
+    id: string;
+    number: string;
+    name?: string;
+  };
   error?: string;
 }
 
@@ -23,7 +28,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { provider, api_key, assistant_id, model_id, use_system_key } = body;
+    const { provider, api_key, assistant_id, model_id, phone_number_id, use_system_key } = body;
 
     if (!provider) {
       return NextResponse.json(
@@ -55,7 +60,7 @@ export async function POST(request: NextRequest) {
 
     switch (provider) {
       case "vapi":
-        result = await verifyVapi(effectiveApiKey, assistant_id);
+        result = await verifyVapi(effectiveApiKey, assistant_id, phone_number_id);
         break;
       case "autocalls":
         result = await verifyAutoCalls(api_key, assistant_id);
@@ -88,10 +93,15 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * Verify Vapi API key and optionally assistant
+ * Verify Vapi API key, assistant, and phone number
  */
-async function verifyVapi(apiKey: string, assistantId?: string): Promise<VerifyResult> {
+async function verifyVapi(apiKey: string, assistantId?: string, phoneNumberId?: string): Promise<VerifyResult> {
   try {
+    const result: VerifyResult = {
+      success: true,
+      provider: "vapi",
+    };
+
     // If assistant ID is provided, verify it exists
     if (assistantId) {
       const response = await fetch(`https://api.vapi.ai/assistant/${assistantId}`, {
@@ -126,44 +136,73 @@ async function verifyVapi(apiKey: string, assistantId?: string): Promise<VerifyR
       }
 
       const assistant = await response.json();
-      return {
-        success: true,
-        provider: "vapi",
-        assistant: {
-          id: assistant.id,
-          name: assistant.name || "Unnamed Assistant",
-        },
+      result.assistant = {
+        id: assistant.id,
+        name: assistant.name || "Unnamed Assistant",
       };
-    }
+    } else {
+      // Just verify API key by listing assistants
+      const response = await fetch("https://api.vapi.ai/assistant", {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+      });
 
-    // Just verify API key by listing assistants
-    const response = await fetch("https://api.vapi.ai/assistant", {
-      method: "GET",
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-    });
-
-    if (!response.ok) {
-      if (response.status === 401) {
+      if (!response.ok) {
+        if (response.status === 401) {
+          return {
+            success: false,
+            provider: "vapi",
+            error: "Invalid API key",
+          };
+        }
         return {
           success: false,
           provider: "vapi",
-          error: "Invalid API key",
+          error: `API error: ${response.status}`,
         };
       }
-      return {
-        success: false,
-        provider: "vapi",
-        error: `API error: ${response.status}`,
+    }
+
+    // If phone number ID is provided, verify it exists
+    if (phoneNumberId) {
+      const phoneResponse = await fetch(`https://api.vapi.ai/phone-number/${phoneNumberId}`, {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!phoneResponse.ok) {
+        if (phoneResponse.status === 404) {
+          return {
+            success: false,
+            provider: "vapi",
+            error: "Phone number not found. Please check the Phone Number ID.",
+            assistant: result.assistant,
+          };
+        }
+        const errorData = await phoneResponse.json().catch(() => ({}));
+        return {
+          success: false,
+          provider: "vapi",
+          error: errorData.message || `Phone number error: ${phoneResponse.status}`,
+          assistant: result.assistant,
+        };
+      }
+
+      const phoneData = await phoneResponse.json();
+      result.phoneNumber = {
+        id: phoneData.id,
+        number: phoneData.number || phoneData.phoneNumber || "Unknown",
+        name: phoneData.name || phoneData.friendlyName,
       };
     }
 
-    return {
-      success: true,
-      provider: "vapi",
-    };
+    return result;
   } catch (error) {
     console.error("Vapi verification error:", error);
     return {

@@ -188,6 +188,7 @@ export default function OutboundCampaignDetailPage({
     success: boolean;
     provider: string;
     assistant?: { id: string; name: string };
+    phoneNumber?: { id: string; number: string; name?: string };
     error?: string;
   } | null>(null);
   const [isSavingProvider, setIsSavingProvider] = useState(false);
@@ -330,6 +331,7 @@ export default function OutboundCampaignDetailPage({
       let apiKey = "";
       let assistantId = "";
       let modelId = "";
+      let phoneNumberId = "";
 
       let useSystemKey = false;
 
@@ -341,6 +343,7 @@ export default function OutboundCampaignDetailPage({
             apiKey = providerData.vapi_api_key;
           }
           assistantId = providerData.vapi_assistant_id;
+          phoneNumberId = providerData.vapi_phone_number_id;
           break;
         case "autocalls":
           apiKey = providerData.autocalls_api_key;
@@ -370,6 +373,7 @@ export default function OutboundCampaignDetailPage({
           api_key: apiKey || undefined,
           assistant_id: assistantId || undefined,
           model_id: modelId || undefined,
+          phone_number_id: phoneNumberId || undefined,
           use_system_key: useSystemKey,
         }),
       });
@@ -1026,6 +1030,17 @@ export default function OutboundCampaignDetailPage({
                           {verificationResult.assistant && (
                             <p className="text-sm text-green-600 dark:text-green-400">
                               Assistant: {verificationResult.assistant.name}
+                            </p>
+                          )}
+                          {verificationResult.phoneNumber && (
+                            <p className="text-sm text-green-600 dark:text-green-400">
+                              Phone Number: {verificationResult.phoneNumber.number}
+                              {verificationResult.phoneNumber.name && ` (${verificationResult.phoneNumber.name})`}
+                            </p>
+                          )}
+                          {providerData.call_provider === "vapi" && !verificationResult.phoneNumber && providerData.vapi_phone_number_id && (
+                            <p className="text-sm text-yellow-600 dark:text-yellow-400">
+                              Phone number not verified - check the Phone Number ID
                             </p>
                           )}
                         </>
