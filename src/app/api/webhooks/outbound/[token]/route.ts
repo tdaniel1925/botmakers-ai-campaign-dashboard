@@ -29,8 +29,10 @@ export async function POST(
     }
 
     // Log raw webhook for debugging
+    console.log(`[Outbound Webhook] ========================================`);
     console.log(`[Outbound Webhook] Campaign: ${campaign.id}, Provider: ${campaign.call_provider}`);
     console.log(`[Outbound Webhook] Raw payload:`, JSON.stringify(body, null, 2));
+    console.log(`[Outbound Webhook] ========================================`);
 
     // Handle based on provider
     switch (campaign.call_provider) {
@@ -63,22 +65,28 @@ async function handleVapiWebhook(
 ) {
   const { message } = body;
 
+  console.log(`[Vapi Webhook] Message received:`, message ? "yes" : "no");
+
   if (!message) {
+    console.log(`[Vapi Webhook] No message in payload, keys: ${Object.keys(body).join(", ")}`);
     return NextResponse.json({ error: "No message in payload" }, { status: 400 });
   }
 
+  const messageType = (message as Record<string, unknown>).type as string;
+  console.log(`[Vapi Webhook] Message type: ${messageType}`);
+
   // Extract metadata from call
-  const metadata = (message as Record<string, unknown>).call
-    ? ((message as Record<string, unknown>).call as Record<string, unknown>).metadata as Record<string, unknown> || {}
-    : {};
+  const call = (message as Record<string, unknown>).call as Record<string, unknown> | undefined;
+  const metadata = call?.metadata as Record<string, unknown> || {};
   const { callRecordId, contactId, attemptNumber, isTest } = metadata;
 
+  console.log(`[Vapi Webhook] Call record ID: ${callRecordId}, Is test: ${isTest}`);
+  console.log(`[Vapi Webhook] Metadata:`, JSON.stringify(metadata));
+
   if (!callRecordId) {
-    console.log("No call record ID in metadata, skipping");
+    console.log("[Vapi Webhook] No call record ID in metadata, skipping");
     return NextResponse.json({ status: "no_call_record" });
   }
-
-  const messageType = (message as Record<string, unknown>).type as string;
 
   // Handle different message types
   switch (messageType) {
@@ -147,9 +155,16 @@ async function handleVapiEndOfCall(
   message: Record<string, unknown>,
   isTest: boolean | undefined
 ) {
+  console.log(`[Vapi End of Call] Processing for call record: ${callRecordId}`);
+  console.log(`[Vapi End of Call] Full message:`, JSON.stringify(message, null, 2));
+
   const call = message.call as Record<string, unknown> || {};
   const analysis = message.analysis as Record<string, unknown> || {};
   const artifact = message.artifact as Record<string, unknown> || {};
+
+  console.log(`[Vapi End of Call] Call object keys: ${Object.keys(call).join(", ")}`);
+  console.log(`[Vapi End of Call] Analysis object keys: ${Object.keys(analysis).join(", ")}`);
+  console.log(`[Vapi End of Call] Artifact object keys: ${Object.keys(artifact).join(", ")}`);
 
   // Extract call data
   const endedReason = call.endedReason as string || "unknown";
@@ -159,6 +174,16 @@ async function handleVapiEndOfCall(
   const transcript = artifact.transcript as string || null;
   const structuredData = analysis.structuredData as Record<string, unknown> || null;
   const summary = analysis.summary as string || null;
+
+  console.log(`[Vapi End of Call] Extracted data:`, {
+    endedReason,
+    durationSeconds,
+    cost,
+    recordingUrl: recordingUrl ? "present" : "null",
+    transcript: transcript ? `${transcript.length} chars` : "null",
+    structuredData: structuredData ? "present" : "null",
+    summary: summary ? `${summary.length} chars` : "null",
+  });
 
   // Determine outcome based on structured data
   let outcome: "positive" | "negative" | "neutral" | null = null;
