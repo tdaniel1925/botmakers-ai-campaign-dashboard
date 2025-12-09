@@ -93,12 +93,43 @@ export interface DbPlatformSettings {
   updated_at: string;
 }
 
+export type AdminRole = "super_admin" | "admin" | "viewer";
+
 export interface DbAdminUser {
   id: string;
   email: string;
   name: string;
-  role: string;
+  role: AdminRole;
+  is_active: boolean;
+  last_login_at: string | null;
+  invited_by: string | null;
   created_at: string;
+  updated_at: string;
+}
+
+export type ClientUserRole = "owner" | "manager" | "member" | "viewer";
+
+export interface DbClientUser {
+  id: string;
+  client_id: string;
+  auth_user_id: string | null;
+  email: string;
+  name: string;
+  role: ClientUserRole;
+  is_active: boolean;
+  temp_password: string | null;
+  password_changed_at: string | null;
+  invited_at: string | null;
+  accepted_at: string | null;
+  invited_by: string | null;
+  last_login_at: string | null;
+  created_at: string;
+  updated_at: string;
+  clients?: {
+    id: string;
+    name: string;
+    company_name: string | null;
+  };
 }
 
 // Outbound Campaign Types

@@ -35,6 +35,7 @@ import {
   Phone,
   Send,
   Activity,
+  Shield,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -128,6 +129,11 @@ const billingItem = {
 
 // Group: Settings
 const settingsItems = [
+  {
+    title: "Platform Admins",
+    href: "/admin/settings/admins",
+    icon: Shield,
+  },
   {
     title: "API Keys",
     href: "/admin/settings/api-keys",

@@ -55,6 +55,7 @@ import {
   Eye,
   Mail,
   CreditCard,
+  Users,
 } from "lucide-react";
 import Link from "next/link";
 import { format } from "date-fns";
@@ -396,6 +397,27 @@ export default function EditClientPage() {
 
         {/* Sidebar Cards */}
         <div className="space-y-6">
+          {/* Team Members Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <Users className="mr-2 h-5 w-5" />
+                Team Members
+              </CardTitle>
+              <CardDescription>
+                Manage who has access to this client&apos;s data
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Link href={`/admin/clients/${params.id}/users`}>
+                <Button className="w-full">
+                  <Users className="mr-2 h-4 w-4" />
+                  Manage Team
+                </Button>
+              </Link>
+            </CardContent>
+          </Card>
+
           {/* Credentials Card */}
           <Card>
             <CardHeader>

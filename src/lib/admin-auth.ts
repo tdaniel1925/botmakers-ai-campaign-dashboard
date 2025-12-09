@@ -2,11 +2,14 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
+import type { AdminRole } from "@/types";
+
 export interface AdminUser {
   id: string;
   email: string;
   name: string;
-  role: string;
+  role: AdminRole;
+  is_active?: boolean;
 }
 
 export interface AuthResult {
