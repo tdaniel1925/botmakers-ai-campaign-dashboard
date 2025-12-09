@@ -14,6 +14,8 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
   Loader2,
   Phone,
   Clock,
@@ -64,6 +66,7 @@ export default function TestCallDetailsPage({
 }) {
   const { id, callId } = use(params);
   const [call, setCall] = useState<TestCallDetails | null>(null);
+  const [navigation, setNavigation] = useState<{ prevId: string | null; nextId: string | null }>({ prevId: null, nextId: null });
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
@@ -78,6 +81,7 @@ export default function TestCallDetailsPage({
       }
       const data = await response.json();
       setCall(data.call);
+      setNavigation(data.navigation || { prevId: null, nextId: null });
     } catch (error) {
       console.error("Error fetching call details:", error);
       toast({
@@ -165,14 +169,52 @@ export default function TestCallDetailsPage({
 
   return (
     <div className="space-y-6">
-      {/* Header with Back Link */}
-      <div className="flex items-center gap-4">
+      {/* Header with Back Link and Navigation */}
+      <div className="flex items-center justify-between">
         <Link href={`/admin/outbound/${id}/testing`}>
           <Button variant="ghost" size="sm" className="gap-2">
             <ArrowLeft className="h-4 w-4" />
             Back to Tests
           </Button>
         </Link>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!navigation.prevId}
+            asChild={!!navigation.prevId}
+          >
+            {navigation.prevId ? (
+              <Link href={`/admin/outbound/${id}/testing/${navigation.prevId}`}>
+                <ChevronLeft className="h-4 w-4 mr-1" />
+                Newer
+              </Link>
+            ) : (
+              <span>
+                <ChevronLeft className="h-4 w-4 mr-1" />
+                Newer
+              </span>
+            )}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!navigation.nextId}
+            asChild={!!navigation.nextId}
+          >
+            {navigation.nextId ? (
+              <Link href={`/admin/outbound/${id}/testing/${navigation.nextId}`}>
+                Older
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Link>
+            ) : (
+              <span>
+                Older
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </span>
+            )}
+          </Button>
+        </div>
       </div>
 
       {/* Page Title */}

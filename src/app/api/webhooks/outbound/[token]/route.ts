@@ -175,24 +175,71 @@ async function handleVapiEndOfCall(
   // Extract call data - try multiple paths
   const endedReason = (call.endedReason as string) || (message.endedReason as string) || "unknown";
 
-  // Duration can be in different places
+  // Duration can be in different places - Vapi sends it in multiple formats
   let durationSeconds: number | null = null;
   if (typeof call.duration === "number") durationSeconds = call.duration;
   else if (typeof message.duration === "number") durationSeconds = message.duration;
   else if (typeof call.durationSeconds === "number") durationSeconds = call.durationSeconds;
   else if (typeof message.durationSeconds === "number") durationSeconds = message.durationSeconds;
+  // Check startedAt/endedAt timestamps to calculate duration
+  else if (call.startedAt && call.endedAt) {
+    const startTime = new Date(call.startedAt as string).getTime();
+    const endTime = new Date(call.endedAt as string).getTime();
+    if (!isNaN(startTime) && !isNaN(endTime)) {
+      durationSeconds = Math.round((endTime - startTime) / 1000);
+    }
+  }
+  // Also check artifact for stereoRecordingUrl duration
+  else if (artifact.stereoRecordingUrl || artifact.recordingUrl) {
+    // If we have a recording, try to get duration from the call timestamps
+    if (message.startedAt && message.endedAt) {
+      const startTime = new Date(message.startedAt as string).getTime();
+      const endTime = new Date(message.endedAt as string).getTime();
+      if (!isNaN(startTime) && !isNaN(endTime)) {
+        durationSeconds = Math.round((endTime - startTime) / 1000);
+      }
+    }
+  }
 
-  // Cost
+  // Cost - check multiple paths including costBreakdown
   let cost: number | null = null;
   if (typeof call.cost === "number") cost = call.cost;
   else if (typeof message.cost === "number") cost = message.cost;
+  else if (call.costBreakdown && typeof (call.costBreakdown as Record<string, unknown>).total === "number") {
+    cost = (call.costBreakdown as Record<string, unknown>).total as number;
+  }
+  else if (message.costBreakdown && typeof (message.costBreakdown as Record<string, unknown>).total === "number") {
+    cost = (message.costBreakdown as Record<string, unknown>).total as number;
+  }
+  // Parse string cost if present
+  else if (typeof call.cost === "string") cost = parseFloat(call.cost as string) || null;
+  else if (typeof message.cost === "string") cost = parseFloat(message.cost as string) || null;
 
   // Recording URL - check multiple paths
   const recordingUrl = (artifact.recordingUrl as string)
+    || (artifact.stereoRecordingUrl as string)
     || (artifact.recording as string)
     || (message.recordingUrl as string)
+    || (message.stereoRecordingUrl as string)
     || (call.recordingUrl as string)
+    || (call.stereoRecordingUrl as string)
     || null;
+
+  // Log all potential data sources for debugging
+  console.log(`[Vapi End of Call] Duration sources:`, {
+    "call.duration": call.duration,
+    "message.duration": message.duration,
+    "call.durationSeconds": call.durationSeconds,
+    "message.durationSeconds": message.durationSeconds,
+    "call.startedAt": call.startedAt,
+    "call.endedAt": call.endedAt,
+  });
+  console.log(`[Vapi End of Call] Cost sources:`, {
+    "call.cost": call.cost,
+    "message.cost": message.cost,
+    "call.costBreakdown": call.costBreakdown,
+    "message.costBreakdown": message.costBreakdown,
+  });
 
   // Transcript - check multiple paths including messages array
   let transcript: string | null = null;
@@ -273,22 +320,44 @@ async function handleVapiEndOfCall(
     status = "completed";
   }
 
+  // Extract timestamps for better tracking
+  const answeredAt = (call.startedAt as string) || (message.startedAt as string) || null;
+  const endedAt = (call.endedAt as string) || (message.endedAt as string) || new Date().toISOString();
+
   // Update call record
-  await supabase
+  const updateData: Record<string, unknown> = {
+    status,
+    outcome,
+    duration_seconds: durationSeconds,
+    cost: cost !== null ? cost.toFixed(4) : null,
+    recording_url: recordingUrl,
+    transcript,
+    structured_data: structuredData,
+    summary,
+    ended_at: endedAt,
+    vapi_ended_reason: endedReason,
+  };
+
+  // Only set answered_at if we have it and it's not already set
+  if (answeredAt) {
+    updateData.answered_at = answeredAt;
+  }
+
+  console.log(`[Vapi End of Call] Updating call record with:`, {
+    ...updateData,
+    transcript: transcript ? `${transcript.length} chars` : null,
+  });
+
+  const { error: updateError } = await supabase
     .from("campaign_calls")
-    .update({
-      status,
-      outcome,
-      duration_seconds: durationSeconds,
-      cost: cost?.toFixed(4),
-      recording_url: recordingUrl,
-      transcript,
-      structured_data: structuredData,
-      summary,
-      ended_at: new Date().toISOString(),
-      vapi_ended_reason: endedReason,
-    })
+    .update(updateData)
     .eq("id", callRecordId);
+
+  if (updateError) {
+    console.error(`[Vapi End of Call] Error updating call record:`, updateError);
+  } else {
+    console.log(`[Vapi End of Call] Successfully updated call record ${callRecordId}`);
+  }
 
   // Skip contact/campaign updates for test calls
   if (isTest) {

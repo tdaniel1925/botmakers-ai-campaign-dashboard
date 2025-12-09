@@ -49,7 +49,34 @@ export async function GET(
       return NextResponse.json({ error: "Test call not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ call });
+    // Get prev/next call IDs for navigation (sorted by created_at desc)
+    const { data: prevCall } = await supabase
+      .from("campaign_calls")
+      .select("id")
+      .eq("campaign_id", id)
+      .eq("is_test", true)
+      .gt("created_at", call.created_at)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .single();
+
+    const { data: nextCall } = await supabase
+      .from("campaign_calls")
+      .select("id")
+      .eq("campaign_id", id)
+      .eq("is_test", true)
+      .lt("created_at", call.created_at)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single();
+
+    return NextResponse.json({
+      call,
+      navigation: {
+        prevId: prevCall?.id || null,
+        nextId: nextCall?.id || null,
+      }
+    });
   } catch (error) {
     console.error("Error fetching test call:", error);
     return NextResponse.json(
