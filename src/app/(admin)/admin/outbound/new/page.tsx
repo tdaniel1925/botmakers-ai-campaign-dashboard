@@ -226,7 +226,7 @@ const AREA_CODE_TIMEZONES: Record<string, string> = {
   "682": "America/Chicago", "701": "America/Chicago", "708": "America/Chicago", "713": "America/Chicago",
   "715": "America/Chicago", "731": "America/Chicago", "737": "America/Chicago", "763": "America/Chicago",
   "769": "America/Chicago", "773": "America/Chicago", "779": "America/Chicago", "785": "America/Chicago",
-  "806": "America/Chicago", "808": "America/Chicago", "815": "America/Chicago", "816": "America/Chicago",
+  "806": "America/Chicago", "815": "America/Chicago", "816": "America/Chicago",
   "817": "America/Chicago", "830": "America/Chicago", "832": "America/Chicago", "847": "America/Chicago",
   "865": "America/Chicago", "870": "America/Chicago", "872": "America/Chicago", "901": "America/Chicago",
   "903": "America/Chicago", "913": "America/Chicago", "915": "America/Chicago", "918": "America/Chicago",
@@ -253,8 +253,8 @@ const AREA_CODE_TIMEZONES: Record<string, string> = {
   "907": "America/Anchorage",
   // Hawaii
   "808": "Pacific/Honolulu",
-  // Arizona (no DST)
-  "480": "America/Phoenix", "520": "America/Phoenix", "602": "America/Phoenix", "623": "America/Phoenix", "928": "America/Phoenix",
+  // Arizona (no DST) - 480 is unique, others overlap with Denver but Arizona doesn't observe DST
+  "480": "America/Phoenix",
 };
 
 function getTimezoneFromPhone(phone: string): string | null {
