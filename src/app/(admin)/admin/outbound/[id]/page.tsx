@@ -892,13 +892,16 @@ export default function OutboundCampaignDetailPage({
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Phone Number ID (optional)</Label>
+                    <Label>Phone Number ID *</Label>
                     <Input
                       value={providerData.vapi_phone_number_id}
                       onChange={(e) => setProviderData({ ...providerData, vapi_phone_number_id: e.target.value })}
-                      placeholder="Optional - uses assistant default if not set"
+                      placeholder="Your Vapi phone number ID for outbound calls"
                       disabled={campaign.status !== "draft"}
                     />
+                    <p className="text-xs text-muted-foreground">
+                      Find this in Vapi Dashboard → Phone Numbers. Required for making outbound calls.
+                    </p>
                   </div>
                 </div>
               )}

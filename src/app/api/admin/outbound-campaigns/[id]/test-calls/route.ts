@@ -257,6 +257,10 @@ async function initiateVapiCall(
     throw new Error("Vapi assistant ID not configured");
   }
 
+  if (!campaign.vapi_phone_number_id) {
+    throw new Error("Vapi phone number ID not configured. Please configure the outbound phone number in campaign settings.");
+  }
+
   // Build webhook URL with campaign token
   const webhookUrl = `${baseUrl}/api/webhooks/outbound/${campaign.webhook_token}`;
 
