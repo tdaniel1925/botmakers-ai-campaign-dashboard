@@ -77,7 +77,7 @@ async function logEmail(params: {
 
 // Get sender email from env or default
 function getSenderEmail() {
-  return process.env.EMAIL_FROM || "BotMakers <noreply@botmakers.io>";
+  return process.env.EMAIL_FROM || "BotMakers <noreply@botmakers.agency>";
 }
 
 /**
@@ -86,10 +86,19 @@ function getSenderEmail() {
 export async function sendWelcomeEmail(
   props: WelcomeEmailProps & { clientId?: string }
 ): Promise<EmailSendResult> {
+  console.log("[sendWelcomeEmail] Starting with props:", {
+    recipientName: props.recipientName,
+    recipientEmail: props.recipientEmail,
+    username: props.username,
+    hasPassword: !!props.tempPassword
+  });
+
   const resend = getResendClient();
   if (!resend) {
+    console.error("[sendWelcomeEmail] Resend API key not configured");
     return { success: false, error: "Resend API key not configured" };
   }
+  console.log("[sendWelcomeEmail] Resend client initialized");
 
   try {
     const settings = await getPlatformSettings();
@@ -108,12 +117,21 @@ export async function sendWelcomeEmail(
       return { success: false, error: "No recipient email address provided" };
     }
 
+    const fromEmail = getSenderEmail();
+    console.log("[sendWelcomeEmail] Sending email:", {
+      from: fromEmail,
+      to: recipientEmail,
+      subject
+    });
+
     const { data, error } = await resend.emails.send({
-      from: getSenderEmail(),
+      from: fromEmail,
       to: recipientEmail,
       subject,
       html,
     });
+
+    console.log("[sendWelcomeEmail] Resend response:", { data, error });
 
     if (error) {
       await logEmail({

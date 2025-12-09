@@ -145,6 +145,7 @@ export async function POST(request: Request) {
           .eq("id", client.id);
       } else {
         // Send welcome email with credentials
+        console.log("Sending welcome email to:", email);
         const emailResult = await sendWelcomeEmail({
           clientId: client.id,
           recipientName: name,
@@ -155,8 +156,11 @@ export async function POST(request: Request) {
           companyName: "BotMakers",
         });
 
+        console.log("Email result:", emailResult);
         if (!emailResult.success) {
           console.error("Email error:", emailResult.error);
+        } else {
+          console.log("Email sent successfully, messageId:", emailResult.messageId);
         }
 
         // Store the auth user ID reference (don't update primary key)
