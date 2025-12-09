@@ -81,16 +81,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // Get existing usernames to avoid duplicates
-    const { data: existingClients } = await supabase
-      .from("clients")
-      .select("username");
-    const existingUsernames = (existingClients || [])
-      .map((c) => c.username)
-      .filter(Boolean) as string[];
-
-    // Generate credentials
-    const username = generateUsername(name, existingUsernames);
+    // Use email as username
+    const username = email;
     const tempPassword = generateTempPassword();
 
     // Determine invite status

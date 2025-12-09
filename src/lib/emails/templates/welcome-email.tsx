@@ -74,7 +74,7 @@ export const WelcomeEmail: React.FC<WelcomeEmailProps> = ({
               <table style={credentialsTable}>
                 <tbody>
                   <tr>
-                    <td style={credentialsLabel}>Username:</td>
+                    <td style={credentialsLabel}>Email:</td>
                     <td style={credentialsValue}>
                       <code style={codeStyle}>{username}</code>
                     </td>

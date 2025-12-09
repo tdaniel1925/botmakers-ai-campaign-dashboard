@@ -34,7 +34,8 @@ export async function POST(
     }
 
     let tempPassword = client.temp_password;
-    let username = client.username;
+    // Use email as username for login
+    const username = client.email;
 
     // Generate new password if requested or if none exists
     if (regeneratePassword || !tempPassword) {

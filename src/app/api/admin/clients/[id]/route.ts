@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { verifyAdmin, forbiddenResponse } from "@/lib/admin-auth";
 
@@ -99,11 +99,65 @@ export async function DELETE(
 
     const { id } = await params;
     const supabase = await createClient();
+    const serviceClient = await createServiceClient();
 
+    // Get client to find auth_user_id
+    const { data: client } = await supabase
+      .from("clients")
+      .select("auth_user_id, email")
+      .eq("id", id)
+      .single();
+
+    // Delete related data in order (respecting foreign key constraints)
+    // 1. Delete calls associated with this client's campaigns
+    const { data: campaigns } = await supabase
+      .from("campaigns")
+      .select("id")
+      .eq("client_id", id);
+
+    if (campaigns && campaigns.length > 0) {
+      const campaignIds = campaigns.map(c => c.id);
+      await supabase.from("calls").delete().in("campaign_id", campaignIds);
+    }
+
+    // 2. Delete inbound campaigns
+    await supabase.from("inbound_campaigns").delete().eq("client_id", id);
+
+    // 3. Delete outbound campaigns
+    await supabase.from("campaigns").delete().eq("client_id", id);
+
+    // 4. Delete email logs
+    await supabase.from("email_logs").delete().eq("client_id", id);
+
+    // 5. Delete notifications
+    await supabase.from("notifications").delete().eq("client_id", id);
+
+    // 6. Delete the client record
     const { error } = await supabase.from("clients").delete().eq("id", id);
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    // 7. Delete auth user if exists
+    if (client?.auth_user_id) {
+      try {
+        await serviceClient.auth.admin.deleteUser(client.auth_user_id);
+      } catch (authErr) {
+        console.error("Error deleting auth user:", authErr);
+        // Don't fail the request if auth user deletion fails
+      }
+    } else if (client?.email) {
+      // Try to find and delete by email if no auth_user_id stored
+      const { data: authUsers } = await serviceClient.auth.admin.listUsers();
+      const authUser = authUsers?.users?.find(u => u.email === client.email);
+      if (authUser) {
+        try {
+          await serviceClient.auth.admin.deleteUser(authUser.id);
+        } catch (authErr) {
+          console.error("Error deleting auth user by email:", authErr);
+        }
+      }
     }
 
     return NextResponse.json({ success: true });

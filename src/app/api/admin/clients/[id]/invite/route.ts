@@ -54,7 +54,7 @@ export async function POST(
     if (resend) {
       try {
         await resend.emails.send({
-          from: "BotMakers <noreply@botmakers.io>",
+          from: process.env.EMAIL_FROM || "BotMakers <noreply@botmakers.agency>",
           to: client.email,
           subject: "You've been invited to BotMakers Call Analytics",
           html: `

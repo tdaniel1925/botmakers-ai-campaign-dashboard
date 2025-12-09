@@ -72,7 +72,7 @@ export const ReInviteEmail: React.FC<ReInviteEmailProps> = ({
               <table style={credentialsTable}>
                 <tbody>
                   <tr>
-                    <td style={credentialsLabel}>Username:</td>
+                    <td style={credentialsLabel}>Email:</td>
                     <td style={credentialsValue}>
                       <code style={codeStyle}>{username}</code>
                     </td>
