@@ -27,6 +27,10 @@ import {
   FileText,
   Braces,
   AudioLines,
+  MessageSquare,
+  Send,
+  AlertCircle,
+  Bot,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -59,6 +63,26 @@ interface TestCallDetails {
   } | null;
 }
 
+interface SmsLog {
+  id: string;
+  status: string;
+  messageBody: string;
+  phoneNumber: string | null;
+  recipientName: string | null;
+  ruleName: string | null;
+  ruleCondition: string | null;
+  aiReason: string | null;
+  aiConfidence: number | null;
+  twilioSid: string | null;
+  twilioStatus: string | null;
+  error: string | null;
+  segmentCount: number | null;
+  cost: string | null;
+  sentAt: string | null;
+  deliveredAt: string | null;
+  createdAt: string;
+}
+
 export default function TestCallDetailsPage({
   params,
 }: {
@@ -66,9 +90,26 @@ export default function TestCallDetailsPage({
 }) {
   const { id, callId } = use(params);
   const [call, setCall] = useState<TestCallDetails | null>(null);
+  const [smsLogs, setSmsLogs] = useState<SmsLog[]>([]);
   const [navigation, setNavigation] = useState<{ prevId: string | null; nextId: string | null }>({ prevId: null, nextId: null });
   const [isLoading, setIsLoading] = useState(true);
+  const [isSmsLoading, setIsSmsLoading] = useState(false);
   const { toast } = useToast();
+
+  const fetchSmsLogs = async () => {
+    setIsSmsLoading(true);
+    try {
+      const response = await fetch(`/api/admin/outbound-campaigns/${id}/test-calls/${callId}/sms`);
+      if (response.ok) {
+        const data = await response.json();
+        setSmsLogs(data.smsLogs || []);
+      }
+    } catch (error) {
+      console.error("Error fetching SMS logs:", error);
+    } finally {
+      setIsSmsLoading(false);
+    }
+  };
 
   const fetchCallDetails = async () => {
     try {
@@ -96,6 +137,7 @@ export default function TestCallDetailsPage({
 
   useEffect(() => {
     fetchCallDetails();
+    fetchSmsLogs();
   }, [id, callId]);
 
   const getStatusBadge = (status: string) => {
@@ -146,6 +188,23 @@ export default function TestCallDetailsPage({
       return `$${parseFloat(cost).toFixed(4)}`;
     }
     return "$0.0000";
+  };
+
+  const getSmsStatusBadge = (status: string) => {
+    switch (status) {
+      case "sent":
+        return <Badge variant="success"><Send className="mr-1 h-3 w-3" /> Sent</Badge>;
+      case "delivered":
+        return <Badge variant="success"><CheckCircle className="mr-1 h-3 w-3" /> Delivered</Badge>;
+      case "pending":
+        return <Badge variant="secondary"><Clock className="mr-1 h-3 w-3" /> Pending</Badge>;
+      case "queued":
+        return <Badge variant="secondary"><Clock className="mr-1 h-3 w-3" /> Queued</Badge>;
+      case "failed":
+        return <Badge variant="destructive"><XCircle className="mr-1 h-3 w-3" /> Failed</Badge>;
+      default:
+        return <Badge variant="outline">{status}</Badge>;
+    }
   };
 
   if (isLoading) {
@@ -384,6 +443,115 @@ export default function TestCallDetailsPage({
           </CardContent>
         </Card>
       )}
+
+      {/* SMS Follow-up Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <MessageSquare className="h-5 w-5" />
+            SMS Follow-up
+          </CardTitle>
+          <CardDescription>
+            Intent-based SMS triggered by conversation analysis
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {isSmsLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : smsLogs.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <MessageSquare className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>No SMS triggered for this call</p>
+              <p className="text-sm mt-2">
+                {call.status !== "completed"
+                  ? "SMS will be evaluated after the call completes"
+                  : "No SMS rules matched the conversation intent"}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {smsLogs.map((sms) => (
+                <div key={sms.id} className="border rounded-lg p-4 space-y-3">
+                  {/* SMS Header */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      {getSmsStatusBadge(sms.status)}
+                      {sms.ruleName && (
+                        <Badge variant="outline">{sms.ruleName}</Badge>
+                      )}
+                    </div>
+                    <span className="text-sm text-muted-foreground">
+                      {sms.sentAt
+                        ? format(new Date(sms.sentAt), "MMM d, h:mm a")
+                        : format(new Date(sms.createdAt), "MMM d, h:mm a")}
+                    </span>
+                  </div>
+
+                  {/* AI Evaluation */}
+                  {sms.aiReason && (
+                    <div className="bg-muted/50 rounded-lg p-3">
+                      <div className="flex items-start gap-2">
+                        <Bot className="h-4 w-4 mt-0.5 text-muted-foreground" />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-muted-foreground mb-1">
+                            AI Decision
+                            {sms.aiConfidence && (
+                              <span className="ml-2 text-xs">
+                                ({Math.round(sms.aiConfidence * 100)}% confidence)
+                              </span>
+                            )}
+                          </p>
+                          <p className="text-sm">{sms.aiReason}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Rule Condition */}
+                  {sms.ruleCondition && (
+                    <div className="text-sm">
+                      <span className="text-muted-foreground">Trigger condition: </span>
+                      <span className="italic">&quot;{sms.ruleCondition}&quot;</span>
+                    </div>
+                  )}
+
+                  {/* Message Content */}
+                  <div className="bg-background border rounded-lg p-3">
+                    <p className="text-sm font-medium text-muted-foreground mb-1">Message sent:</p>
+                    <p className="text-sm whitespace-pre-wrap">{sms.messageBody}</p>
+                  </div>
+
+                  {/* Technical Details */}
+                  <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+                    {sms.phoneNumber && (
+                      <span>To: {sms.phoneNumber}</span>
+                    )}
+                    {sms.twilioSid && (
+                      <span className="font-mono">SID: {sms.twilioSid.slice(0, 12)}...</span>
+                    )}
+                    {sms.segmentCount && (
+                      <span>{sms.segmentCount} segment{sms.segmentCount > 1 ? "s" : ""}</span>
+                    )}
+                    {sms.twilioStatus && (
+                      <span>Twilio: {sms.twilioStatus}</span>
+                    )}
+                  </div>
+
+                  {/* Error Message */}
+                  {sms.error && (
+                    <div className="flex items-start gap-2 text-destructive text-sm">
+                      <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                      <span>{sms.error}</span>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Transcript */}
       <Card>

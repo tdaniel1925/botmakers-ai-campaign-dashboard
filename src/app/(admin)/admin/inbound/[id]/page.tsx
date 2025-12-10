@@ -53,6 +53,7 @@ import {
   Webhook,
   PhoneIncoming,
   Trash2,
+  Send,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 
@@ -126,6 +127,23 @@ interface InboundCall {
   } | null;
 }
 
+interface SmsLog {
+  id: string;
+  status: string;
+  messageBody: string | null;
+  phoneNumber: string | null;
+  recipientName: string | null;
+  ruleName: string | null;
+  ruleCondition: string | null;
+  aiReason: string | null;
+  aiConfidence: number | null;
+  twilioSid: string | null;
+  twilioStatus: string | null;
+  error: string | null;
+  sentAt: string | null;
+  createdAt: string;
+}
+
 export default function InboundCampaignDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -147,6 +165,8 @@ export default function InboundCampaignDetailPage() {
   const [callsTotal, setCallsTotal] = useState(0);
   const [callsPage, setCallsPage] = useState(1);
   const [selectedCall, setSelectedCall] = useState<InboundCall | null>(null);
+  const [smsLogs, setSmsLogs] = useState<SmsLog[]>([]);
+  const [isLoadingSms, setIsLoadingSms] = useState(false);
 
   const fetchCampaign = useCallback(async () => {
     try {
@@ -209,6 +229,74 @@ export default function InboundCampaignDetailPage() {
       setIsLoadingCalls(false);
     }
   }, [campaignId]);
+
+  const fetchSmsLogs = useCallback(async (callId: string) => {
+    setIsLoadingSms(true);
+    setSmsLogs([]);
+    try {
+      const response = await fetch(
+        `/api/admin/inbound-campaigns/${campaignId}/calls/${callId}/sms`
+      );
+      if (response.ok) {
+        const data = await response.json();
+        setSmsLogs(data.smsLogs || []);
+      }
+    } catch (error) {
+      console.error("Error fetching SMS logs:", error);
+    } finally {
+      setIsLoadingSms(false);
+    }
+  }, [campaignId]);
+
+  const getSmsStatusBadge = (status: string) => {
+    switch (status) {
+      case "sent":
+        return (
+          <Badge variant="default" className="bg-blue-500">
+            <Send className="mr-1 h-3 w-3" />
+            Sent
+          </Badge>
+        );
+      case "delivered":
+        return (
+          <Badge variant="success">
+            <CheckCircle2 className="mr-1 h-3 w-3" />
+            Delivered
+          </Badge>
+        );
+      case "failed":
+        return (
+          <Badge variant="destructive">
+            <XCircle className="mr-1 h-3 w-3" />
+            Failed
+          </Badge>
+        );
+      case "pending":
+        return (
+          <Badge variant="secondary">
+            <Clock className="mr-1 h-3 w-3" />
+            Pending
+          </Badge>
+        );
+      case "not_triggered":
+        return (
+          <Badge variant="outline">
+            <AlertCircle className="mr-1 h-3 w-3" />
+            Not Triggered
+          </Badge>
+        );
+      default:
+        return <Badge variant="secondary">{status}</Badge>;
+    }
+  };
+
+  useEffect(() => {
+    if (selectedCall) {
+      fetchSmsLogs(selectedCall.id);
+    } else {
+      setSmsLogs([]);
+    }
+  }, [selectedCall?.id, fetchSmsLogs]);
 
   useEffect(() => {
     fetchCampaign();
@@ -735,6 +823,89 @@ export default function InboundCampaignDetailPage() {
                     </p>
                   </div>
                 )}
+
+                {/* SMS Follow-up */}
+                <div>
+                  <Label className="text-muted-foreground flex items-center gap-1">
+                    <MessageSquare className="h-4 w-4" />
+                    SMS Follow-up
+                  </Label>
+                  <div className="mt-1">
+                    {isLoadingSms ? (
+                      <div className="flex items-center justify-center py-4">
+                        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : smsLogs.length === 0 ? (
+                      <div className="text-center py-3 text-muted-foreground text-sm bg-muted/50 rounded-lg">
+                        No SMS triggered for this call
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {smsLogs.map((sms) => (
+                          <div
+                            key={sms.id}
+                            className="border rounded-lg p-3 space-y-2"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium">
+                                {sms.ruleName || "SMS"}
+                              </span>
+                              {getSmsStatusBadge(sms.status)}
+                            </div>
+
+                            {/* AI Decision */}
+                            {sms.aiReason && (
+                              <div className="bg-blue-50 dark:bg-blue-950/30 p-2 rounded text-sm">
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="font-medium text-blue-700 dark:text-blue-300">
+                                    AI Decision
+                                  </span>
+                                  {sms.aiConfidence !== null && (
+                                    <span className="text-xs text-blue-600 dark:text-blue-400">
+                                      {Math.round(sms.aiConfidence * 100)}% confident
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-blue-800 dark:text-blue-200">
+                                  {sms.aiReason}
+                                </p>
+                              </div>
+                            )}
+
+                            {/* Message Preview */}
+                            {sms.messageBody && (
+                              <div className="bg-muted p-2 rounded text-sm">
+                                <span className="text-muted-foreground text-xs">
+                                  Message:
+                                </span>
+                                <p className="mt-1">{sms.messageBody}</p>
+                              </div>
+                            )}
+
+                            {/* Error */}
+                            {sms.error && (
+                              <div className="bg-red-50 dark:bg-red-950/30 p-2 rounded text-sm text-red-600 dark:text-red-400">
+                                {sms.error}
+                              </div>
+                            )}
+
+                            {/* Technical Details */}
+                            <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                              {sms.phoneNumber && (
+                                <span>To: {sms.phoneNumber}</span>
+                              )}
+                              {sms.sentAt && (
+                                <span>
+                                  Sent: {format(new Date(sms.sentAt), "h:mm a")}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </CardContent>
             </Card>
           )}

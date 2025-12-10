@@ -2,6 +2,7 @@ import { summarizeCall, SummarizationResult } from "./deepseek";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { trackCallUsage } from "@/lib/billing/usage-tracker";
 import { processCallForSms } from "@/lib/sms";
+import { processInboundCallForSms } from "@/lib/sms/campaign-trigger";
 
 // Lazy init to avoid build-time errors when env vars aren't available
 function getSupabaseClient() {
@@ -240,6 +241,22 @@ async function processInboundCallWithAI(supabase: SupabaseClientType, callId: st
       } catch (billingError) {
         // Log but don't fail the call processing
         console.error("Failed to track usage:", billingError);
+      }
+    }
+
+    // Process SMS rules after successful AI analysis (for inbound campaigns)
+    const campaignId = call.inbound_campaigns?.id;
+    if (campaignId) {
+      try {
+        const smsResult = await processInboundCallForSms(callId, campaignId);
+        if (smsResult.sent) {
+          console.log(`SMS triggered for inbound call ${callId}, SMS ID: ${smsResult.smsId}`);
+        } else {
+          console.log(`SMS not triggered for inbound call ${callId}: ${smsResult.reason}`);
+        }
+      } catch (smsError) {
+        // Log but don't fail the call processing
+        console.error("SMS processing error for inbound call:", smsError);
       }
     }
   }

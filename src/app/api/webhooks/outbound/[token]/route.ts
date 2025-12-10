@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
+import { processOutboundCallForSms } from "@/lib/sms/campaign-trigger";
 
 /**
  * POST /api/webhooks/outbound/[token]
@@ -359,6 +360,19 @@ async function handleVapiEndOfCall(
     console.log(`[Vapi End of Call] Successfully updated call record ${callRecordId}`);
   }
 
+  // Process SMS rules (works for both test and production calls)
+  // We process SMS even for test calls so we can verify SMS rules work
+  if (transcript && status === "completed") {
+    try {
+      console.log(`[Vapi End of Call] Processing SMS rules for call ${callRecordId}`);
+      const smsResult = await processOutboundCallForSms(callRecordId, campaignId);
+      console.log(`[Vapi End of Call] SMS processing result:`, smsResult);
+    } catch (smsError) {
+      console.error(`[Vapi End of Call] Error processing SMS:`, smsError);
+      // Don't fail the webhook if SMS processing fails
+    }
+  }
+
   // Skip contact/campaign updates for test calls
   if (isTest) {
     return;
@@ -425,17 +439,30 @@ async function handleAutoCallsWebhook(
   }
 
   if (event === "call.completed" || event === "call.ended") {
+    const mappedStatus = mapAutoCallsStatus(status as string);
+
     // Update call record
     await supabase
       .from("campaign_calls")
       .update({
-        status: mapAutoCallsStatus(status as string),
+        status: mappedStatus,
         duration_seconds: duration as number,
         recording_url: recording_url as string,
         transcript: transcript as string,
         ended_at: new Date().toISOString(),
       })
       .eq("id", callRecordId);
+
+    // Process SMS rules if call completed with transcript
+    if (transcript && mappedStatus === "completed") {
+      try {
+        console.log(`[AutoCalls Webhook] Processing SMS rules for call ${callRecordId}`);
+        const smsResult = await processOutboundCallForSms(callRecordId, campaignId);
+        console.log(`[AutoCalls Webhook] SMS processing result:`, smsResult);
+      } catch (smsError) {
+        console.error(`[AutoCalls Webhook] Error processing SMS:`, smsError);
+      }
+    }
   } else if (event === "call.started" || event === "call.answered") {
     await supabase
       .from("campaign_calls")
@@ -481,6 +508,8 @@ async function handleSynthflowWebhook(
   }
 
   if (event_type === "call.completed" || event_type === "call_ended") {
+    const mappedStatus = mapSynthflowStatus(status as string);
+
     // Determine outcome from structured data
     let outcome: "positive" | "negative" | "neutral" | null = null;
     const structData = structured_data as Record<string, unknown>;
@@ -497,7 +526,7 @@ async function handleSynthflowWebhook(
     await supabase
       .from("campaign_calls")
       .update({
-        status: mapSynthflowStatus(status as string),
+        status: mappedStatus,
         outcome,
         duration_seconds: duration_seconds as number,
         recording_url: recording_url as string,
@@ -506,6 +535,17 @@ async function handleSynthflowWebhook(
         ended_at: new Date().toISOString(),
       })
       .eq("id", callRecordId);
+
+    // Process SMS rules if call completed with transcript
+    if (transcript && mappedStatus === "completed") {
+      try {
+        console.log(`[Synthflow Webhook] Processing SMS rules for call ${callRecordId}`);
+        const smsResult = await processOutboundCallForSms(callRecordId, campaignId);
+        console.log(`[Synthflow Webhook] SMS processing result:`, smsResult);
+      } catch (smsError) {
+        console.error(`[Synthflow Webhook] Error processing SMS:`, smsError);
+      }
+    }
   } else if (event_type === "call.started" || event_type === "call_answered") {
     await supabase
       .from("campaign_calls")
