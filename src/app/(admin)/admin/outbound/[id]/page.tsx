@@ -61,6 +61,10 @@ import {
   TestTube,
   Copy,
   Webhook,
+  Plus,
+  Trash2,
+  Sparkles,
+  GripVertical,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 
@@ -121,6 +125,20 @@ interface Campaign {
     positiveCalls: number;
     positiveRate: number;
   };
+}
+
+interface SmsRule {
+  id: string;
+  campaign_id: string;
+  name: string;
+  trigger_condition: string;
+  message_template: string;
+  is_active: boolean;
+  priority: number;
+  trigger_count: number;
+  last_triggered_at: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 // Provider info for display
@@ -193,6 +211,19 @@ export default function OutboundCampaignDetailPage({
   } | null>(null);
   const [isSavingProvider, setIsSavingProvider] = useState(false);
 
+  // SMS Rules state
+  const [smsRules, setSmsRules] = useState<SmsRule[]>([]);
+  const [isLoadingSmsRules, setIsLoadingSmsRules] = useState(false);
+  const [isSavingSmsRule, setIsSavingSmsRule] = useState(false);
+  const [editingRule, setEditingRule] = useState<SmsRule | null>(null);
+  const [showAddRule, setShowAddRule] = useState(false);
+  const [newRule, setNewRule] = useState({
+    name: "",
+    trigger_condition: "",
+    message_template: "",
+    priority: 0,
+  });
+
   const router = useRouter();
   const { toast } = useToast();
 
@@ -239,7 +270,150 @@ export default function OutboundCampaignDetailPage({
 
   useEffect(() => {
     fetchCampaign();
+    fetchSmsRules();
   }, [id]);
+
+  // Fetch SMS rules
+  const fetchSmsRules = async () => {
+    setIsLoadingSmsRules(true);
+    try {
+      const response = await fetch(`/api/admin/outbound-campaigns/${id}/sms-rules`);
+      if (response.ok) {
+        const data = await response.json();
+        setSmsRules(data.rules || []);
+      }
+    } catch (error) {
+      console.error("Error fetching SMS rules:", error);
+    } finally {
+      setIsLoadingSmsRules(false);
+    }
+  };
+
+  // Add new SMS rule
+  const handleAddSmsRule = async () => {
+    if (!newRule.name.trim() || !newRule.trigger_condition.trim() || !newRule.message_template.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "Please fill in all required fields",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSavingSmsRule(true);
+    try {
+      const response = await fetch(`/api/admin/outbound-campaigns/${id}/sms-rules`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newRule),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to create SMS rule");
+      }
+
+      toast({ title: "Success", description: "SMS rule created successfully" });
+      setNewRule({ name: "", trigger_condition: "", message_template: "", priority: 0 });
+      setShowAddRule(false);
+      fetchSmsRules();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to create SMS rule",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingSmsRule(false);
+    }
+  };
+
+  // Update SMS rule
+  const handleUpdateSmsRule = async () => {
+    if (!editingRule) return;
+
+    setIsSavingSmsRule(true);
+    try {
+      const response = await fetch(`/api/admin/outbound-campaigns/${id}/sms-rules`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ruleId: editingRule.id,
+          name: editingRule.name,
+          trigger_condition: editingRule.trigger_condition,
+          message_template: editingRule.message_template,
+          is_active: editingRule.is_active,
+          priority: editingRule.priority,
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to update SMS rule");
+      }
+
+      toast({ title: "Success", description: "SMS rule updated successfully" });
+      setEditingRule(null);
+      fetchSmsRules();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to update SMS rule",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingSmsRule(false);
+    }
+  };
+
+  // Delete SMS rule
+  const handleDeleteSmsRule = async (ruleId: string) => {
+    try {
+      const response = await fetch(`/api/admin/outbound-campaigns/${id}/sms-rules?ruleId=${ruleId}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to delete SMS rule");
+      }
+
+      toast({ title: "Success", description: "SMS rule deleted successfully" });
+      fetchSmsRules();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to delete SMS rule",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Toggle SMS rule active status
+  const handleToggleSmsRule = async (rule: SmsRule) => {
+    try {
+      const response = await fetch(`/api/admin/outbound-campaigns/${id}/sms-rules`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ruleId: rule.id,
+          is_active: !rule.is_active,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to update rule");
+      }
+
+      fetchSmsRules();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update SMS rule",
+        variant: "destructive",
+      });
+    }
+  };
 
   const handleSave = async () => {
     if (!campaign || campaign.status !== "draft") return;
@@ -1325,6 +1499,297 @@ export default function OutboundCampaignDetailPage({
                     max={100}
                   />
                 </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* SMS Rules - Intent-Based */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <MessageSquare className="h-5 w-5" />
+                SMS Follow-up Rules
+              </CardTitle>
+              <CardDescription>
+                AI-powered intent-based SMS triggers. After each call, AI analyzes the conversation
+                and sends SMS messages when it detects matching intents.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {isLoadingSmsRules ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : (
+                <>
+                  {/* Existing Rules */}
+                  {smsRules.length > 0 ? (
+                    <div className="space-y-3">
+                      {smsRules.map((rule) => (
+                        <div
+                          key={rule.id}
+                          className={`border rounded-lg p-4 space-y-3 ${
+                            !rule.is_active ? "opacity-60 bg-muted/30" : ""
+                          }`}
+                        >
+                          {editingRule?.id === rule.id ? (
+                            // Edit mode
+                            <div className="space-y-4">
+                              <div className="grid gap-4 md:grid-cols-2">
+                                <div className="space-y-2">
+                                  <Label>Rule Name</Label>
+                                  <Input
+                                    value={editingRule.name}
+                                    onChange={(e) =>
+                                      setEditingRule({ ...editingRule, name: e.target.value })
+                                    }
+                                    placeholder="e.g., Send Scheduling Link"
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  <Label>Priority (higher = evaluated first)</Label>
+                                  <Input
+                                    type="number"
+                                    value={editingRule.priority}
+                                    onChange={(e) =>
+                                      setEditingRule({
+                                        ...editingRule,
+                                        priority: parseInt(e.target.value) || 0,
+                                      })
+                                    }
+                                    min={0}
+                                  />
+                                </div>
+                              </div>
+                              <div className="space-y-2">
+                                <Label className="flex items-center gap-2">
+                                  <Sparkles className="h-4 w-4 text-blue-500" />
+                                  Trigger Condition (AI Intent)
+                                </Label>
+                                <Textarea
+                                  value={editingRule.trigger_condition}
+                                  onChange={(e) =>
+                                    setEditingRule({
+                                      ...editingRule,
+                                      trigger_condition: e.target.value,
+                                    })
+                                  }
+                                  placeholder="Describe when this SMS should be sent, e.g., 'Customer expressed interest in scheduling an appointment'"
+                                  rows={2}
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Message Template</Label>
+                                <Textarea
+                                  value={editingRule.message_template}
+                                  onChange={(e) =>
+                                    setEditingRule({
+                                      ...editingRule,
+                                      message_template: e.target.value,
+                                    })
+                                  }
+                                  placeholder="Hi {{first_name}}, thanks for your interest! Here's the link to schedule: {{link}}"
+                                  rows={3}
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                  Variables: {"{{first_name}}"}, {"{{last_name}}"}, {"{{phone}}"}, {"{{company}}"}, {"{{link}}"}
+                                </p>
+                              </div>
+                              <div className="flex gap-2">
+                                <Button
+                                  size="sm"
+                                  onClick={handleUpdateSmsRule}
+                                  disabled={isSavingSmsRule}
+                                >
+                                  {isSavingSmsRule && (
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                  )}
+                                  Save Changes
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setEditingRule(null)}
+                                >
+                                  Cancel
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            // View mode
+                            <>
+                              <div className="flex items-start justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium">{rule.name}</span>
+                                  <Badge variant={rule.is_active ? "success" : "secondary"}>
+                                    {rule.is_active ? "Active" : "Inactive"}
+                                  </Badge>
+                                  {rule.priority > 0 && (
+                                    <Badge variant="outline">Priority: {rule.priority}</Badge>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Switch
+                                    checked={rule.is_active}
+                                    onCheckedChange={() => handleToggleSmsRule(rule)}
+                                  />
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => setEditingRule(rule)}
+                                  >
+                                    <Settings className="h-4 w-4" />
+                                  </Button>
+                                  <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                      <Button variant="ghost" size="icon">
+                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                      </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                      <AlertDialogHeader>
+                                        <AlertDialogTitle>Delete SMS Rule?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                          This will permanently delete the &quot;{rule.name}&quot; SMS rule.
+                                          This action cannot be undone.
+                                        </AlertDialogDescription>
+                                      </AlertDialogHeader>
+                                      <AlertDialogFooter>
+                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                        <AlertDialogAction
+                                          onClick={() => handleDeleteSmsRule(rule.id)}
+                                          className="bg-destructive text-destructive-foreground"
+                                        >
+                                          Delete
+                                        </AlertDialogAction>
+                                      </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                  </AlertDialog>
+                                </div>
+                              </div>
+                              <div className="bg-blue-50 dark:bg-blue-950/30 p-3 rounded-lg">
+                                <div className="flex items-start gap-2 text-sm">
+                                  <Sparkles className="h-4 w-4 text-blue-500 mt-0.5 flex-shrink-0" />
+                                  <div>
+                                    <span className="text-blue-700 dark:text-blue-300 font-medium">
+                                      Trigger when AI detects:
+                                    </span>
+                                    <p className="text-blue-800 dark:text-blue-200 mt-1">
+                                      &quot;{rule.trigger_condition}&quot;
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="text-sm">
+                                <span className="text-muted-foreground">Message: </span>
+                                <span className="italic">{rule.message_template}</span>
+                              </div>
+                              {rule.trigger_count > 0 && (
+                                <div className="text-xs text-muted-foreground">
+                                  Triggered {rule.trigger_count} time{rule.trigger_count !== 1 ? "s" : ""}
+                                  {rule.last_triggered_at && (
+                                    <span>
+                                      {" "}· Last: {formatDistanceToNow(new Date(rule.last_triggered_at), { addSuffix: true })}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-6 text-muted-foreground">
+                      <MessageSquare className="h-12 w-12 mx-auto mb-3 opacity-40" />
+                      <p>No SMS rules configured yet</p>
+                      <p className="text-sm">Add intent-based rules to automatically send SMS after calls</p>
+                    </div>
+                  )}
+
+                  {/* Add New Rule Form */}
+                  {showAddRule ? (
+                    <Card className="border-dashed">
+                      <CardContent className="pt-4 space-y-4">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-medium">New SMS Rule</h4>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setShowAddRule(false);
+                              setNewRule({ name: "", trigger_condition: "", message_template: "", priority: 0 });
+                            }}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <div className="space-y-2">
+                            <Label>Rule Name *</Label>
+                            <Input
+                              value={newRule.name}
+                              onChange={(e) => setNewRule({ ...newRule, name: e.target.value })}
+                              placeholder="e.g., Send Appointment Confirmation"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Priority</Label>
+                            <Input
+                              type="number"
+                              value={newRule.priority}
+                              onChange={(e) =>
+                                setNewRule({ ...newRule, priority: parseInt(e.target.value) || 0 })
+                              }
+                              min={0}
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="flex items-center gap-2">
+                            <Sparkles className="h-4 w-4 text-blue-500" />
+                            Trigger Condition (AI Intent) *
+                          </Label>
+                          <Textarea
+                            value={newRule.trigger_condition}
+                            onChange={(e) =>
+                              setNewRule({ ...newRule, trigger_condition: e.target.value })
+                            }
+                            placeholder="Describe in natural language when this SMS should be sent, e.g., 'Customer showed interest in the product and asked for more information'"
+                            rows={2}
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            AI will analyze call transcripts and trigger this rule when the conversation matches this intent
+                          </p>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Message Template *</Label>
+                          <Textarea
+                            value={newRule.message_template}
+                            onChange={(e) =>
+                              setNewRule({ ...newRule, message_template: e.target.value })
+                            }
+                            placeholder="Hi {{first_name}}! Thanks for chatting with us. Here's the info you requested: {{link}}"
+                            rows={3}
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Available variables: {"{{first_name}}"}, {"{{last_name}}"}, {"{{phone}}"}, {"{{company}}"}, {"{{link}}"}
+                          </p>
+                        </div>
+                        <Button onClick={handleAddSmsRule} disabled={isSavingSmsRule}>
+                          {isSavingSmsRule && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                          <Plus className="mr-2 h-4 w-4" />
+                          Add Rule
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <Button variant="outline" onClick={() => setShowAddRule(true)}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add SMS Rule
+                    </Button>
+                  )}
+                </>
               )}
             </CardContent>
           </Card>
