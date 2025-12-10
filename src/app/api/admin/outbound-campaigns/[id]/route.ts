@@ -3,6 +3,19 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { verifyAdmin, forbiddenResponse } from "@/lib/admin-auth";
 import { encrypt } from "@/lib/encryption";
 
+// Normalize phone number for comparison (strip all non-digits, ensure consistent format)
+function normalizePhone(phone: string): string {
+  const cleaned = phone.replace(/\D/g, "");
+  // Handle US numbers - normalize to 10 digits
+  if (cleaned.length === 11 && cleaned.startsWith("1")) {
+    return cleaned.slice(1);
+  }
+  if (cleaned.length === 10) {
+    return cleaned;
+  }
+  return cleaned;
+}
+
 /**
  * GET /api/admin/outbound-campaigns/[id]
  * Get a single outbound campaign with all related data
@@ -123,6 +136,37 @@ export async function GET(
         .eq("outcome", "positive"),
     ]);
 
+    // Get count of SMS opted-out contacts for this campaign
+    // Join campaign_contacts with sms_blacklist to find contacts that have opted out
+    const { data: optedOutContacts } = await supabase
+      .from("campaign_contacts")
+      .select(`
+        id,
+        phone
+      `)
+      .eq("campaign_id", id);
+
+    let smsOptedOutCount = 0;
+    if (optedOutContacts && optedOutContacts.length > 0) {
+      // Get all blacklisted phone numbers
+      const { data: blacklistedNumbers } = await supabase
+        .from("sms_blacklist")
+        .select("phone_number")
+        .eq("is_active", true);
+
+      if (blacklistedNumbers && blacklistedNumbers.length > 0) {
+        // Create a set of blacklisted numbers for fast lookup (normalized)
+        const blacklistSet = new Set(
+          blacklistedNumbers.map((b) => normalizePhone(b.phone_number))
+        );
+
+        // Count contacts that are in the blacklist
+        smsOptedOutCount = optedOutContacts.filter((contact) =>
+          blacklistSet.has(normalizePhone(contact.phone || ""))
+        ).length;
+      }
+    }
+
     return NextResponse.json({
       ...campaign,
       stats: {
@@ -135,6 +179,7 @@ export async function GET(
           totalCalls && totalCalls > 0
             ? ((positiveCalls || 0) / totalCalls) * 100
             : 0,
+        smsOptedOutCount,
       },
     });
   } catch (error) {

@@ -76,6 +76,7 @@ import {
   GripVertical,
   CalendarClock,
   X,
+  MessageCircleOff,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 
@@ -137,6 +138,7 @@ interface Campaign {
     totalCalls: number;
     positiveCalls: number;
     positiveRate: number;
+    smsOptedOutCount: number;
   };
 }
 
@@ -1155,6 +1157,39 @@ export default function OutboundCampaignDetailPage({
           </CardContent>
         </Card>
       </div>
+
+      {/* SMS Opted-Out Contacts Warning */}
+      {campaign.stats.smsOptedOutCount > 0 && (
+        <Card className="border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-950/30">
+          <CardContent className="py-4">
+            <div className="flex items-start gap-4">
+              <div className="p-2 rounded-full bg-orange-100 dark:bg-orange-900/50">
+                <MessageCircleOff className="h-6 w-6 text-orange-600 dark:text-orange-400" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-semibold text-orange-800 dark:text-orange-200">
+                  {campaign.stats.smsOptedOutCount} Contact{campaign.stats.smsOptedOutCount !== 1 ? "s" : ""} Opted Out of SMS
+                </h3>
+                <p className="text-sm text-orange-700 dark:text-orange-300 mt-1">
+                  These contacts have requested to stop receiving text messages and will not receive any SMS follow-ups.
+                  This is a global blacklist that applies across all campaigns and clients.
+                </p>
+                <p className="text-xs text-orange-600 dark:text-orange-400 mt-2">
+                  Only platform administrators can remove contacts from the SMS blacklist.
+                </p>
+              </div>
+              <div className="text-right">
+                <div className="text-2xl font-bold text-orange-700 dark:text-orange-300">
+                  {campaign.stats.smsOptedOutCount}
+                </div>
+                <div className="text-xs text-orange-600 dark:text-orange-400">
+                  of {campaign.stats.totalContacts}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Tabs */}
       <Tabs defaultValue="settings">
