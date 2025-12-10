@@ -177,22 +177,21 @@ export default function TestCallDetailsPage({
             Back to Tests
           </Button>
         </Link>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center">
           <Button
             variant="outline"
             size="sm"
             disabled={!navigation.prevId}
             asChild={!!navigation.prevId}
+            className="rounded-r-none border-r-0"
           >
             {navigation.prevId ? (
               <Link href={`/admin/outbound/${id}/testing/${navigation.prevId}`}>
-                <ChevronLeft className="h-4 w-4 mr-1" />
-                Newer
+                <ChevronLeft className="h-4 w-4" />
               </Link>
             ) : (
               <span>
-                <ChevronLeft className="h-4 w-4 mr-1" />
-                Newer
+                <ChevronLeft className="h-4 w-4" />
               </span>
             )}
           </Button>
@@ -201,16 +200,15 @@ export default function TestCallDetailsPage({
             size="sm"
             disabled={!navigation.nextId}
             asChild={!!navigation.nextId}
+            className="rounded-l-none"
           >
             {navigation.nextId ? (
               <Link href={`/admin/outbound/${id}/testing/${navigation.nextId}`}>
-                Older
-                <ChevronRight className="h-4 w-4 ml-1" />
+                <ChevronRight className="h-4 w-4" />
               </Link>
             ) : (
               <span>
-                Older
-                <ChevronRight className="h-4 w-4 ml-1" />
+                <ChevronRight className="h-4 w-4" />
               </span>
             )}
           </Button>
