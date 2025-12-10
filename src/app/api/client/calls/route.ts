@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { getClientId } from "@/lib/client-auth";
 
 interface UnifiedCall {
   id: string;
@@ -30,28 +31,16 @@ export async function GET(request: Request) {
     const supabase = await createClient();
     const { searchParams } = new URL(request.url);
 
-    // Get authenticated user
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user?.email) {
+    // Get client ID (supports impersonation)
+    const clientAuth = await getClientId(request);
+    if (!clientAuth.authenticated || !clientAuth.clientId) {
       return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
+        { error: clientAuth.error || "Not authenticated" },
+        { status: clientAuth.error === "Not authenticated" ? 401 : 403 }
       );
     }
 
-    // Get client record
-    const { data: client, error: clientError } = await supabase
-      .from("clients")
-      .select("id")
-      .eq("email", user.email)
-      .single();
-
-    if (clientError || !client) {
-      return NextResponse.json(
-        { error: "Client not found" },
-        { status: 404 }
-      );
-    }
+    const clientId = clientAuth.clientId;
 
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "50");
@@ -74,7 +63,7 @@ export async function GET(request: Request) {
       const { data: legacyCampaigns } = await supabase
         .from("campaigns")
         .select("id, name")
-        .eq("client_id", client.id);
+        .eq("client_id", clientId);
 
       if (legacyCampaigns && legacyCampaigns.length > 0) {
         const campaignIds = legacyCampaigns.map(c => c.id);
@@ -150,7 +139,7 @@ export async function GET(request: Request) {
       const { data: inboundCampaigns } = await supabase
         .from("inbound_campaigns")
         .select("id, name")
-        .eq("client_id", client.id);
+        .eq("client_id", clientId);
 
       if (inboundCampaigns && inboundCampaigns.length > 0) {
         const campaignIds = inboundCampaigns.map(c => c.id);
@@ -224,7 +213,7 @@ export async function GET(request: Request) {
       const { data: outboundCampaigns } = await supabase
         .from("outbound_campaigns")
         .select("id, name")
-        .eq("client_id", client.id);
+        .eq("client_id", clientId);
 
       if (outboundCampaigns && outboundCampaigns.length > 0) {
         const campaignIds = outboundCampaigns.map(c => c.id);

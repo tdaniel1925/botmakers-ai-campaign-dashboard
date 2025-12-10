@@ -196,8 +196,8 @@ export function ClientSidebar({
       )}>
         {/* Header */}
         <div className="p-4 flex justify-between items-center">
-          <div className="w-[80%]">
-            <Logo fillWidth={true} />
+          <div className="flex-1 mr-2">
+            <Logo fillWidth={true} maxHeight={56} />
           </div>
           <Button
             variant="ghost"

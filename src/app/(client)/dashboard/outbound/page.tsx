@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { clientFetch } from "@/hooks/use-client-fetch";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -67,7 +68,7 @@ export default function ClientOutboundCampaignsPage() {
   const fetchCampaigns = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch("/api/client/outbound-campaigns");
+      const response = await clientFetch("/api/client/outbound-campaigns");
       if (!response.ok) throw new Error("Failed to fetch campaigns");
       const data = await response.json();
       setCampaigns(data.campaigns || []);
@@ -117,7 +118,7 @@ export default function ClientOutboundCampaignsPage() {
   const handleAction = async (campaignId: string, action: "pause" | "resume" | "stop") => {
     setActionLoading(campaignId);
     try {
-      const response = await fetch(`/api/client/outbound-campaigns/${campaignId}/${action}`, {
+      const response = await clientFetch(`/api/client/outbound-campaigns/${campaignId}/${action}`, {
         method: "POST",
       });
       if (!response.ok) {

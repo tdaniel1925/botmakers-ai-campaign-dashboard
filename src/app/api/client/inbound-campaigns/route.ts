@@ -1,36 +1,25 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { getClientId } from "@/lib/client-auth";
 
 /**
  * GET /api/client/inbound-campaigns
  * Get all inbound campaigns for the authenticated client
  */
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const supabase = await createClient();
 
-    // Get authenticated user
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user?.email) {
+    // Get client ID (supports impersonation)
+    const clientAuth = await getClientId(request);
+    if (!clientAuth.authenticated || !clientAuth.clientId) {
       return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
+        { error: clientAuth.error || "Not authenticated" },
+        { status: clientAuth.error === "Not authenticated" ? 401 : 403 }
       );
     }
 
-    // Get client record
-    const { data: client, error: clientError } = await supabase
-      .from("clients")
-      .select("id")
-      .eq("email", user.email)
-      .single();
-
-    if (clientError || !client) {
-      return NextResponse.json(
-        { error: "Client not found" },
-        { status: 404 }
-      );
-    }
+    const clientId = clientAuth.clientId;
 
     // Fetch inbound campaigns with call stats
     const { data: campaigns, error } = await supabase
@@ -48,7 +37,7 @@ export async function GET() {
           created_at
         )
       `)
-      .eq("client_id", client.id)
+      .eq("client_id", clientId)
       .order("created_at", { ascending: false });
 
     if (error) {

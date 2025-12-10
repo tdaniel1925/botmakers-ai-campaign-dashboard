@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { clientFetch } from "@/hooks/use-client-fetch";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -96,7 +97,7 @@ export default function CallsPage() {
         params.append("sentiment", sentimentFilter);
       if (searchQuery) params.append("search", searchQuery);
 
-      const response = await fetch(`/api/client/calls?${params}`);
+      const response = await clientFetch(`/api/client/calls?${params}`);
       if (!response.ok) throw new Error("Failed to fetch calls");
       const data = await response.json();
       setCalls(data.calls);
