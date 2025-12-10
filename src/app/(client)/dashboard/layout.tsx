@@ -90,7 +90,7 @@ export default function DashboardLayout({
         // Try to find client by email
         const { data: client } = await supabase
           .from("clients")
-          .select("id, name, company_name, email")
+          .select("id, name, company_name, email, status")
           .eq("email", user.email)
           .single();
 
@@ -98,6 +98,14 @@ export default function DashboardLayout({
           setClientId(client.id);
           setClientName(client.name);
           setCompanyName(client.company_name || client.name);
+
+          // Auto-activate client on first login if status is pending
+          if (client.status === "pending") {
+            await supabase
+              .from("clients")
+              .update({ status: "active", updated_at: new Date().toISOString() })
+              .eq("id", client.id);
+          }
 
           // Get user role from client_users if exists
           const { data: clientUser } = await supabase
