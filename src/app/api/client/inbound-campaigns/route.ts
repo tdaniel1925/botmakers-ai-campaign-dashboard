@@ -33,7 +33,7 @@ export async function GET(request: Request) {
         inbound_campaign_calls (
           id,
           status,
-          sentiment,
+          ai_sentiment,
           created_at
         )
       `)
@@ -49,14 +49,14 @@ export async function GET(request: Request) {
     interface CallRecord {
       id: string;
       status: string;
-      sentiment: string | null;
+      ai_sentiment: string | null;
       created_at: string;
     }
 
     const processedCampaigns = (campaigns || []).map((campaign) => {
       const calls = (campaign.inbound_campaign_calls || []) as unknown as CallRecord[];
       const completedCalls = calls.filter(c => c.status === "completed");
-      const positiveCalls = completedCalls.filter(c => c.sentiment === "positive");
+      const positiveCalls = completedCalls.filter(c => c.ai_sentiment === "positive");
       const lastCall = calls.length > 0
         ? calls.reduce((latest, call) =>
             new Date(call.created_at) > new Date(latest.created_at) ? call : latest
