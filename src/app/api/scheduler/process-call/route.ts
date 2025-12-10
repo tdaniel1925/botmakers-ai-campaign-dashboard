@@ -105,9 +105,35 @@ export async function POST(request: NextRequest) {
 
     // Prepare dynamic variables for the assistant
     const agentConfig = campaign.agent_config as Record<string, unknown> || {};
+    const contactFullName = `${contact.first_name || ""} ${contact.last_name || ""}`.trim() || "there";
+    const firstNameValue = contact.first_name || "there";
+
+    // Build variable values for Vapi dynamic variables (e.g., {{firstName}}, {{name}})
+    const variableValues: Record<string, string> = {
+      firstName: firstNameValue,
+      first_name: firstNameValue,
+      name: firstNameValue,
+      customerName: contactFullName,
+      contact_name: contactFullName,
+      lastName: contact.last_name || "",
+      last_name: contact.last_name || "",
+      phone: phoneNumber,
+      phone_number: phoneNumber,
+      company: contact.company || "",
+    };
+
+    // Add any custom fields from contact data
+    if (contact.custom_fields && typeof contact.custom_fields === 'object') {
+      for (const [key, value] of Object.entries(contact.custom_fields as Record<string, unknown>)) {
+        if (value !== null && value !== undefined) {
+          variableValues[key] = String(value);
+        }
+      }
+    }
+
     const firstMessage = (agentConfig.first_message as string || "")
-      .replace(/\{\{contact_name\}\}/g, `${contact.first_name || ""} ${contact.last_name || ""}`.trim() || "there")
-      .replace(/\{\{first_name\}\}/g, contact.first_name || "there");
+      .replace(/\{\{contact_name\}\}/g, contactFullName)
+      .replace(/\{\{first_name\}\}/g, firstNameValue);
 
     // Create call record
     const { data: callRecord, error: callError } = await supabase
@@ -144,10 +170,12 @@ export async function POST(request: NextRequest) {
           contactId,
           callRecordId: callRecord.id,
           attemptNumber,
+          firstName: firstNameValue,
         },
-        assistantOverrides: firstMessage
-          ? { firstMessage }
-          : undefined,
+        assistantOverrides: {
+          variableValues,
+          ...(firstMessage ? { firstMessage } : {}),
+        },
       });
 
       // Update call record with Vapi call ID

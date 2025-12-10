@@ -269,6 +269,7 @@ async function initiateVapiCall(
     assistantId: campaign.vapi_assistant_id,
     customer: {
       number: phoneNumber,
+      name: firstName || undefined,
     },
     metadata: {
       campaignId: campaign.id,
@@ -283,17 +284,18 @@ async function initiateVapiCall(
     payload.phoneNumberId = campaign.vapi_phone_number_id;
   }
 
-  // Add variable values for first name if provided
-  if (firstName) {
-    payload.assistantOverrides = {
-      variableValues: {
-        firstName: firstName,
-        first_name: firstName,
-        name: firstName,
-        customerName: firstName,
-      },
-    };
-  }
+  // Always add assistantOverrides with variableValues for dynamic variables
+  // This allows the assistant to use {{firstName}}, {{name}}, etc. in prompts
+  const nameValue = firstName || "there";
+  payload.assistantOverrides = {
+    variableValues: {
+      firstName: nameValue,
+      first_name: nameValue,
+      name: nameValue,
+      customerName: nameValue,
+      contact_name: nameValue,
+    },
+  };
 
   // Note: Webhook URL (serverUrl) must be configured on the Vapi assistant itself.
   // The webhook URL for this campaign is: ${webhookUrl}
@@ -343,6 +345,7 @@ async function initiateAutoCallsCall(
   const webhookUrl = `${baseUrl}/api/webhooks/outbound/${campaign.webhook_token}`;
 
   // Build call payload based on AutoCalls.ai API
+  const nameValue = firstName || "there";
   const payload: Record<string, unknown> = {
     assistant_id: campaign.autocalls_assistant_id,
     phone_number: phoneNumber,
@@ -351,17 +354,17 @@ async function initiateAutoCallsCall(
       campaignId: campaign.id,
       callRecordId: callRecordId,
       isTest: true,
+      firstName: firstName || undefined,
+    },
+    // Always include variables for personalization
+    variables: {
+      firstName: nameValue,
+      first_name: nameValue,
+      name: nameValue,
+      customerName: nameValue,
+      contact_name: nameValue,
     },
   };
-
-  // Add variables if first name provided
-  if (firstName) {
-    payload.variables = {
-      firstName: firstName,
-      first_name: firstName,
-      name: firstName,
-    };
-  }
 
   const response = await fetch("https://app.autocalls.ai/api/user/calls/create", {
     method: "POST",
@@ -406,6 +409,7 @@ async function initiateSynthflowCall(
   const webhookUrl = `${baseUrl}/api/webhooks/outbound/${campaign.webhook_token}`;
 
   // Build call payload based on Synthflow API
+  const nameValue = firstName || "there";
   const payload: Record<string, unknown> = {
     model_id: campaign.synthflow_model_id,
     phone_number: phoneNumber,
@@ -414,17 +418,17 @@ async function initiateSynthflowCall(
       campaignId: campaign.id as string,
       callRecordId: callRecordId,
       isTest: true,
+      firstName: firstName || undefined,
+    },
+    // Always include variables for personalization
+    variables: {
+      firstName: nameValue,
+      first_name: nameValue,
+      name: nameValue,
+      customerName: nameValue,
+      contact_name: nameValue,
     },
   };
-
-  // Add variables if first name provided
-  if (firstName) {
-    payload.variables = {
-      firstName: firstName,
-      first_name: firstName,
-      name: firstName,
-    };
-  }
 
   const response = await fetch("https://api.synthflow.ai/v2/calls", {
     method: "POST",

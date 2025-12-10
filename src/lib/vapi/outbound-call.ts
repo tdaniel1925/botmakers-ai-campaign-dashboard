@@ -14,6 +14,7 @@ interface OutboundCallConfig {
   metadata?: Record<string, unknown>;
   assistantOverrides?: {
     firstMessage?: string;
+    variableValues?: Record<string, string>;
     model?: {
       messages?: Array<{
         role: string;
