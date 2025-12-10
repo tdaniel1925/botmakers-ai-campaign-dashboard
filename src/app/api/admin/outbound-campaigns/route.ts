@@ -25,18 +25,29 @@ export async function GET(request: Request) {
 
     const supabase = await createClient();
 
-    // Query campaigns with related data
-    // Note: campaign_phone_numbers and campaign_schedules are linked via campaign_id FK
+    // Query campaigns with related data - only select needed columns for performance
     let query = supabase
       .from("outbound_campaigns")
       .select(
         `
-        *,
+        id,
+        name,
+        description,
+        client_id,
+        status,
+        total_contacts,
+        contacts_completed,
+        is_test_mode,
+        created_at,
+        launched_at,
+        call_provider,
+        vapi_assistant_id,
+        autocalls_assistant_id,
+        synthflow_model_id,
         clients (
           id,
           name,
-          company_name,
-          email
+          company_name
         ),
         campaign_schedules (
           id

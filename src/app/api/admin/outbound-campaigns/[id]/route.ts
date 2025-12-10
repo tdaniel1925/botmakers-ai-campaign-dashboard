@@ -25,7 +25,33 @@ export async function GET(
       .from("outbound_campaigns")
       .select(
         `
-        *,
+        id,
+        name,
+        description,
+        client_id,
+        status,
+        total_contacts,
+        contacts_completed,
+        is_test_mode,
+        test_call_limit,
+        rate_per_minute,
+        billing_threshold,
+        max_concurrent_calls,
+        retry_enabled,
+        retry_attempts,
+        retry_delay_minutes,
+        agent_config,
+        structured_data_schema,
+        created_at,
+        updated_at,
+        launched_at,
+        webhook_token,
+        call_provider,
+        vapi_key_source,
+        vapi_assistant_id,
+        vapi_phone_number_id,
+        autocalls_assistant_id,
+        synthflow_model_id,
         clients (
           id,
           name,
@@ -36,7 +62,6 @@ export async function GET(
           id,
           phone_number,
           friendly_name,
-          provider,
           is_active
         ),
         campaign_schedules (
@@ -45,18 +70,7 @@ export async function GET(
           start_time,
           end_time,
           timezone,
-          specific_dates,
-          excluded_dates,
           is_active
-        ),
-        campaign_sms_templates (
-          id,
-          name,
-          trigger_type,
-          template_body,
-          link_url,
-          is_active,
-          send_count
         )
       `
       )
@@ -74,35 +88,38 @@ export async function GET(
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Get contact stats
-    const { count: totalContacts } = await supabase
-      .from("campaign_contacts")
-      .select("*", { count: "exact", head: true })
-      .eq("campaign_id", id);
-
-    const { count: pendingContacts } = await supabase
-      .from("campaign_contacts")
-      .select("*", { count: "exact", head: true })
-      .eq("campaign_id", id)
-      .eq("status", "pending");
-
-    const { count: completedContacts } = await supabase
-      .from("campaign_contacts")
-      .select("*", { count: "exact", head: true })
-      .eq("campaign_id", id)
-      .eq("status", "completed");
-
-    // Get call stats
-    const { count: totalCalls } = await supabase
-      .from("campaign_calls")
-      .select("*", { count: "exact", head: true })
-      .eq("campaign_id", id);
-
-    const { count: positiveCalls } = await supabase
-      .from("campaign_calls")
-      .select("*", { count: "exact", head: true })
-      .eq("campaign_id", id)
-      .eq("outcome", "positive");
+    // Get contact and call stats in parallel for better performance
+    const [
+      { count: totalContacts },
+      { count: pendingContacts },
+      { count: completedContacts },
+      { count: totalCalls },
+      { count: positiveCalls },
+    ] = await Promise.all([
+      supabase
+        .from("campaign_contacts")
+        .select("*", { count: "exact", head: true })
+        .eq("campaign_id", id),
+      supabase
+        .from("campaign_contacts")
+        .select("*", { count: "exact", head: true })
+        .eq("campaign_id", id)
+        .eq("status", "pending"),
+      supabase
+        .from("campaign_contacts")
+        .select("*", { count: "exact", head: true })
+        .eq("campaign_id", id)
+        .eq("status", "completed"),
+      supabase
+        .from("campaign_calls")
+        .select("*", { count: "exact", head: true })
+        .eq("campaign_id", id),
+      supabase
+        .from("campaign_calls")
+        .select("*", { count: "exact", head: true })
+        .eq("campaign_id", id)
+        .eq("outcome", "positive"),
+    ]);
 
     return NextResponse.json({
       ...campaign,
