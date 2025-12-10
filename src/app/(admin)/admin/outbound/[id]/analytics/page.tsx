@@ -86,7 +86,7 @@ export default function AnalyticsPage({
       const endDate = format(new Date(), "yyyy-MM-dd");
 
       const response = await fetch(
-        `/api/client/outbound-campaigns/${id}/activity?start_date=${startDate}&end_date=${endDate}`
+        `/api/admin/outbound-campaigns/${id}/activity?start_date=${startDate}&end_date=${endDate}`
       );
       if (!response.ok) throw new Error("Failed to fetch analytics");
       const data = await response.json();
