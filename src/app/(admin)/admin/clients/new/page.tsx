@@ -63,14 +63,8 @@ export default function NewClientPage() {
   const router = useRouter();
   const { toast } = useToast();
 
-  // Generate preview credentials for display
-  const previewUsername = name
-    ? name
-        .toLowerCase()
-        .replace(/[^a-z0-9\s]/g, "")
-        .replace(/\s+/g, ".")
-        .substring(0, 20)
-    : "john.doe";
+  // Username is the email address
+  const previewUsername = email || "john@example.com";
   const previewPassword = "Abc@123#Xyz";
 
   const loadEmailPreview = async () => {
@@ -252,7 +246,7 @@ export default function NewClientPage() {
             </div>
 
             {/* Credentials Preview */}
-            {name && (
+            {email && (
               <div className="mt-6 p-4 bg-muted rounded-lg">
                 <h4 className="font-medium mb-2">Generated Credentials Preview</h4>
                 <div className="space-y-2 text-sm">
