@@ -101,6 +101,7 @@ interface Campaign {
   updated_at: string;
   launched_at: string | null;
   scheduled_launch_at: string | null;
+  scheduled_timezone: string | null;
   webhook_token: string | null;
   // Provider fields
   call_provider: "vapi" | "autocalls" | "synthflow" | null;
@@ -240,7 +241,19 @@ export default function OutboundCampaignDetailPage({
   const [showScheduleDialog, setShowScheduleDialog] = useState(false);
   const [scheduledDate, setScheduledDate] = useState("");
   const [scheduledTime, setScheduledTime] = useState("");
+  const [scheduledTimezone, setScheduledTimezone] = useState("America/New_York");
   const [isScheduling, setIsScheduling] = useState(false);
+
+  // Common US Timezones
+  const TIMEZONES = [
+    { value: "America/New_York", label: "Eastern Time (ET)" },
+    { value: "America/Chicago", label: "Central Time (CT)" },
+    { value: "America/Denver", label: "Mountain Time (MT)" },
+    { value: "America/Los_Angeles", label: "Pacific Time (PT)" },
+    { value: "America/Phoenix", label: "Arizona Time" },
+    { value: "America/Anchorage", label: "Alaska Time" },
+    { value: "Pacific/Honolulu", label: "Hawaii Time" },
+  ];
 
   const router = useRouter();
   const { toast } = useToast();
@@ -527,15 +540,57 @@ export default function OutboundCampaignDetailPage({
 
     setIsScheduling(true);
     try {
-      const scheduledAt = new Date(`${scheduledDate}T${scheduledTime}`);
+      // Create date in the selected timezone and convert to UTC for storage
+      // Parse the date/time as if it were in the selected timezone
+      const localDateString = `${scheduledDate}T${scheduledTime}:00`;
+
+      // Get the timezone offset for the selected timezone
+      const tzDate = new Date(localDateString);
+      const formatter = new Intl.DateTimeFormat("en-US", {
+        timeZone: scheduledTimezone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+      });
+
+      // Convert local time in timezone to UTC
+      // We need to find what UTC time corresponds to the given time in the target timezone
+      const parts = formatter.formatToParts(tzDate);
+      const getPart = (type: string) => parts.find(p => p.type === type)?.value || "";
+
+      // Calculate UTC time by using Intl API to get proper offset
+      const tempDate = new Date(localDateString);
+      const utcFormatter = new Intl.DateTimeFormat("en-US", {
+        timeZone: "UTC",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+      });
+
+      // Get the offset between UTC and target timezone at this date/time
+      const tzNow = new Date(new Date().toLocaleString("en-US", { timeZone: scheduledTimezone }));
+      const utcNow = new Date(new Date().toLocaleString("en-US", { timeZone: "UTC" }));
+      const offsetMs = tzNow.getTime() - utcNow.getTime();
+
+      // Adjust: subtract the offset to get UTC time
+      const scheduledAtUTC = new Date(tempDate.getTime() - offsetMs);
 
       // Validate it's in the future
-      if (scheduledAt <= new Date()) {
+      if (scheduledAtUTC <= new Date()) {
         toast({
           title: "Error",
           description: "Scheduled time must be in the future",
           variant: "destructive",
         });
+        setIsScheduling(false);
         return;
       }
 
@@ -543,7 +598,8 @@ export default function OutboundCampaignDetailPage({
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          scheduled_launch_at: scheduledAt.toISOString(),
+          scheduled_launch_at: scheduledAtUTC.toISOString(),
+          scheduled_timezone: scheduledTimezone,
         }),
       });
 
@@ -552,13 +608,15 @@ export default function OutboundCampaignDetailPage({
         throw new Error(data.error || "Failed to schedule campaign");
       }
 
+      const tzLabel = TIMEZONES.find(tz => tz.value === scheduledTimezone)?.label || scheduledTimezone;
       toast({
         title: "Scheduled",
-        description: `Campaign will launch on ${format(scheduledAt, "PPp")}`,
+        description: `Campaign will launch on ${scheduledDate} at ${scheduledTime} ${tzLabel}`,
       });
       setShowScheduleDialog(false);
       setScheduledDate("");
       setScheduledTime("");
+      setScheduledTimezone("America/New_York");
       fetchCampaign();
     } catch (error) {
       toast({
@@ -881,11 +939,11 @@ export default function OutboundCampaignDetailPage({
                     Schedule
                   </Button>
                 </DialogTrigger>
-                <DialogContent>
+                <DialogContent className="sm:max-w-[500px]">
                   <DialogHeader>
                     <DialogTitle>Schedule Campaign Launch</DialogTitle>
                     <DialogDescription>
-                      Set a date and time for the campaign to automatically launch.
+                      Set a date, time, and timezone for the campaign to automatically launch.
                     </DialogDescription>
                   </DialogHeader>
                   <div className="grid gap-4 py-4">
@@ -908,11 +966,35 @@ export default function OutboundCampaignDetailPage({
                         onChange={(e) => setScheduledTime(e.target.value)}
                       />
                     </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="schedule-timezone">Timezone</Label>
+                      <Select
+                        value={scheduledTimezone}
+                        onValueChange={setScheduledTimezone}
+                      >
+                        <SelectTrigger id="schedule-timezone">
+                          <SelectValue placeholder="Select timezone" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {TIMEZONES.map((tz) => (
+                            <SelectItem key={tz.value} value={tz.value}>
+                              {tz.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                     {scheduledDate && scheduledTime && (
                       <p className="text-sm text-muted-foreground">
-                        Campaign will launch on {format(new Date(`${scheduledDate}T${scheduledTime}`), "PPpp")}
+                        Campaign will launch on {scheduledDate} at {scheduledTime} {TIMEZONES.find(tz => tz.value === scheduledTimezone)?.label}
                       </p>
                     )}
+                    <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+                      <p className="text-sm text-blue-800 dark:text-blue-200">
+                        <strong>Note:</strong> Once launched, calls will only be made during the hours defined in your campaign schedule.
+                        Each contact will be called according to their local timezone to ensure calls happen during appropriate business hours.
+                      </p>
+                    </div>
                   </div>
                   <DialogFooter>
                     <Button variant="outline" onClick={() => setShowScheduleDialog(false)}>
@@ -935,7 +1017,8 @@ export default function OutboundCampaignDetailPage({
                   Launches {campaign.scheduled_launch_at && formatDistanceToNow(new Date(campaign.scheduled_launch_at), { addSuffix: true })}
                 </span>
                 <span className="text-xs">
-                  ({campaign.scheduled_launch_at && format(new Date(campaign.scheduled_launch_at), "PPp")})
+                  ({campaign.scheduled_launch_at && format(new Date(campaign.scheduled_launch_at), "PPp")}
+                  {campaign.scheduled_timezone && ` ${TIMEZONES.find(tz => tz.value === campaign.scheduled_timezone)?.label || campaign.scheduled_timezone}`})
                 </span>
               </div>
               <Button variant="outline" onClick={handleCancelSchedule} disabled={isScheduling}>

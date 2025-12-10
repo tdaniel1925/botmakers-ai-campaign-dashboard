@@ -46,6 +46,7 @@ export async function GET(
         updated_at,
         launched_at,
         scheduled_launch_at,
+        scheduled_timezone,
         webhook_token,
         call_provider,
         vapi_key_source,
@@ -219,6 +220,7 @@ export async function PUT(
       variable_mapping,
       // Scheduled launch
       scheduled_launch_at,
+      scheduled_timezone,
       // Status (for canceling scheduled launch)
       status,
     } = body;
@@ -305,6 +307,11 @@ export async function PUT(
       if (scheduled_launch_at) {
         updateData.status = "scheduled";
       }
+    }
+
+    // Scheduled timezone - stored for display purposes
+    if (scheduled_timezone !== undefined) {
+      updateData.scheduled_timezone = scheduled_timezone || null;
     }
 
     // Allow setting status to draft when canceling scheduled launch
