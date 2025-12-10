@@ -45,6 +45,7 @@ export async function GET(
         created_at,
         updated_at,
         launched_at,
+        scheduled_launch_at,
         webhook_token,
         call_provider,
         vapi_key_source,
@@ -176,12 +177,12 @@ export async function PUT(
       );
     }
 
-    // Only draft campaigns can be fully edited
-    if (existingCampaign.status !== "draft") {
+    // Only draft or scheduled campaigns can be fully edited
+    if (existingCampaign.status !== "draft" && existingCampaign.status !== "scheduled") {
       return NextResponse.json(
         {
           error:
-            "Only draft campaigns can be edited. Use pause/resume/stop for active campaigns.",
+            "Only draft or scheduled campaigns can be edited. Use pause/resume/stop for active campaigns.",
         },
         { status: 400 }
       );
@@ -216,6 +217,10 @@ export async function PUT(
       provider_api_key,
       // Variable mapping
       variable_mapping,
+      // Scheduled launch
+      scheduled_launch_at,
+      // Status (for canceling scheduled launch)
+      status,
     } = body;
 
     // Build update object (only include provided fields)
@@ -292,6 +297,20 @@ export async function PUT(
 
     // Variable mapping
     if (variable_mapping !== undefined) updateData.variable_mapping = variable_mapping || {};
+
+    // Scheduled launch - can set to null to cancel
+    if (scheduled_launch_at !== undefined) {
+      updateData.scheduled_launch_at = scheduled_launch_at || null;
+      // If scheduling for the future, also set status to "scheduled"
+      if (scheduled_launch_at) {
+        updateData.status = "scheduled";
+      }
+    }
+
+    // Allow setting status to draft when canceling scheduled launch
+    if (status !== undefined && status === "draft" && existingCampaign.status === "scheduled") {
+      updateData.status = "draft";
+    }
 
     updateData.updated_at = new Date().toISOString();
 

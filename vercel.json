@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/send-reports",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/launch-scheduled",
+      "schedule": "* * * * *"
     }
   ]
 }

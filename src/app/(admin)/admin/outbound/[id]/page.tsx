@@ -35,6 +35,15 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import {
   ArrowLeft,
@@ -65,6 +74,8 @@ import {
   Trash2,
   Sparkles,
   GripVertical,
+  CalendarClock,
+  X,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 
@@ -73,7 +84,7 @@ interface Campaign {
   name: string;
   description: string | null;
   client_id: string;
-  status: "draft" | "active" | "paused" | "stopped" | "completed";
+  status: "draft" | "scheduled" | "active" | "paused" | "stopped" | "completed";
   total_contacts: number;
   contacts_completed: number;
   is_test_mode: boolean;
@@ -89,6 +100,7 @@ interface Campaign {
   created_at: string;
   updated_at: string;
   launched_at: string | null;
+  scheduled_launch_at: string | null;
   webhook_token: string | null;
   // Provider fields
   call_provider: "vapi" | "autocalls" | "synthflow" | null;
@@ -223,6 +235,12 @@ export default function OutboundCampaignDetailPage({
     message_template: "",
     priority: 0,
   });
+
+  // Schedule launch state
+  const [showScheduleDialog, setShowScheduleDialog] = useState(false);
+  const [scheduledDate, setScheduledDate] = useState("");
+  const [scheduledTime, setScheduledTime] = useState("");
+  const [isScheduling, setIsScheduling] = useState(false);
 
   const router = useRouter();
   const { toast } = useToast();
@@ -496,6 +514,97 @@ export default function OutboundCampaignDetailPage({
     }
   };
 
+  // Schedule campaign launch
+  const handleScheduleLaunch = async () => {
+    if (!scheduledDate || !scheduledTime) {
+      toast({
+        title: "Error",
+        description: "Please select a date and time",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsScheduling(true);
+    try {
+      const scheduledAt = new Date(`${scheduledDate}T${scheduledTime}`);
+
+      // Validate it's in the future
+      if (scheduledAt <= new Date()) {
+        toast({
+          title: "Error",
+          description: "Scheduled time must be in the future",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const response = await fetch(`/api/admin/outbound-campaigns/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          scheduled_launch_at: scheduledAt.toISOString(),
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to schedule campaign");
+      }
+
+      toast({
+        title: "Scheduled",
+        description: `Campaign will launch on ${format(scheduledAt, "PPp")}`,
+      });
+      setShowScheduleDialog(false);
+      setScheduledDate("");
+      setScheduledTime("");
+      fetchCampaign();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to schedule campaign",
+        variant: "destructive",
+      });
+    } finally {
+      setIsScheduling(false);
+    }
+  };
+
+  // Cancel scheduled launch
+  const handleCancelSchedule = async () => {
+    setIsScheduling(true);
+    try {
+      const response = await fetch(`/api/admin/outbound-campaigns/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          scheduled_launch_at: null,
+          status: "draft",
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to cancel schedule");
+      }
+
+      toast({
+        title: "Cancelled",
+        description: "Scheduled launch has been cancelled",
+      });
+      fetchCampaign();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to cancel schedule",
+        variant: "destructive",
+      });
+    } finally {
+      setIsScheduling(false);
+    }
+  };
+
   // Verify provider connection
   const verifyProviderConnection = async () => {
     setIsVerifying(true);
@@ -672,6 +781,8 @@ export default function OutboundCampaignDetailPage({
     switch (status) {
       case "draft":
         return <Badge variant="secondary">Draft</Badge>;
+      case "scheduled":
+        return <Badge variant="outline" className="border-blue-500 text-blue-600">Scheduled</Badge>;
       case "active":
         return <Badge variant="success">Active</Badge>;
       case "paused":
@@ -759,6 +870,98 @@ export default function OutboundCampaignDetailPage({
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
                     <AlertDialogAction onClick={() => handleAction("launch")}>
                       Launch
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+              <Dialog open={showScheduleDialog} onOpenChange={setShowScheduleDialog}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" disabled={campaign.total_contacts === 0}>
+                    <CalendarClock className="mr-2 h-4 w-4" />
+                    Schedule
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Schedule Campaign Launch</DialogTitle>
+                    <DialogDescription>
+                      Set a date and time for the campaign to automatically launch.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="grid gap-4 py-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="schedule-date">Date</Label>
+                      <Input
+                        id="schedule-date"
+                        type="date"
+                        value={scheduledDate}
+                        onChange={(e) => setScheduledDate(e.target.value)}
+                        min={new Date().toISOString().split("T")[0]}
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="schedule-time">Time</Label>
+                      <Input
+                        id="schedule-time"
+                        type="time"
+                        value={scheduledTime}
+                        onChange={(e) => setScheduledTime(e.target.value)}
+                      />
+                    </div>
+                    {scheduledDate && scheduledTime && (
+                      <p className="text-sm text-muted-foreground">
+                        Campaign will launch on {format(new Date(`${scheduledDate}T${scheduledTime}`), "PPpp")}
+                      </p>
+                    )}
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setShowScheduleDialog(false)}>
+                      Cancel
+                    </Button>
+                    <Button onClick={handleScheduleLaunch} disabled={isScheduling || !scheduledDate || !scheduledTime}>
+                      {isScheduling && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      Schedule Launch
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            </>
+          )}
+          {campaign.status === "scheduled" && (
+            <>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <CalendarClock className="h-4 w-4" />
+                <span>
+                  Launches {campaign.scheduled_launch_at && formatDistanceToNow(new Date(campaign.scheduled_launch_at), { addSuffix: true })}
+                </span>
+                <span className="text-xs">
+                  ({campaign.scheduled_launch_at && format(new Date(campaign.scheduled_launch_at), "PPp")})
+                </span>
+              </div>
+              <Button variant="outline" onClick={handleCancelSchedule} disabled={isScheduling}>
+                {isScheduling && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                <X className="mr-2 h-4 w-4" />
+                Cancel Schedule
+              </Button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button disabled={isActionLoading}>
+                    {isActionLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    <Play className="mr-2 h-4 w-4" />
+                    Launch Now
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Launch Campaign Now?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will cancel the scheduled launch and start the campaign immediately.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => handleAction("launch")}>
+                      Launch Now
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>

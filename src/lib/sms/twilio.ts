@@ -198,3 +198,89 @@ export async function isTwilioConfigured(): Promise<boolean> {
   const credentials = await getTwilioCredentials();
   return credentials !== null;
 }
+
+// Verify Twilio connection by fetching account info
+export async function verifyTwilioConnection(): Promise<{
+  success: boolean;
+  accountSid?: string;
+  accountName?: string;
+  phoneNumber?: string;
+  phoneNumberFormatted?: string;
+  balance?: string;
+  error?: string;
+}> {
+  const credentials = await getTwilioCredentials();
+
+  if (!credentials) {
+    return {
+      success: false,
+      error: "Twilio credentials not configured. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_FROM_NUMBER in environment or database.",
+    };
+  }
+
+  try {
+    // Fetch account info to verify credentials
+    const accountUrl = `https://api.twilio.com/2010-04-01/Accounts/${credentials.accountSid}.json`;
+    const authHeader = `Basic ${Buffer.from(`${credentials.accountSid}:${credentials.authToken}`).toString("base64")}`;
+
+    const accountResponse = await fetch(accountUrl, {
+      headers: { Authorization: authHeader },
+    });
+
+    if (!accountResponse.ok) {
+      const errorData = await accountResponse.json();
+      return {
+        success: false,
+        error: errorData.message || `Authentication failed (${accountResponse.status})`,
+      };
+    }
+
+    const accountData = await accountResponse.json();
+
+    // Verify the phone number exists and is SMS-capable
+    const phoneUrl = `https://api.twilio.com/2010-04-01/Accounts/${credentials.accountSid}/IncomingPhoneNumbers.json?PhoneNumber=${encodeURIComponent(credentials.fromNumber)}`;
+
+    const phoneResponse = await fetch(phoneUrl, {
+      headers: { Authorization: authHeader },
+    });
+
+    let phoneNumberFormatted = credentials.fromNumber;
+    let phoneNumberValid = false;
+
+    if (phoneResponse.ok) {
+      const phoneData = await phoneResponse.json();
+      if (phoneData.incoming_phone_numbers && phoneData.incoming_phone_numbers.length > 0) {
+        const phone = phoneData.incoming_phone_numbers[0];
+        phoneNumberFormatted = phone.friendly_name || phone.phone_number;
+        phoneNumberValid = true;
+      }
+    }
+
+    // Get account balance
+    const balanceUrl = `https://api.twilio.com/2010-04-01/Accounts/${credentials.accountSid}/Balance.json`;
+    const balanceResponse = await fetch(balanceUrl, {
+      headers: { Authorization: authHeader },
+    });
+
+    let balance: string | undefined;
+    if (balanceResponse.ok) {
+      const balanceData = await balanceResponse.json();
+      balance = `${balanceData.currency} ${parseFloat(balanceData.balance).toFixed(2)}`;
+    }
+
+    return {
+      success: true,
+      accountSid: credentials.accountSid.slice(0, 8) + "..." + credentials.accountSid.slice(-4),
+      accountName: accountData.friendly_name,
+      phoneNumber: credentials.fromNumber,
+      phoneNumberFormatted: phoneNumberValid ? phoneNumberFormatted : `${credentials.fromNumber} (not found in account)`,
+      balance,
+    };
+  } catch (error) {
+    console.error("Twilio verification error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error verifying Twilio connection",
+    };
+  }
+}
