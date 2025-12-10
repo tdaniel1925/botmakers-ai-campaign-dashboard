@@ -237,15 +237,28 @@ export async function POST(
 
     // Process SMS rules if call completed with transcript
     let smsResult = null;
+    console.log(`[Vapi Sync] Checking SMS eligibility: transcript=${!!transcript}, status=${status}`);
+
+    // Debug: Check if Twilio env vars are accessible here
+    console.log(`[Vapi Sync] DEBUG Twilio env vars: TWILIO_ACCOUNT_SID=${process.env.TWILIO_ACCOUNT_SID ? "set" : "missing"}, TWILIO_AUTH_TOKEN=${process.env.TWILIO_AUTH_TOKEN ? "set" : "missing"}, TWILIO_PHONE_NUMBER=${process.env.TWILIO_PHONE_NUMBER || "missing"}`);
+    console.log(`[Vapi Sync] DEBUG Other env vars: VAPI_API_KEY=${process.env.VAPI_API_KEY ? "set" : "missing"}, OPENAI_API_KEY=${process.env.OPENAI_API_KEY ? "set" : "missing"}`);
     if (transcript && status === "completed") {
       try {
-        console.log(`[Vapi Sync] Processing SMS rules for call ${callId}`);
+        console.log(`[Vapi Sync] Processing SMS rules for call ${callId}, campaign ${id}`);
         smsResult = await processOutboundCallForSms(callId, id);
-        console.log(`[Vapi Sync] SMS processing result:`, smsResult);
+        console.log(`[Vapi Sync] SMS processing result:`, JSON.stringify(smsResult, null, 2));
       } catch (smsError) {
         console.error(`[Vapi Sync] Error processing SMS:`, smsError);
         // Don't fail the sync if SMS processing fails
+        smsResult = { processed: false, sent: false, reason: `Error: ${smsError}` };
       }
+    } else {
+      console.log(`[Vapi Sync] Skipping SMS: ${!transcript ? 'No transcript' : `Status is ${status}, not completed`}`);
+      smsResult = {
+        processed: false,
+        sent: false,
+        reason: !transcript ? 'No transcript available' : `Call status is ${status}, requires completed`
+      };
     }
 
     return NextResponse.json({

@@ -46,14 +46,21 @@ export async function POST(request: NextRequest) {
     const supabase = await createServiceClient();
     const now = new Date().toISOString();
 
+    // Map Twilio status to our internal status
+    let internalStatus = messageStatus;
+    if (messageStatus === "undelivered" || messageStatus === "failed") {
+      internalStatus = "failed";
+    }
+
     // Update campaign_sms table (outbound campaigns)
     const { data: campaignSms, error: campaignError } = await supabase
       .from("campaign_sms")
       .update({
-        status: messageStatus,
+        status: internalStatus,
+        twilio_status: messageStatus, // Store exact Twilio status for display
         delivered_at: messageStatus === "delivered" ? now : null,
-        error_code: errorCode,
-        error_message: errorMessage,
+        twilio_error_code: errorCode,
+        twilio_error_message: errorMessage,
         updated_at: now,
       })
       .eq("twilio_sid", messageSid)
@@ -68,10 +75,11 @@ export async function POST(request: NextRequest) {
     const { data: smsLog, error: logError } = await supabase
       .from("sms_logs")
       .update({
-        status: messageStatus,
+        status: internalStatus,
+        twilio_status: messageStatus,
         delivered_at: messageStatus === "delivered" ? now : null,
-        error_code: errorCode,
-        error_message: errorMessage,
+        twilio_error_code: errorCode,
+        twilio_error_message: errorMessage,
         updated_at: now,
       })
       .eq("twilio_sid", messageSid)

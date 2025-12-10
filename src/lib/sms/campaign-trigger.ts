@@ -281,6 +281,7 @@ export async function processOutboundCallForSms(
 ): Promise<ProcessSmsResult> {
   const supabase = await createServiceClient();
 
+  console.log(`[SMS Trigger] ========================================`);
   console.log(`[SMS Trigger] Processing outbound call ${callId} for campaign ${campaignId}`);
 
   // Get call data
@@ -317,6 +318,7 @@ export async function processOutboundCallForSms(
   }
 
   // Get active SMS rules for this campaign
+  console.log(`[SMS Trigger] Fetching SMS rules for campaign ${campaignId}`);
   const { data: rules, error: rulesError } = await supabase
     .from("outbound_campaign_sms_rules")
     .select("id, name, trigger_condition, message_template, priority")
@@ -325,6 +327,7 @@ export async function processOutboundCallForSms(
     .order("priority", { ascending: false });
 
   if (rulesError) {
+    console.log(`[SMS Trigger] Error fetching SMS rules: ${rulesError.message}`);
     return {
       processed: false,
       sent: false,
@@ -333,6 +336,8 @@ export async function processOutboundCallForSms(
     };
   }
 
+  console.log(`[SMS Trigger] Found ${rules?.length || 0} active SMS rules`);
+
   if (!rules || rules.length === 0) {
     return {
       processed: true,
@@ -340,6 +345,8 @@ export async function processOutboundCallForSms(
       reason: "No active SMS rules for this campaign",
     };
   }
+
+  console.log(`[SMS Trigger] Rules: ${rules.map(r => r.name).join(", ")}`);
 
   // Map to interface
   const mappedRules: SmsRule[] = rules.map((r) => ({
@@ -351,6 +358,9 @@ export async function processOutboundCallForSms(
   }));
 
   // Evaluate rules using AI
+  console.log(`[SMS Trigger] Evaluating rules against transcript (${call.transcript?.length || 0} chars)`);
+  console.log(`[SMS Trigger] Call data: phone=${call.phone_number}, firstName=${call.first_name}, outcome=${call.outcome}`);
+
   const evaluation = await evaluateSmsRules(
     {
       id: call.id,
@@ -366,7 +376,7 @@ export async function processOutboundCallForSms(
     mappedRules
   );
 
-  console.log(`[SMS Trigger] Evaluation result:`, evaluation);
+  console.log(`[SMS Trigger] Evaluation result:`, JSON.stringify(evaluation, null, 2));
 
   if (!evaluation.shouldTrigger || !evaluation.ruleId) {
     // Log that we evaluated but didn't trigger
@@ -431,10 +441,13 @@ export async function processOutboundCallForSms(
   }
 
   // Send the SMS
+  console.log(`[SMS Trigger] Sending SMS to ${call.phone_number}`);
+  console.log(`[SMS Trigger] Message: ${messageBody.substring(0, 100)}...`);
   const smsResult = await sendSms({
     to: call.phone_number,
     body: messageBody,
   });
+  console.log(`[SMS Trigger] sendSms result:`, JSON.stringify(smsResult, null, 2));
 
   // Update SMS record with result
   const updateData: Record<string, unknown> = {

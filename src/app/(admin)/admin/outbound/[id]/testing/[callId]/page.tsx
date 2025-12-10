@@ -21,7 +21,6 @@ import {
   Clock,
   CheckCircle,
   XCircle,
-  Calendar,
   User,
   DollarSign,
   FileText,
@@ -31,6 +30,9 @@ import {
   Send,
   AlertCircle,
   Bot,
+  RefreshCw,
+  CheckCircle2,
+  AlertTriangle,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -94,6 +96,7 @@ export default function TestCallDetailsPage({
   const [navigation, setNavigation] = useState<{ prevId: string | null; nextId: string | null }>({ prevId: null, nextId: null });
   const [isLoading, setIsLoading] = useState(true);
   const [isSmsLoading, setIsSmsLoading] = useState(false);
+  const [refreshingSmsId, setRefreshingSmsId] = useState<string | null>(null);
   const { toast } = useToast();
 
   const fetchSmsLogs = async () => {
@@ -108,6 +111,52 @@ export default function TestCallDetailsPage({
       console.error("Error fetching SMS logs:", error);
     } finally {
       setIsSmsLoading(false);
+    }
+  };
+
+  const refreshSmsStatus = async (smsId: string) => {
+    setRefreshingSmsId(smsId);
+    try {
+      const response = await fetch(
+        `/api/admin/outbound-campaigns/${id}/test-calls/${callId}/sms/${smsId}/refresh`,
+        { method: "POST" }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        // Update the SMS in the local state
+        setSmsLogs(logs => logs.map(log => {
+          if (log.id === smsId) {
+            return {
+              ...log,
+              status: data.sms.status,
+              twilioStatus: data.sms.twilioStatus,
+              deliveredAt: data.sms.dateUpdated || log.deliveredAt,
+            };
+          }
+          return log;
+        }));
+        toast({
+          title: "Status Updated",
+          description: `SMS status: ${data.sms.twilioStatus}`,
+        });
+      } else {
+        const errorData = await response.json();
+        toast({
+          title: "Error",
+          description: errorData.error || "Failed to refresh status",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error refreshing SMS status:", error);
+      toast({
+        title: "Error",
+        description: "Failed to refresh SMS status",
+        variant: "destructive",
+      });
+    } finally {
+      setRefreshingSmsId(null);
     }
   };
 
@@ -190,20 +239,26 @@ export default function TestCallDetailsPage({
     return "$0.0000";
   };
 
-  const getSmsStatusBadge = (status: string) => {
-    switch (status) {
+  const getSmsStatusBadge = (status: string, twilioStatus?: string | null) => {
+    // Use twilioStatus for more accurate display if available
+    const displayStatus = twilioStatus || status;
+    switch (displayStatus) {
       case "sent":
-        return <Badge variant="success"><Send className="mr-1 h-3 w-3" /> Sent</Badge>;
+        return <Badge variant="default"><Send className="mr-1 h-3 w-3" /> Sent</Badge>;
       case "delivered":
-        return <Badge variant="success"><CheckCircle className="mr-1 h-3 w-3" /> Delivered</Badge>;
+        return <Badge variant="success"><CheckCircle2 className="mr-1 h-3 w-3" /> Delivered</Badge>;
       case "pending":
         return <Badge variant="secondary"><Clock className="mr-1 h-3 w-3" /> Pending</Badge>;
       case "queued":
         return <Badge variant="secondary"><Clock className="mr-1 h-3 w-3" /> Queued</Badge>;
+      case "sending":
+        return <Badge variant="secondary"><Loader2 className="mr-1 h-3 w-3 animate-spin" /> Sending</Badge>;
+      case "undelivered":
+        return <Badge variant="warning"><AlertTriangle className="mr-1 h-3 w-3" /> Undelivered</Badge>;
       case "failed":
         return <Badge variant="destructive"><XCircle className="mr-1 h-3 w-3" /> Failed</Badge>;
       default:
-        return <Badge variant="outline">{status}</Badge>;
+        return <Badge variant="outline">{displayStatus}</Badge>;
     }
   };
 
@@ -477,17 +532,58 @@ export default function TestCallDetailsPage({
                   {/* SMS Header */}
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      {getSmsStatusBadge(sms.status)}
+                      {getSmsStatusBadge(sms.status, sms.twilioStatus)}
                       {sms.ruleName && (
                         <Badge variant="outline">{sms.ruleName}</Badge>
                       )}
                     </div>
-                    <span className="text-sm text-muted-foreground">
-                      {sms.sentAt
-                        ? format(new Date(sms.sentAt), "MMM d, h:mm a")
-                        : format(new Date(sms.createdAt), "MMM d, h:mm a")}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground">
+                        {sms.sentAt
+                          ? format(new Date(sms.sentAt), "MMM d, h:mm a")
+                          : format(new Date(sms.createdAt), "MMM d, h:mm a")}
+                      </span>
+                      {sms.twilioSid && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => refreshSmsStatus(sms.id)}
+                          disabled={refreshingSmsId === sms.id}
+                          title="Refresh delivery status from Twilio"
+                        >
+                          <RefreshCw className={`h-4 w-4 ${refreshingSmsId === sms.id ? "animate-spin" : ""}`} />
+                        </Button>
+                      )}
+                    </div>
                   </div>
+
+                  {/* Delivery Confirmation Banner */}
+                  {sms.twilioStatus === "delivered" && (
+                    <div className="flex items-center gap-2 bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-400 rounded-lg p-3">
+                      <CheckCircle2 className="h-5 w-5 flex-shrink-0" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">Delivered to {sms.phoneNumber}</p>
+                        {sms.deliveredAt && (
+                          <p className="text-xs opacity-75">
+                            Confirmed at {format(new Date(sms.deliveredAt), "MMM d, h:mm:ss a")}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Undelivered Warning */}
+                  {sms.twilioStatus === "undelivered" && (
+                    <div className="flex items-center gap-2 bg-yellow-50 dark:bg-yellow-950/30 text-yellow-700 dark:text-yellow-400 rounded-lg p-3">
+                      <AlertTriangle className="h-5 w-5 flex-shrink-0" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">Message Not Delivered</p>
+                        <p className="text-xs opacity-75">
+                          The carrier could not deliver this message. The recipient&apos;s phone may be off or unreachable.
+                        </p>
+                      </div>
+                    </div>
+                  )}
 
                   {/* AI Evaluation */}
                   {sms.aiReason && (
@@ -524,18 +620,18 @@ export default function TestCallDetailsPage({
                   </div>
 
                   {/* Technical Details */}
-                  <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+                  <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
                     {sms.phoneNumber && (
                       <span>To: {sms.phoneNumber}</span>
                     )}
                     {sms.twilioSid && (
-                      <span className="font-mono">SID: {sms.twilioSid.slice(0, 12)}...</span>
+                      <span className="font-mono">SID: {sms.twilioSid}</span>
                     )}
                     {sms.segmentCount && (
                       <span>{sms.segmentCount} segment{sms.segmentCount > 1 ? "s" : ""}</span>
                     )}
-                    {sms.twilioStatus && (
-                      <span>Twilio: {sms.twilioStatus}</span>
+                    {sms.cost && (
+                      <span>Cost: ${parseFloat(sms.cost).toFixed(4)}</span>
                     )}
                   </div>
 

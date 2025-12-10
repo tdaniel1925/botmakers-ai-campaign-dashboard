@@ -57,8 +57,8 @@ export function ViewAsClientButton() {
     setLoading(true);
     // Store the selected client ID in sessionStorage for the preview
     sessionStorage.setItem("viewAsClientId", selectedClientId);
-    // Navigate to the client preview page
-    window.location.href = "/preview-client";
+    // Navigate to the actual client dashboard
+    window.location.href = "/dashboard";
   };
 
   return (

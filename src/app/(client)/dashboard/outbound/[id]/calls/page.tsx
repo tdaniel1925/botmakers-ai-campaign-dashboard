@@ -48,6 +48,11 @@ import {
   User,
   Calendar,
   ExternalLink,
+  MessageSquare,
+  Send,
+  CheckCircle2,
+  AlertTriangle,
+  XCircle,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 
@@ -72,6 +77,20 @@ interface Call {
   };
 }
 
+interface SmsLog {
+  id: string;
+  status: string;
+  twilioStatus: string | null;
+  messageBody: string;
+  phoneNumber: string;
+  recipientName: string | null;
+  ruleName: string | null;
+  segmentCount: number | null;
+  sentAt: string | null;
+  deliveredAt: string | null;
+  createdAt: string;
+}
+
 export default function ClientCallLogsPage({
   params,
 }: {
@@ -84,6 +103,8 @@ export default function ClientCallLogsPage({
   const [statusFilter, setStatusFilter] = useState("all");
   const [outcomeFilter, setOutcomeFilter] = useState("all");
   const [selectedCall, setSelectedCall] = useState<Call | null>(null);
+  const [smsLogs, setSmsLogs] = useState<SmsLog[]>([]);
+  const [smsLoading, setSmsLoading] = useState(false);
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 25,
@@ -92,6 +113,48 @@ export default function ClientCallLogsPage({
   });
 
   const { toast } = useToast();
+
+  // Fetch SMS logs when a call is selected
+  const fetchSmsLogs = async (callId: string) => {
+    setSmsLoading(true);
+    try {
+      const response = await fetch(`/api/client/outbound-campaigns/${id}/calls/${callId}/sms`);
+      if (!response.ok) throw new Error("Failed to fetch SMS logs");
+      const data = await response.json();
+      setSmsLogs(data.smsLogs || []);
+    } catch (error) {
+      console.error("Error fetching SMS logs:", error);
+      setSmsLogs([]);
+    } finally {
+      setSmsLoading(false);
+    }
+  };
+
+  // Handle call selection and fetch SMS logs
+  const handleSelectCall = (call: Call) => {
+    setSelectedCall(call);
+    setSmsLogs([]);
+    fetchSmsLogs(call.id);
+  };
+
+  const getSmsStatusBadge = (status: string, twilioStatus: string | null) => {
+    const displayStatus = twilioStatus || status;
+    switch (displayStatus) {
+      case "delivered":
+        return <Badge variant="success" className="gap-1"><CheckCircle2 className="h-3 w-3" />Delivered</Badge>;
+      case "sent":
+        return <Badge variant="secondary" className="gap-1"><Send className="h-3 w-3" />Sent</Badge>;
+      case "queued":
+      case "sending":
+        return <Badge variant="secondary" className="gap-1"><Loader2 className="h-3 w-3 animate-spin" />Sending</Badge>;
+      case "undelivered":
+        return <Badge variant="warning" className="gap-1"><AlertTriangle className="h-3 w-3" />Undelivered</Badge>;
+      case "failed":
+        return <Badge variant="destructive" className="gap-1"><XCircle className="h-3 w-3" />Failed</Badge>;
+      default:
+        return <Badge>{displayStatus}</Badge>;
+    }
+  };
 
   const fetchCalls = async () => {
     setIsLoading(true);
@@ -298,7 +361,7 @@ export default function ClientCallLogsPage({
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => setSelectedCall(call)}
+                          onClick={() => handleSelectCall(call)}
                         >
                           <FileText className="h-4 w-4" />
                         </Button>
@@ -434,6 +497,81 @@ export default function ClientCallLogsPage({
                   </div>
                 </div>
               )}
+
+              {/* SMS Logs Section */}
+              <div>
+                <label className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                  <MessageSquare className="h-4 w-4" />
+                  SMS Messages
+                </label>
+                <div className="mt-2">
+                  {smsLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : smsLogs.length > 0 ? (
+                    <div className="space-y-3">
+                      {smsLogs.map((sms) => (
+                        <div key={sms.id} className="border rounded-lg p-4 space-y-3">
+                          {/* SMS Header */}
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              {getSmsStatusBadge(sms.status, sms.twilioStatus)}
+                              {sms.ruleName && (
+                                <span className="text-xs text-muted-foreground">
+                                  via {sms.ruleName}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {sms.sentAt ? format(new Date(sms.sentAt), "MMM d, h:mm a") : "Pending"}
+                            </div>
+                          </div>
+
+                          {/* Delivered Banner */}
+                          {sms.twilioStatus === "delivered" && sms.deliveredAt && (
+                            <div className="flex items-center gap-2 text-xs text-green-600 bg-green-50 dark:bg-green-950/30 dark:text-green-400 px-3 py-2 rounded">
+                              <CheckCircle2 className="h-3 w-3" />
+                              Delivered {formatDistanceToNow(new Date(sms.deliveredAt), { addSuffix: true })}
+                            </div>
+                          )}
+
+                          {/* Undelivered Warning */}
+                          {sms.twilioStatus === "undelivered" && (
+                            <div className="flex items-center gap-2 text-xs text-yellow-600 bg-yellow-50 dark:bg-yellow-950/30 dark:text-yellow-400 px-3 py-2 rounded">
+                              <AlertTriangle className="h-3 w-3" />
+                              Message could not be delivered to carrier
+                            </div>
+                          )}
+
+                          {/* Message Body */}
+                          <div className="bg-muted/50 rounded p-3">
+                            <p className="text-sm whitespace-pre-wrap">{sms.messageBody}</p>
+                          </div>
+
+                          {/* SMS Details */}
+                          <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                            <div>
+                              <span className="font-medium">To:</span> {sms.phoneNumber}
+                              {sms.recipientName && ` (${sms.recipientName})`}
+                            </div>
+                            {sms.segmentCount && (
+                              <div>
+                                <span className="font-medium">Segments:</span> {sms.segmentCount}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm">No SMS messages for this call</p>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           )}
         </DialogContent>

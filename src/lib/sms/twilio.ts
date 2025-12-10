@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 
 interface TwilioCredentials {
   accountSid: string;
@@ -52,7 +52,7 @@ interface SendSmsResult {
 async function getTwilioCredentials(): Promise<TwilioCredentials | null> {
   // First try to get from database (api_keys table)
   try {
-    const supabase = await createClient();
+    const supabase = await createServiceClient();
     const { data: apiKey } = await supabase
       .from("api_keys")
       .select("key_data")
@@ -81,12 +81,16 @@ async function getTwilioCredentials(): Promise<TwilioCredentials | null> {
   // Fall back to environment variables
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
   const authToken = process.env.TWILIO_AUTH_TOKEN;
-  const fromNumber = process.env.TWILIO_FROM_NUMBER;
+  // Support both TWILIO_FROM_NUMBER and TWILIO_PHONE_NUMBER for compatibility
+  const fromNumber = process.env.TWILIO_FROM_NUMBER || process.env.TWILIO_PHONE_NUMBER;
+
+  console.log(`[Twilio] Checking env vars: accountSid=${accountSid ? "set" : "missing"}, authToken=${authToken ? "set" : "missing"}, fromNumber=${fromNumber || "missing"}`);
 
   if (accountSid && authToken && fromNumber) {
     return { accountSid, authToken, fromNumber };
   }
 
+  console.log("[Twilio] Missing credentials - accountSid:", !!accountSid, "authToken:", !!authToken, "fromNumber:", !!fromNumber);
   return null;
 }
 
@@ -117,7 +121,7 @@ function formatPhoneNumber(phone: string): string {
 // Check if a phone number is on the global SMS blacklist
 async function isBlacklisted(phoneNumber: string): Promise<boolean> {
   try {
-    const supabase = await createClient();
+    const supabase = await createServiceClient();
     const formattedPhone = formatPhoneNumber(phoneNumber);
 
     const { data } = await supabase

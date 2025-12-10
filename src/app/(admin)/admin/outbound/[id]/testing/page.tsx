@@ -95,6 +95,7 @@ export default function OutboundCampaignTestingPage({
   const [isLoadingCalls, setIsLoadingCalls] = useState(false);
   const [isMakingCall, setIsMakingCall] = useState(false);
   const [expandedCallId, setExpandedCallId] = useState<string | null>(null);
+  const [syncingCallId, setSyncingCallId] = useState<string | null>(null);
 
   // Test call form
   const [phoneNumber, setPhoneNumber] = useState("");
@@ -206,6 +207,41 @@ export default function OutboundCampaignTestingPage({
       title: "Copied!",
       description: `${label} copied to clipboard`,
     });
+  };
+
+  const handleSyncCall = async (callId: string) => {
+    setSyncingCallId(callId);
+    try {
+      const response = await fetch(`/api/admin/outbound-campaigns/${id}/test-calls/${callId}/sync`, {
+        method: "POST",
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to sync call");
+      }
+
+      toast({
+        title: "Call Synced",
+        description: data.sms?.sent
+          ? `Call synced successfully! SMS sent.`
+          : data.sms?.reason
+            ? `Call synced. SMS: ${data.sms.reason}`
+            : "Call data updated from Vapi",
+      });
+
+      // Refresh test calls list
+      fetchTestCalls();
+    } catch (error) {
+      toast({
+        title: "Sync Error",
+        description: error instanceof Error ? error.message : "Failed to sync call",
+        variant: "destructive",
+      });
+    } finally {
+      setSyncingCallId(null);
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -565,6 +601,25 @@ export default function OutboundCampaignTestingPage({
                             </div>
                           </div>
                           <div className="flex items-center gap-2 ml-4">
+                            {/* Sync button - only show for Vapi calls with a vapi_call_id */}
+                            {call.vapi_call_id && campaign.call_provider === "vapi" && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleSyncCall(call.id);
+                                }}
+                                disabled={syncingCallId === call.id}
+                              >
+                                {syncingCallId === call.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <RefreshCw className="h-4 w-4" />
+                                )}
+                                <span className="ml-1">Sync</span>
+                              </Button>
+                            )}
                             <Button
                               variant="outline"
                               size="sm"

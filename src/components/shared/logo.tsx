@@ -59,8 +59,8 @@ export function Logo({ className, maxHeight = 48, fillWidth = false }: LogoProps
         src={currentLogo}
         alt="Logo"
         style={{
-          maxHeight: fillWidth ? undefined : `${maxHeight}px`,
-          height: fillWidth ? 'auto' : undefined,
+          maxHeight: `${maxHeight}px`,
+          height: 'auto',
           width: fillWidth ? '100%' : 'auto',
           maxWidth: '100%',
           objectFit: 'contain',

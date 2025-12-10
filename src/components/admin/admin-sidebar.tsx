@@ -250,8 +250,8 @@ export function AdminSidebar({ isOpen = true, onToggle }: AdminSidebarProps) {
         )}
       >
         <div className="p-4 flex justify-between items-center">
-          <div className="w-[80%]">
-            <Logo fillWidth={true} />
+          <div className="flex-1 pr-2">
+            <Logo fillWidth={true} maxHeight={56} />
           </div>
           {/* Mobile close button */}
           <Button
