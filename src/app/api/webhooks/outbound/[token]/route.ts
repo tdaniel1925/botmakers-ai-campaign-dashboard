@@ -329,7 +329,7 @@ async function handleVapiEndOfCall(
   const updateData: Record<string, unknown> = {
     status,
     outcome,
-    duration_seconds: durationSeconds,
+    duration_seconds: durationSeconds !== null ? Math.round(durationSeconds) : null,
     cost: cost !== null ? cost.toFixed(4) : null,
     recording_url: recordingUrl,
     transcript,
@@ -442,11 +442,12 @@ async function handleAutoCallsWebhook(
     const mappedStatus = mapAutoCallsStatus(status as string);
 
     // Update call record
+    const durationValue = duration as number | undefined;
     await supabase
       .from("campaign_calls")
       .update({
         status: mappedStatus,
-        duration_seconds: duration as number,
+        duration_seconds: durationValue !== undefined ? Math.round(durationValue) : null,
         recording_url: recording_url as string,
         transcript: transcript as string,
         ended_at: new Date().toISOString(),
@@ -523,12 +524,13 @@ async function handleSynthflowWebhook(
       }
     }
 
+    const durationValue = duration_seconds as number | undefined;
     await supabase
       .from("campaign_calls")
       .update({
         status: mappedStatus,
         outcome,
-        duration_seconds: duration_seconds as number,
+        duration_seconds: durationValue !== undefined ? Math.round(durationValue) : null,
         recording_url: recording_url as string,
         transcript: transcript as string,
         structured_data: structData,
