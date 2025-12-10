@@ -9,6 +9,34 @@ interface TwilioCredentials {
 interface SendSmsParams {
   to: string;
   body: string;
+  statusCallbackUrl?: string;
+  /**
+   * If true, automatically uses the default status callback URL from environment.
+   * This should be enabled for production SMS to track delivery status.
+   */
+  enableStatusCallback?: boolean;
+}
+
+// Get the base URL for callbacks
+function getStatusCallbackUrl(): string | null {
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL;
+  if (!baseUrl) return null;
+  const protocol = baseUrl.includes("localhost") ? "http" : "https";
+  const url = baseUrl.startsWith("http") ? baseUrl : `${protocol}://${baseUrl}`;
+  return `${url}/api/webhooks/sms-status`;
+}
+
+// Mandatory opt-out message - cannot be disabled or modified by users
+const OPT_OUT_MESSAGE = "\n\nReply STOP to unsubscribe.";
+
+// Append opt-out message to SMS body
+function appendOptOutMessage(body: string): string {
+  // Check if message already contains opt-out language (case insensitive)
+  const hasOptOut = /\b(stop|unsubscribe|opt.?out)\b/i.test(body);
+  if (hasOptOut) {
+    return body; // Don't duplicate if already present
+  }
+  return body + OPT_OUT_MESSAGE;
 }
 
 interface SendSmsResult {
@@ -86,6 +114,27 @@ function formatPhoneNumber(phone: string): string {
   return `+${cleaned}`;
 }
 
+// Check if a phone number is on the global SMS blacklist
+async function isBlacklisted(phoneNumber: string): Promise<boolean> {
+  try {
+    const supabase = await createClient();
+    const formattedPhone = formatPhoneNumber(phoneNumber);
+
+    const { data } = await supabase
+      .from("sms_blacklist")
+      .select("id")
+      .eq("phone_number", formattedPhone)
+      .eq("is_active", true)
+      .maybeSingle();
+
+    return !!data;
+  } catch (error) {
+    // If table doesn't exist or error, allow sending (fail open for now)
+    console.warn("Could not check SMS blacklist:", error);
+    return false;
+  }
+}
+
 // Send SMS using Twilio REST API
 export async function sendSms(params: SendSmsParams): Promise<SendSmsResult> {
   const credentials = await getTwilioCredentials();
@@ -107,14 +156,35 @@ export async function sendSms(params: SendSmsParams): Promise<SendSmsResult> {
     };
   }
 
+  // Check global SMS blacklist
+  const blacklisted = await isBlacklisted(formattedTo);
+  if (blacklisted) {
+    return {
+      success: false,
+      error: "Phone number has opted out of SMS",
+      errorCode: "BLACKLISTED",
+    };
+  }
+
   try {
     // Use Twilio REST API directly (no SDK needed)
     const url = `https://api.twilio.com/2010-04-01/Accounts/${credentials.accountSid}/Messages.json`;
 
+    // Append mandatory opt-out message
+    const messageBody = appendOptOutMessage(params.body);
+
     const formData = new URLSearchParams();
     formData.append("To", formattedTo);
     formData.append("From", credentials.fromNumber);
-    formData.append("Body", params.body);
+    formData.append("Body", messageBody);
+
+    // Add status callback URL for delivery tracking
+    // Uses explicit URL if provided, otherwise auto-generates if enableStatusCallback is true (default)
+    const callbackUrl = params.statusCallbackUrl ||
+      (params.enableStatusCallback !== false ? getStatusCallbackUrl() : null);
+    if (callbackUrl) {
+      formData.append("StatusCallback", callbackUrl);
+    }
 
     const response = await fetch(url, {
       method: "POST",
@@ -136,9 +206,10 @@ export async function sendSms(params: SendSmsParams): Promise<SendSmsResult> {
     }
 
     // Calculate segment count (160 chars for GSM-7, 70 for Unicode)
-    const isUnicode = /[^\x00-\x7F]/.test(params.body);
+    // Use the actual message body sent (with opt-out appended)
+    const isUnicode = /[^\x00-\x7F]/.test(messageBody);
     const charsPerSegment = isUnicode ? 70 : 160;
-    const segmentCount = Math.ceil(params.body.length / charsPerSegment);
+    const segmentCount = Math.ceil(messageBody.length / charsPerSegment);
 
     return {
       success: true,
