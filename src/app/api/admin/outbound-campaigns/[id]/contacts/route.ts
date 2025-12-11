@@ -24,6 +24,7 @@ export async function GET(
     const status = searchParams.get("status");
     const search = searchParams.get("search");
     const outcome = searchParams.get("outcome");
+    const idsOnly = searchParams.get("ids_only") === "true";
 
     const supabase = await createServiceClient();
 
@@ -39,6 +40,38 @@ export async function GET(
         { error: "Campaign not found" },
         { status: 404 }
       );
+    }
+
+    // If requesting IDs only, fetch all matching contact IDs (for select all functionality)
+    if (idsOnly) {
+      let idsQuery = supabase
+        .from("campaign_contacts")
+        .select("id")
+        .eq("campaign_id", id);
+
+      if (status) {
+        idsQuery = idsQuery.eq("status", status);
+      }
+      if (outcome) {
+        idsQuery = idsQuery.eq("outcome", outcome);
+      }
+      if (search) {
+        idsQuery = idsQuery.or(
+          `phone_number.ilike.%${search}%,first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%`
+        );
+      }
+
+      const { data: ids, error: idsError } = await idsQuery;
+
+      if (idsError) {
+        console.error("IDs query error:", idsError);
+        return NextResponse.json({ error: idsError.message }, { status: 500 });
+      }
+
+      return NextResponse.json({
+        contact_ids: ids?.map((c) => c.id) || [],
+        total: ids?.length || 0,
+      });
     }
 
     // For filtered queries, we need to count; for unfiltered, use campaign.total_contacts

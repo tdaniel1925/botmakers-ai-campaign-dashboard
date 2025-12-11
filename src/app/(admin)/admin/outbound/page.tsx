@@ -127,6 +127,7 @@ export default function OutboundCampaignsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectAllMode, setSelectAllMode] = useState<boolean>(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedCampaign, setSelectedCampaign] = useState<OutboundCampaign | null>(null);
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
@@ -223,14 +224,17 @@ export default function OutboundCampaignsPage() {
 
   // Bulk selection
   const toggleSelectAll = () => {
-    if (selectedIds.size === filteredCampaigns.length) {
+    if (selectedIds.size === filteredCampaigns.length && filteredCampaigns.length > 0) {
       setSelectedIds(new Set());
+      setSelectAllMode(false);
     } else {
       setSelectedIds(new Set(filteredCampaigns.map((c) => c.id)));
+      setSelectAllMode(true);
     }
   };
 
   const toggleSelect = (id: string) => {
+    setSelectAllMode(false); // Reset select all mode when manually toggling
     const newSelected = new Set(selectedIds);
     if (newSelected.has(id)) {
       newSelected.delete(id);
@@ -238,6 +242,11 @@ export default function OutboundCampaignsPage() {
       newSelected.add(id);
     }
     setSelectedIds(newSelected);
+  };
+
+  const clearSelection = () => {
+    setSelectedIds(new Set());
+    setSelectAllMode(false);
   };
 
   // Bulk actions
@@ -472,57 +481,76 @@ export default function OutboundCampaignsPage() {
 
       {/* Bulk Actions Bar */}
       {selectedIds.size > 0 && (
-        <div className="flex items-center gap-4 p-3 bg-muted rounded-lg">
-          <span className="text-sm font-medium">
-            {selectedIds.size} selected
-          </span>
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleBulkResume}
-              disabled={isSubmitting}
-            >
-              <Play className="mr-2 h-4 w-4" />
-              Resume
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleBulkPause}
-              disabled={isSubmitting}
-            >
-              <Pause className="mr-2 h-4 w-4" />
-              Pause
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleBulkStop}
-              disabled={isSubmitting}
-            >
-              <Square className="mr-2 h-4 w-4" />
-              Stop
-            </Button>
-            {draftCountInSelection > 0 && (
+        <div className="flex flex-col gap-2 p-3 bg-muted rounded-lg">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">
+                {selectAllMode
+                  ? `All ${selectedIds.size} campaign${selectedIds.size !== 1 ? "s" : ""} selected`
+                  : `${selectedIds.size} selected`}
+              </span>
+              {!selectAllMode && selectedIds.size < filteredCampaigns.length && (
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="h-auto p-0 text-primary"
+                  onClick={toggleSelectAll}
+                >
+                  Select all {filteredCampaigns.length} campaigns
+                </Button>
+              )}
+              {selectAllMode && (
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="h-auto p-0 text-muted-foreground"
+                  onClick={clearSelection}
+                >
+                  Clear selection
+                </Button>
+              )}
+            </div>
+            <div className="flex gap-2 flex-wrap">
               <Button
                 size="sm"
-                variant="destructive"
-                onClick={() => setShowBulkDeleteDialog(true)}
+                variant="outline"
+                onClick={handleBulkResume}
                 disabled={isSubmitting}
               >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Delete ({draftCountInSelection})
+                <Play className="mr-2 h-4 w-4" />
+                Resume
               </Button>
-            )}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleBulkPause}
+                disabled={isSubmitting}
+              >
+                <Pause className="mr-2 h-4 w-4" />
+                Pause
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleBulkStop}
+                disabled={isSubmitting}
+              >
+                <Square className="mr-2 h-4 w-4" />
+                Stop
+              </Button>
+              {draftCountInSelection > 0 && (
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={() => setShowBulkDeleteDialog(true)}
+                  disabled={isSubmitting}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete ({draftCountInSelection})
+                </Button>
+              )}
+            </div>
           </div>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => setSelectedIds(new Set())}
-          >
-            Clear
-          </Button>
         </div>
       )}
 

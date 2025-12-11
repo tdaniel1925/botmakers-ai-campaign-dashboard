@@ -227,6 +227,7 @@ export default function ContactsPage({
   const [statusFilter, setStatusFilter] = useState("all");
   const [outcomeFilter, setOutcomeFilter] = useState("all");
   const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
+  const [selectAllMode, setSelectAllMode] = useState<"page" | "all" | null>(null);
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 50,
@@ -839,14 +840,53 @@ export default function ContactsPage({
   };
 
   const toggleSelectAll = () => {
-    if (selectedContacts.length === contacts.length) {
+    const pendingOnPage = contacts.filter((c) => c.status === "pending");
+    if (selectedContacts.length === pendingOnPage.length && pendingOnPage.length > 0) {
       setSelectedContacts([]);
+      setSelectAllMode(null);
     } else {
-      setSelectedContacts(contacts.filter((c) => c.status === "pending").map((c) => c.id));
+      setSelectedContacts(pendingOnPage.map((c) => c.id));
+      setSelectAllMode("page");
     }
   };
 
+  const handleSelectAllRecords = async () => {
+    // Fetch all pending contact IDs for the campaign
+    try {
+      const params = new URLSearchParams({
+        status: "pending",
+        ids_only: "true",
+      });
+      if (statusFilter !== "all" && statusFilter !== "pending") {
+        // If filtering by non-pending status, no pending contacts match
+        setSelectedContacts([]);
+        setSelectAllMode(null);
+        return;
+      }
+      if (searchQuery) params.set("search", searchQuery);
+
+      const response = await fetch(`/api/admin/outbound-campaigns/${id}/contacts?${params}`);
+      if (!response.ok) throw new Error("Failed to fetch contact IDs");
+      const data = await response.json();
+      setSelectedContacts(data.contact_ids || []);
+      setSelectAllMode("all");
+    } catch (error) {
+      console.error("Error fetching all contact IDs:", error);
+      toast({
+        title: "Error",
+        description: "Failed to select all records",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const clearSelection = () => {
+    setSelectedContacts([]);
+    setSelectAllMode(null);
+  };
+
   const toggleSelect = (contactId: string) => {
+    setSelectAllMode(null); // Reset select all mode when manually toggling
     setSelectedContacts((prev) =>
       prev.includes(contactId)
         ? prev.filter((id) => id !== contactId)
@@ -967,14 +1007,42 @@ export default function ContactsPage({
 
       {/* Bulk Actions */}
       {selectedContacts.length > 0 && (
-        <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
-          <span className="text-sm font-medium">
-            {selectedContacts.length} contact{selectedContacts.length > 1 ? "s" : ""} selected
-          </span>
-          <Button variant="destructive" size="sm" onClick={() => setShowDeleteModal(true)}>
-            <Trash2 className="mr-2 h-4 w-4" />
-            Delete Selected
-          </Button>
+        <div className="flex flex-col gap-2 p-4 bg-muted rounded-lg">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">
+                {selectAllMode === "all"
+                  ? `All ${selectedContacts.length.toLocaleString()} pending contact${selectedContacts.length !== 1 ? "s" : ""} selected`
+                  : `${selectedContacts.length} contact${selectedContacts.length !== 1 ? "s" : ""} selected`}
+              </span>
+              {selectAllMode === "page" && pagination.total > contacts.length && (
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="h-auto p-0 text-primary"
+                  onClick={handleSelectAllRecords}
+                >
+                  Select all {pagination.total.toLocaleString()} pending contacts
+                </Button>
+              )}
+              {selectAllMode === "all" && (
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="h-auto p-0 text-muted-foreground"
+                  onClick={clearSelection}
+                >
+                  Clear selection
+                </Button>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="destructive" size="sm" onClick={() => setShowDeleteModal(true)}>
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete Selected
+              </Button>
+            </div>
+          </div>
         </div>
       )}
 
