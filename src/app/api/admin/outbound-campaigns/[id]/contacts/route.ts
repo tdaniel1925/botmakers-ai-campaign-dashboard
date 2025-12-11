@@ -76,18 +76,21 @@ export async function GET(
 
     // If requesting IDs only, fetch all matching contact IDs (for select all functionality)
     if (idsOnly) {
-      // Supabase has a default limit of 1000 rows, so we need to paginate
-      // to get all IDs for large datasets
+      // Supabase/PostgREST has a default max of 1000 rows per request
+      // We need to paginate in batches of 1000 to get all IDs
       const allIds: string[] = [];
-      const batchSize = 10000; // Fetch in larger batches
+      const batchSize = 1000; // Match Supabase's default limit
       let offset = 0;
       let hasMore = true;
+      let batchNum = 0;
 
       while (hasMore) {
+        batchNum++;
         let idsQuery = supabase
           .from("campaign_contacts")
           .select("id")
           .eq("campaign_id", id)
+          .order("created_at", { ascending: true }) // Consistent ordering for pagination
           .range(offset, offset + batchSize - 1);
 
         if (status) {
@@ -111,8 +114,8 @@ export async function GET(
 
         if (ids && ids.length > 0) {
           allIds.push(...ids.map((c) => c.id));
-          console.log(`IDs batch ${offset / batchSize + 1}: fetched ${ids.length} IDs, total so far: ${allIds.length}`);
-          offset += batchSize;
+          console.log(`IDs batch ${batchNum}: fetched ${ids.length} IDs (offset ${offset}), total so far: ${allIds.length}`);
+          offset += ids.length; // Use actual count returned, not batchSize
           // If we got fewer results than the batch size, we've reached the end
           hasMore = ids.length === batchSize;
         } else {
@@ -120,7 +123,7 @@ export async function GET(
         }
       }
 
-      console.log(`Total IDs fetched: ${allIds.length}`);
+      console.log(`Total IDs fetched: ${allIds.length} in ${batchNum} batches`);
       return NextResponse.json({
         contact_ids: allIds,
         total: allIds.length,
