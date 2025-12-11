@@ -174,6 +174,7 @@ interface ColumnMapping {
   phone_number: string;
   first_name: string;
   last_name: string;
+  full_name: string; // For CSVs with a single name column
   email: string;
   timezone: string;
 }
@@ -254,6 +255,7 @@ export default function ContactsPage({
     phone_number: "",
     first_name: "",
     last_name: "",
+    full_name: "",
     email: "",
     timezone: "",
   });
@@ -385,20 +387,50 @@ export default function ContactsPage({
 
     setCsvFile(file);
 
-    // Parse CSV
+    // Parse CSV properly handling quoted fields
+    const parseCSVLine = (line: string): string[] => {
+      const result: string[] = [];
+      let current = "";
+      let inQuotes = false;
+
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        const nextChar = line[i + 1];
+
+        if (char === '"' && inQuotes && nextChar === '"') {
+          // Escaped quote inside quoted field
+          current += '"';
+          i++; // Skip next quote
+        } else if (char === '"') {
+          // Toggle quote state
+          inQuotes = !inQuotes;
+        } else if (char === ',' && !inQuotes) {
+          // Field separator
+          result.push(current.trim());
+          current = "";
+        } else {
+          current += char;
+        }
+      }
+      // Don't forget the last field
+      result.push(current.trim());
+      return result;
+    };
+
     const reader = new FileReader();
     reader.onload = (event) => {
       const text = event.target?.result as string;
-      const lines = text.split("\n");
+      // Handle different line endings (Windows \r\n, Mac \r, Unix \n)
+      const lines = text.split(/\r?\n|\r/);
       if (lines.length > 0) {
-        const headers = lines[0].split(",").map((h) => h.trim().replace(/"/g, ""));
+        const headers = parseCSVLine(lines[0]);
         setCsvHeaders(headers);
 
         // Parse all data rows
         const allData: Record<string, string>[] = [];
         for (let i = 1; i < lines.length; i++) {
           if (lines[i].trim()) {
-            const values = lines[i].split(",").map((v) => v.trim().replace(/"/g, ""));
+            const values = parseCSVLine(lines[i]);
             const row: Record<string, string> = {};
             headers.forEach((h, idx) => {
               row[h] = values[idx] || "";
@@ -409,28 +441,72 @@ export default function ContactsPage({
         setCsvData(allData);
         setCsvPreview(allData.slice(0, 5));
 
-        // Auto-map common column names
+        // Auto-map common column names with comprehensive pattern matching
         const autoMapping: ColumnMapping = {
           phone_number: "",
           first_name: "",
           last_name: "",
+          full_name: "",
           email: "",
           timezone: "",
         };
+
+        // Normalize header for matching (lowercase, remove spaces/underscores/dashes)
+        const normalizeHeader = (h: string) => h.toLowerCase().replace(/[\s_-]/g, "");
+
         headers.forEach((h) => {
           const lower = h.toLowerCase();
-          if (lower.includes("phone") || lower === "mobile" || lower === "cell") {
-            autoMapping.phone_number = h;
-          } else if (lower.includes("first") || lower === "fname") {
-            autoMapping.first_name = h;
-          } else if (lower.includes("last") || lower === "lname") {
-            autoMapping.last_name = h;
-          } else if (lower.includes("email")) {
-            autoMapping.email = h;
-          } else if (lower.includes("timezone") || lower === "tz" || lower === "time_zone") {
-            autoMapping.timezone = h;
+          const normalized = normalizeHeader(h);
+
+          // Phone number patterns
+          if (!autoMapping.phone_number) {
+            const phonePatterns = ["phone", "phonenumber", "mobile", "cell", "telephone", "tel", "number", "contact"];
+            if (phonePatterns.some(p => normalized.includes(p)) || lower === "phone" || lower === "mobile") {
+              autoMapping.phone_number = h;
+            }
+          }
+
+          // First name patterns (must check before generic "name")
+          if (!autoMapping.first_name) {
+            const firstNamePatterns = ["firstname", "first", "fname", "givenname", "given"];
+            if (firstNamePatterns.some(p => normalized === p || normalized.startsWith(p))) {
+              autoMapping.first_name = h;
+            }
+          }
+
+          // Last name patterns
+          if (!autoMapping.last_name) {
+            const lastNamePatterns = ["lastname", "last", "lname", "surname", "familyname", "family"];
+            if (lastNamePatterns.some(p => normalized === p || normalized.startsWith(p))) {
+              autoMapping.last_name = h;
+            }
+          }
+
+          // Full name patterns (single column with full name)
+          if (!autoMapping.full_name && !autoMapping.first_name && !autoMapping.last_name) {
+            const fullNamePatterns = ["fullname", "name", "contactname", "customername", "personname"];
+            if (fullNamePatterns.some(p => normalized === p)) {
+              autoMapping.full_name = h;
+            }
+          }
+
+          // Email patterns
+          if (!autoMapping.email) {
+            const emailPatterns = ["email", "emailaddress", "mail", "emailid"];
+            if (emailPatterns.some(p => normalized.includes(p))) {
+              autoMapping.email = h;
+            }
+          }
+
+          // Timezone patterns
+          if (!autoMapping.timezone) {
+            const tzPatterns = ["timezone", "tz", "timez", "zone"];
+            if (tzPatterns.some(p => normalized.includes(p))) {
+              autoMapping.timezone = h;
+            }
           }
         });
+
         setColumnMapping(autoMapping);
 
         setUploadStep("mapping");
@@ -538,6 +614,7 @@ export default function ContactsPage({
           columnMapping.phone_number,
           columnMapping.first_name,
           columnMapping.last_name,
+          columnMapping.full_name,
           columnMapping.email,
           columnMapping.timezone,
         ].filter(Boolean);
@@ -562,10 +639,26 @@ export default function ContactsPage({
           }
         }
 
+        // Handle names - support both separate first/last and combined full name
+        let firstName = columnMapping.first_name ? row[columnMapping.first_name] : undefined;
+        let lastName = columnMapping.last_name ? row[columnMapping.last_name] : undefined;
+
+        // If we have a full_name column but no separate first/last, split it
+        if (columnMapping.full_name && row[columnMapping.full_name] && !firstName && !lastName) {
+          const fullName = row[columnMapping.full_name].trim();
+          const nameParts = fullName.split(/\s+/);
+          if (nameParts.length >= 2) {
+            firstName = nameParts[0];
+            lastName = nameParts.slice(1).join(" ");
+          } else if (nameParts.length === 1) {
+            firstName = nameParts[0];
+          }
+        }
+
         processedContacts.push({
           phone_number: normalizedPhone,
-          first_name: columnMapping.first_name ? row[columnMapping.first_name] : undefined,
-          last_name: columnMapping.last_name ? row[columnMapping.last_name] : undefined,
+          first_name: firstName || undefined,
+          last_name: lastName || undefined,
           email: columnMapping.email ? row[columnMapping.email] : undefined,
           timezone: timezone || undefined,
           custom_data: customData,
@@ -635,7 +728,7 @@ export default function ContactsPage({
     setCsvHeaders([]);
     setCsvData([]);
     setCsvPreview([]);
-    setColumnMapping({ phone_number: "", first_name: "", last_name: "", email: "", timezone: "" });
+    setColumnMapping({ phone_number: "", first_name: "", last_name: "", full_name: "", email: "", timezone: "" });
     setVariableMappings([]);
     setUploadStep("upload");
     setUploadProgress(0);
@@ -1155,6 +1248,31 @@ export default function ContactsPage({
                     </Select>
                   </div>
                 </div>
+                {/* Full Name option - only show if first/last not already mapped */}
+                {!columnMapping.first_name && !columnMapping.last_name && (
+                  <div className="space-y-2">
+                    <Label>Full Name Column (optional)</Label>
+                    <Select
+                      value={columnMapping.full_name}
+                      onValueChange={(value) => setColumnMapping({ ...columnMapping, full_name: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select column" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">— None —</SelectItem>
+                        {csvHeaders.map((header) => (
+                          <SelectItem key={header} value={header}>
+                            {header}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      If your CSV has a single &quot;Name&quot; column, select it here. It will be split into first and last names.
+                    </p>
+                  </div>
+                )}
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label>Email Column</Label>
