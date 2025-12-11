@@ -43,8 +43,19 @@ export async function GET(
       );
     }
 
-    // If requesting count only, use Supabase count query (no row limit)
+    // If requesting count only
     if (countOnly) {
+      const hasFilters = status || outcome || search;
+
+      // For very large campaigns (50K+) without filters, return cached count
+      // Count queries on 100K+ rows can timeout
+      if (!hasFilters && (campaign.total_contacts || 0) > 50000) {
+        return NextResponse.json({
+          count: campaign.total_contacts || 0,
+        });
+      }
+
+      // For filtered queries or smaller campaigns, do actual count
       let countQuery = supabase
         .from("campaign_contacts")
         .select("*", { count: "exact", head: true })
@@ -66,6 +77,13 @@ export async function GET(
 
       if (countError) {
         console.error("Count query error:", countError);
+        // On timeout/error for large campaigns, fall back to cached count
+        if ((campaign.total_contacts || 0) > 10000) {
+          console.log("Falling back to cached total_contacts due to count error");
+          return NextResponse.json({
+            count: campaign.total_contacts || 0,
+          });
+        }
         return NextResponse.json({ error: countError.message }, { status: 500 });
       }
 
@@ -130,15 +148,19 @@ export async function GET(
       });
     }
 
-    // For filtered queries, we need to count; for unfiltered, use campaign.total_contacts
+    // For filtered queries on smaller campaigns, we can count; for large campaigns, use cached count
     const hasFilters = status || outcome || search;
+    const isLargeCampaign = (campaign.total_contacts || 0) > 50000;
 
-    // Build query - only use count for filtered queries
+    // Build query - never use inline count for large campaigns (can timeout)
+    // For smaller campaigns with filters, we can use inline count
+    const useInlineCount = hasFilters && !isLargeCampaign;
+
     let query = supabase
       .from("campaign_contacts")
       .select(
         "id, campaign_id, phone_number, first_name, last_name, email, status, outcome, call_attempts, last_called_at, timezone, created_at",
-        { count: hasFilters ? "exact" : undefined }
+        useInlineCount ? { count: "exact" } : undefined
       )
       .eq("campaign_id", id)
       .order("created_at", { ascending: false });
@@ -168,8 +190,25 @@ export async function GET(
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Use campaign total_contacts for unfiltered queries, otherwise use count
-    const total = hasFilters ? (count || 0) : (campaign.total_contacts || 0);
+    // Calculate total:
+    // - For unfiltered queries: use cached total_contacts
+    // - For filtered queries on small campaigns: use inline count
+    // - For filtered queries on large campaigns: estimate based on page data
+    let total = campaign.total_contacts || 0;
+    if (hasFilters) {
+      if (useInlineCount) {
+        total = count || 0;
+      } else {
+        // Large campaign with filters - estimate based on returned data
+        // If we got a full page, there's likely more
+        if (contacts && contacts.length < limit) {
+          total = from + contacts.length;
+        } else {
+          // Show that there are more pages (at least)
+          total = from + limit + 1;
+        }
+      }
+    }
 
     return NextResponse.json({
       contacts,
