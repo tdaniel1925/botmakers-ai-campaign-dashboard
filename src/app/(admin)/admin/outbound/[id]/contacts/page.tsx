@@ -1144,7 +1144,7 @@ export default function ContactsPage({
 
       {/* Upload CSV Modal */}
       <Dialog open={showUploadModal} onOpenChange={(open) => { if (!open) handleCloseUploadModal(); else setShowUploadModal(true); }}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Upload Contacts</DialogTitle>
             <DialogDescription>
