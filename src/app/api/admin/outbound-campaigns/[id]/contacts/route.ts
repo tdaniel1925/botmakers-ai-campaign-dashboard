@@ -25,6 +25,7 @@ export async function GET(
     const search = searchParams.get("search");
     const outcome = searchParams.get("outcome");
     const idsOnly = searchParams.get("ids_only") === "true";
+    const countOnly = searchParams.get("count_only") === "true";
 
     const supabase = await createServiceClient();
 
@@ -40,6 +41,37 @@ export async function GET(
         { error: "Campaign not found" },
         { status: 404 }
       );
+    }
+
+    // If requesting count only, use Supabase count query (no row limit)
+    if (countOnly) {
+      let countQuery = supabase
+        .from("campaign_contacts")
+        .select("*", { count: "exact", head: true })
+        .eq("campaign_id", id);
+
+      if (status) {
+        countQuery = countQuery.eq("status", status);
+      }
+      if (outcome) {
+        countQuery = countQuery.eq("outcome", outcome);
+      }
+      if (search) {
+        countQuery = countQuery.or(
+          `phone_number.ilike.%${search}%,first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%`
+        );
+      }
+
+      const { count, error: countError } = await countQuery;
+
+      if (countError) {
+        console.error("Count query error:", countError);
+        return NextResponse.json({ error: countError.message }, { status: 500 });
+      }
+
+      return NextResponse.json({
+        count: count || 0,
+      });
     }
 
     // If requesting IDs only, fetch all matching contact IDs (for select all functionality)
@@ -79,6 +111,7 @@ export async function GET(
 
         if (ids && ids.length > 0) {
           allIds.push(...ids.map((c) => c.id));
+          console.log(`IDs batch ${offset / batchSize + 1}: fetched ${ids.length} IDs, total so far: ${allIds.length}`);
           offset += batchSize;
           // If we got fewer results than the batch size, we've reached the end
           hasMore = ids.length === batchSize;
@@ -87,6 +120,7 @@ export async function GET(
         }
       }
 
+      console.log(`Total IDs fetched: ${allIds.length}`);
       return NextResponse.json({
         contact_ids: allIds,
         total: allIds.length,

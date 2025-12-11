@@ -871,8 +871,10 @@ export default function ContactsPage({
       const response = await fetch(`/api/admin/outbound-campaigns/${id}/contacts?${params}`);
       if (!response.ok) throw new Error("Failed to fetch contact IDs");
       const data = await response.json();
-      setSelectedContacts(data.contact_ids || []);
-      setPendingCount(data.total || data.contact_ids?.length || 0);
+      const contactIds = data.contact_ids || [];
+      console.log(`Select all: fetched ${contactIds.length} contact IDs`);
+      setSelectedContacts(contactIds);
+      setPendingCount(contactIds.length);
       setSelectAllMode("all");
     } catch (error) {
       console.error("Error fetching all contact IDs:", error);
@@ -891,14 +893,14 @@ export default function ContactsPage({
     try {
       const params = new URLSearchParams({
         status: "pending",
-        ids_only: "true",
+        count_only: "true",
       });
       if (searchQuery) params.set("search", searchQuery);
 
       const response = await fetch(`/api/admin/outbound-campaigns/${id}/contacts?${params}`);
       if (response.ok) {
         const data = await response.json();
-        setPendingCount(data.total || 0);
+        setPendingCount(data.count || 0);
       }
     } catch (error) {
       console.error("Error fetching pending count:", error);
