@@ -25,6 +25,12 @@ export async function GET(
 
     const clientId = clientAuth.clientId;
 
+    console.log("[outbound-campaign] Fetching campaign:", {
+      campaignId: id,
+      clientId,
+      isImpersonating: clientAuth.isImpersonating
+    });
+
     // Get campaign - ensure it belongs to this client
     const { data: campaign, error } = await supabase
       .from("outbound_campaigns")
@@ -59,6 +65,12 @@ export async function GET(
       .eq("id", id)
       .eq("client_id", clientId)
       .single();
+
+    console.log("[outbound-campaign] Query result:", {
+      hasCampaign: !!campaign,
+      error: error?.message,
+      errorCode: error?.code
+    });
 
     if (error) {
       if (error.code === "PGRST116") {
