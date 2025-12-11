@@ -25,6 +25,8 @@ export async function GET(request: Request) {
       : await createClient();
 
     // Get campaigns for this client
+    // Note: Using !campaign_phone_numbers_campaign_id_fkey to specify which FK to use
+    // because there are multiple relationships between these tables
     const { data: campaigns, error } = await supabase
       .from("outbound_campaigns")
       .select(
@@ -45,7 +47,7 @@ export async function GET(request: Request) {
         completed_at,
         created_at,
         updated_at,
-        campaign_phone_numbers (
+        campaign_phone_numbers!campaign_phone_numbers_campaign_id_fkey (
           phone_number,
           friendly_name
         ),

@@ -56,12 +56,13 @@ export async function POST(
     }
 
     // Get campaign with all required data - ensure it belongs to this client
+    // Note: Using !campaign_phone_numbers_campaign_id_fkey to specify which FK to use
     const { data: campaign, error: fetchError } = await supabase
       .from("outbound_campaigns")
       .select(
         `
         *,
-        campaign_phone_numbers (
+        campaign_phone_numbers!campaign_phone_numbers_campaign_id_fkey (
           id,
           phone_number,
           provider,

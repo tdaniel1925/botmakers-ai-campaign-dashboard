@@ -36,12 +36,14 @@ export async function GET(
     });
 
     // Get campaign - ensure it belongs to this client
+    // Note: Using !campaign_phone_numbers_campaign_id_fkey to specify which FK to use
+    // because there are multiple relationships between these tables
     const { data: campaign, error } = await supabase
       .from("outbound_campaigns")
       .select(
         `
         *,
-        campaign_phone_numbers (
+        campaign_phone_numbers!campaign_phone_numbers_campaign_id_fkey (
           id,
           phone_number,
           friendly_name,
