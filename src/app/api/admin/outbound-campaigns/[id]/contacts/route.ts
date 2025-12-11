@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 import { verifyAdmin, forbiddenResponse } from "@/lib/admin-auth";
 
 /**
@@ -25,7 +25,7 @@ export async function GET(
     const search = searchParams.get("search");
     const outcome = searchParams.get("outcome");
 
-    const supabase = await createClient();
+    const supabase = await createServiceClient();
 
     // Verify campaign exists
     const { data: campaign, error: campaignError } = await supabase
@@ -117,7 +117,7 @@ export async function POST(
       );
     }
 
-    const supabase = await createClient();
+    const supabase = await createServiceClient();
 
     // Verify campaign exists and is in draft status
     const { data: campaign, error: campaignError } = await supabase
@@ -206,7 +206,7 @@ export async function DELETE(
     const body = await request.json();
     const { contact_ids, delete_all_pending } = body;
 
-    const supabase = await createClient();
+    const supabase = await createServiceClient();
 
     // Verify campaign exists and is in draft status
     const { data: campaign, error: campaignError } = await supabase
