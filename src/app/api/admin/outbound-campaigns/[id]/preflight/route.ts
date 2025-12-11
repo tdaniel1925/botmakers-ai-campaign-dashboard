@@ -164,13 +164,33 @@ export async function GET(
       totalContactCount = queryTotal || 0;
     }
 
+    // For pending count: if cached is 0 but total > 0, need to determine pending
     if (pendingContactCount === 0 && totalContactCount > 0) {
-      const { count: queryPending } = await supabase
-        .from("campaign_contacts")
-        .select("*", { count: "exact", head: true })
-        .eq("campaign_id", id)
-        .eq("status", "pending");
-      pendingContactCount = queryPending || 0;
+      // For draft campaigns that have never been launched, all contacts are pending
+      // This avoids expensive count queries on large campaigns
+      if (campaign.status === "draft" && !campaign.launched_at) {
+        pendingContactCount = totalContactCount;
+      } else {
+        // For large campaigns (50K+), avoid expensive count - check if ANY pending exist
+        if (totalContactCount > 50000) {
+          const { data: anyPending } = await supabase
+            .from("campaign_contacts")
+            .select("id")
+            .eq("campaign_id", id)
+            .eq("status", "pending")
+            .limit(1);
+          // If any pending exist, report as "has pending contacts"
+          pendingContactCount = anyPending && anyPending.length > 0 ? totalContactCount : 0;
+        } else {
+          // For smaller campaigns, do actual count
+          const { count: queryPending } = await supabase
+            .from("campaign_contacts")
+            .select("*", { count: "exact", head: true })
+            .eq("campaign_id", id)
+            .eq("status", "pending");
+          pendingContactCount = queryPending || 0;
+        }
+      }
     }
 
     checks.push({
