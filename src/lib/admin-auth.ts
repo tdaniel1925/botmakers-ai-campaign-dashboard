@@ -53,6 +53,12 @@ export async function verifyAdmin(): Promise<AuthResult> {
       error: userError,
     } = await supabase.auth.getUser();
 
+    console.log("[admin-auth] User check:", {
+      userId: user?.id,
+      userEmail: user?.email,
+      userError: userError?.message
+    });
+
     if (userError || !user) {
       return {
         authenticated: false,
@@ -67,6 +73,11 @@ export async function verifyAdmin(): Promise<AuthResult> {
       .select("id, email, name, role")
       .eq("id", user.id)
       .single();
+
+    console.log("[admin-auth] Admin check:", {
+      adminUser: adminUser?.email,
+      adminError: adminError?.message
+    });
 
     if (adminError || !adminUser) {
       return {

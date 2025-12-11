@@ -24,6 +24,10 @@ export async function getClientId(request?: Request): Promise<ClientAuthResult> 
     if (impersonatedClientId) {
       // Verify the requester is an admin
       const adminAuth = await verifyAdmin();
+      console.log("[client-auth] Impersonation attempt:", {
+        impersonatedClientId,
+        adminAuth: { authenticated: adminAuth.authenticated, error: adminAuth.error }
+      });
       if (!adminAuth.authenticated || !adminAuth.admin) {
         return {
           authenticated: false,
