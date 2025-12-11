@@ -113,9 +113,8 @@ export async function GET(request: Request) {
         } else if (legacyCalls) {
           totalCount += legacyCount || 0;
           for (const call of legacyCalls) {
-            // Outcome tags come as arrays from the join
-            const tags = call.campaign_outcome_tags as unknown as Array<{ tag_name: string; tag_color: string }>;
-            const outcomeTag = tags?.[0] || null;
+            // Outcome tag comes as single object from many-to-one join (call.ai_outcome_tag_id -> campaign_outcome_tags.id)
+            const outcomeTag = call.campaign_outcome_tags as unknown as { tag_name: string; tag_color: string } | null;
             calls.push({
               id: call.id,
               campaign_type: "legacy",
@@ -187,9 +186,8 @@ export async function GET(request: Request) {
         } else if (inboundCalls) {
           totalCount += inboundCount || 0;
           for (const call of inboundCalls) {
-            // Outcome tags come as arrays from the join
-            const tags = call.inbound_campaign_outcome_tags as unknown as Array<{ tag_name: string; tag_color: string }>;
-            const outcomeTag = tags?.[0] || null;
+            // Outcome tag comes as single object from many-to-one join (call.outcome_tag_id -> inbound_campaign_outcome_tags.id)
+            const outcomeTag = call.inbound_campaign_outcome_tags as unknown as { tag_name: string; tag_color: string } | null;
             calls.push({
               id: call.id,
               campaign_type: "inbound",
@@ -254,9 +252,8 @@ export async function GET(request: Request) {
           // Process outbound calls and count after filtering
           let outboundFilteredCount = 0;
           for (const call of outboundCalls) {
-            // Contacts come as arrays from the join
-            const contacts = call.campaign_contacts as unknown as Array<{ phone_number: string }>;
-            const contact = contacts?.[0];
+            // Contacts come as single object from many-to-one join (call.contact_id -> campaign_contacts.id)
+            const contact = call.campaign_contacts as unknown as { phone_number: string } | null;
             // Map outcome to sentiment for consistency
             let callSentiment: string | null = null;
             if (call.outcome === "positive") callSentiment = "positive";

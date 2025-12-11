@@ -94,10 +94,9 @@ export async function GET(request: Request) {
       } else if (legacyCalls) {
         totalCount += legacyCount || 0;
         for (const call of legacyCalls) {
-          // Relations come as arrays with !inner join
-          const campaigns = call.campaigns as unknown as Array<{ id: string; name: string; clients: Array<{ id: string; name: string }> }>;
-          const campaign = campaigns?.[0];
-          const client = campaign?.clients?.[0];
+          // Relations come as single objects for many-to-one joins
+          const campaign = call.campaigns as unknown as { id: string; name: string; clients: { id: string; name: string } | null } | null;
+          const client = campaign?.clients;
           calls.push({
             id: call.id,
             campaign_type: "legacy",
@@ -154,10 +153,9 @@ export async function GET(request: Request) {
       } else if (inboundCalls) {
         totalCount += inboundCount || 0;
         for (const call of inboundCalls) {
-          // Relations come as arrays with !inner join
-          const campaigns = call.inbound_campaigns as unknown as Array<{ id: string; name: string; clients: Array<{ id: string; name: string }> }>;
-          const campaign = campaigns?.[0];
-          const client = campaign?.clients?.[0];
+          // Relations come as single objects for many-to-one joins
+          const campaign = call.inbound_campaigns as unknown as { id: string; name: string; clients: { id: string; name: string } | null } | null;
+          const client = campaign?.clients;
           calls.push({
             id: call.id,
             campaign_type: "inbound",
@@ -216,12 +214,10 @@ export async function GET(request: Request) {
       } else if (outboundCalls) {
         totalCount += outboundCount || 0;
         for (const call of outboundCalls) {
-          // Relations come as arrays with !inner join
-          const campaigns = call.outbound_campaigns as unknown as Array<{ id: string; name: string; clients: Array<{ id: string; name: string }> }>;
-          const campaign = campaigns?.[0];
-          const client = campaign?.clients?.[0];
-          const contacts = call.campaign_contacts as unknown as Array<{ phone_number: string }>;
-          const contact = contacts?.[0];
+          // Relations come as single objects for many-to-one joins
+          const campaign = call.outbound_campaigns as unknown as { id: string; name: string; clients: { id: string; name: string } | null } | null;
+          const client = campaign?.clients;
+          const contact = call.campaign_contacts as unknown as { phone_number: string } | null;
           calls.push({
             id: call.id,
             campaign_type: "outbound",

@@ -144,10 +144,10 @@ export async function GET(request: NextRequest) {
     const outcomeMap = new Map<string, number>();
     calls?.forEach((call) => {
       if (call.campaign_outcome_tags) {
-        const tag = call.campaign_outcome_tags as unknown as { tag_name: string } | { tag_name: string }[];
-        const tagName = Array.isArray(tag) ? tag[0]?.tag_name : tag?.tag_name;
-        if (tagName) {
-          outcomeMap.set(tagName, (outcomeMap.get(tagName) || 0) + 1);
+        // Outcome tag comes as single object from many-to-one join
+        const tag = call.campaign_outcome_tags as unknown as { tag_name: string } | null;
+        if (tag?.tag_name) {
+          outcomeMap.set(tag.tag_name, (outcomeMap.get(tag.tag_name) || 0) + 1);
         }
       }
     });

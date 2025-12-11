@@ -87,12 +87,13 @@ export async function GET(request: Request) {
 
       if (legacyCalls) {
         for (const call of legacyCalls) {
-          const tags = call.campaign_outcome_tags as unknown as Array<{ tag_name: string; tag_color: string }>;
+          // Outcome tag comes as single object from many-to-one join
+          const outcomeTag = call.campaign_outcome_tags as unknown as { tag_name: string; tag_color: string } | null;
           calls.push({
             id: call.id,
             duration_seconds: call.call_duration || 0,
             sentiment: call.ai_sentiment,
-            outcome_tag: tags?.[0] || null,
+            outcome_tag: outcomeTag,
             created_at: call.created_at,
             campaign_id: call.campaign_id,
             campaign_type: "legacy",
@@ -122,12 +123,13 @@ export async function GET(request: Request) {
 
       if (inboundCalls) {
         for (const call of inboundCalls) {
-          const tags = call.inbound_campaign_outcome_tags as unknown as Array<{ tag_name: string; tag_color: string }>;
+          // Outcome tag comes as single object from many-to-one join
+          const outcomeTag = call.inbound_campaign_outcome_tags as unknown as { tag_name: string; tag_color: string } | null;
           calls.push({
             id: call.id,
             duration_seconds: call.duration_seconds || 0,
             sentiment: call.sentiment,
-            outcome_tag: tags?.[0] || null,
+            outcome_tag: outcomeTag,
             created_at: call.created_at,
             campaign_id: call.campaign_id,
             campaign_type: "inbound",
