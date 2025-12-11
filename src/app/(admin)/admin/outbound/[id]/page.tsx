@@ -79,6 +79,7 @@ import {
   MessageCircleOff,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
+import { PreLaunchChecklist } from "@/components/campaigns/PreLaunchChecklist";
 
 interface Campaign {
   id: string;
@@ -245,6 +246,9 @@ export default function OutboundCampaignDetailPage({
   const [scheduledTime, setScheduledTime] = useState("");
   const [scheduledTimezone, setScheduledTimezone] = useState("America/New_York");
   const [isScheduling, setIsScheduling] = useState(false);
+
+  // Pre-launch checklist state
+  const [showPreflightDialog, setShowPreflightDialog] = useState(false);
 
   // Common US Timezones
   const TIMEZONES = [
@@ -917,31 +921,14 @@ export default function OutboundCampaignDetailPage({
                 <Save className="mr-2 h-4 w-4" />
                 Save
               </Button>
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button disabled={isActionLoading || campaign.total_contacts === 0}>
-                    {isActionLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    <Play className="mr-2 h-4 w-4" />
-                    Launch
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Launch Campaign?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      {formData.is_test_mode
-                        ? `This will start the campaign in test mode, making up to ${formData.test_call_limit} calls.`
-                        : "This will start making calls to all contacts. Make sure everything is configured correctly."}
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => handleAction("launch")}>
-                      Launch
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+              <Button
+                onClick={() => setShowPreflightDialog(true)}
+                disabled={isActionLoading || campaign.total_contacts === 0}
+              >
+                {isActionLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                <Play className="mr-2 h-4 w-4" />
+                Launch
+              </Button>
               <Dialog open={showScheduleDialog} onOpenChange={setShowScheduleDialog}>
                 <DialogTrigger asChild>
                   <Button variant="outline" disabled={campaign.total_contacts === 0}>
@@ -1036,29 +1023,14 @@ export default function OutboundCampaignDetailPage({
                 <X className="mr-2 h-4 w-4" />
                 Cancel Schedule
               </Button>
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button disabled={isActionLoading}>
-                    {isActionLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    <Play className="mr-2 h-4 w-4" />
-                    Launch Now
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Launch Campaign Now?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      This will cancel the scheduled launch and start the campaign immediately.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => handleAction("launch")}>
-                      Launch Now
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+              <Button
+                onClick={() => setShowPreflightDialog(true)}
+                disabled={isActionLoading}
+              >
+                {isActionLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                <Play className="mr-2 h-4 w-4" />
+                Launch Now
+              </Button>
             </>
           )}
           {campaign.status === "active" && (
@@ -2124,6 +2096,21 @@ export default function OutboundCampaignDetailPage({
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Pre-Launch Checklist Dialog */}
+      <PreLaunchChecklist
+        campaignId={id}
+        campaignName={campaign.name}
+        isTestMode={formData.is_test_mode}
+        testCallLimit={formData.test_call_limit}
+        isOpen={showPreflightDialog}
+        onClose={() => setShowPreflightDialog(false)}
+        onLaunch={() => {
+          handleAction("launch");
+          setShowPreflightDialog(false);
+        }}
+        isLaunching={isActionLoading}
+      />
     </div>
   );
 }
