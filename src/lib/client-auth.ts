@@ -1,5 +1,4 @@
 import { createClient } from "@/lib/supabase/server";
-import { verifyAdmin } from "@/lib/admin-auth";
 
 export interface ClientAuthResult {
   authenticated: boolean;
@@ -22,13 +21,41 @@ export async function getClientId(request?: Request): Promise<ClientAuthResult> 
     const impersonatedClientId = request?.headers.get("X-Impersonate-Client-Id");
 
     if (impersonatedClientId) {
-      // Verify the requester is an admin
-      const adminAuth = await verifyAdmin();
+      // Verify the requester is an admin using the same supabase client
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
       console.log("[client-auth] Impersonation attempt:", {
         impersonatedClientId,
-        adminAuth: { authenticated: adminAuth.authenticated, error: adminAuth.error }
+        userId: user?.id,
+        userEmail: user?.email,
+        userError: userError?.message
       });
-      if (!adminAuth.authenticated || !adminAuth.admin) {
+
+      if (userError || !user) {
+        return {
+          authenticated: false,
+          clientId: null,
+          isImpersonating: false,
+          error: "Not authenticated",
+        };
+      }
+
+      // Check if user is an admin
+      const { data: adminUser, error: adminError } = await supabase
+        .from("admin_users")
+        .select("id, email, name, role")
+        .eq("id", user.id)
+        .single();
+
+      console.log("[client-auth] Admin check:", {
+        adminUser: adminUser?.email,
+        adminError: adminError?.message
+      });
+
+      if (adminError || !adminUser) {
         return {
           authenticated: false,
           clientId: null,
