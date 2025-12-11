@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { getClientId } from "@/lib/client-auth";
 
@@ -28,7 +28,6 @@ interface UnifiedCall {
  */
 export async function GET(request: Request) {
   try {
-    const supabase = await createClient();
     const { searchParams } = new URL(request.url);
 
     // Get client ID (supports impersonation)
@@ -41,6 +40,11 @@ export async function GET(request: Request) {
     }
 
     const clientId = clientAuth.clientId;
+
+    // Use service client when impersonating to bypass RLS
+    const supabase = clientAuth.isImpersonating
+      ? await createServiceClient()
+      : await createClient();
 
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "50");

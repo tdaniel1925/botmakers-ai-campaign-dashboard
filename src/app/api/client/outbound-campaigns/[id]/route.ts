@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getClientId } from "@/lib/client-auth";
 
 /**
@@ -12,7 +12,6 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const supabase = await createClient();
 
     // Get client ID (supports impersonation)
     const clientAuth = await getClientId(request);
@@ -24,6 +23,11 @@ export async function GET(
     }
 
     const clientId = clientAuth.clientId;
+
+    // Use service client when impersonating to bypass RLS
+    const supabase = clientAuth.isImpersonating
+      ? await createServiceClient()
+      : await createClient();
 
     console.log("[outbound-campaign] Fetching campaign:", {
       campaignId: id,
