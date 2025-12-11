@@ -50,6 +50,7 @@ import {
   Info,
   FileSpreadsheet,
   X,
+  Sparkles,
 } from "lucide-react";
 import {
   Table,
@@ -90,12 +91,12 @@ interface WizardData {
   schedule_start_time: string;
   schedule_end_time: string;
   schedule_timezone: string;
-  // Step 5: SMS Templates
-  sms_templates: Array<{
+  // Step 5: SMS Rules (Intent-Based)
+  sms_rules: Array<{
     name: string;
-    trigger_type: string;
-    template_body: string;
-    link_url: string;
+    trigger_condition: string;
+    message_template: string;
+    priority: number;
   }>;
   // Step 6: Contact List (handled separately via upload)
   // Step 7: Retry Settings
@@ -148,13 +149,6 @@ function getTimezoneFriendlyName(tz: string): string {
   return TIMEZONE_DISPLAY_NAMES[tz] || tz.replace("America/", "").replace("Pacific/", "").replace("_", " ");
 }
 
-const SMS_TRIGGER_TYPES = [
-  { value: "call_completed", label: "After Call Completed" },
-  { value: "positive_outcome", label: "Positive Outcome" },
-  { value: "negative_outcome", label: "Negative Outcome" },
-  { value: "no_answer", label: "No Answer" },
-  { value: "voicemail", label: "Left Voicemail" },
-];
 
 const STEPS = [
   { id: 1, title: "Client", icon: Building2 },
@@ -941,7 +935,7 @@ const initialData: WizardData = {
   schedule_start_time: "09:00",
   schedule_end_time: "17:00",
   schedule_timezone: "America/New_York",
-  sms_templates: [],
+  sms_rules: [],
   retry_enabled: true,
   retry_attempts: 2,
   retry_delay_minutes: 60,
@@ -996,20 +990,20 @@ function NewOutboundCampaignPageContent() {
           // Set campaign ID so we update instead of create
           setCreatedCampaignId(campaign.id);
 
-          // Load SMS templates if available
-          let smsTemplates: Array<{
+          // Load SMS rules if available
+          let smsRules: Array<{
             name: string;
-            trigger_type: string;
-            template_body: string;
-            link_url: string;
+            trigger_condition: string;
+            message_template: string;
+            priority: number;
           }> = [];
           if (smsResponse.ok) {
             const smsData = await smsResponse.json();
-            smsTemplates = (smsData || []).map((t: { name: string; trigger_type: string; template_body: string; link_url?: string }) => ({
-              name: t.name || "",
-              trigger_type: t.trigger_type || "call_completed",
-              template_body: t.template_body || "",
-              link_url: t.link_url || "",
+            smsRules = (smsData || []).map((r: { name: string; trigger_condition: string; message_template: string; priority?: number }) => ({
+              name: r.name || "",
+              trigger_condition: r.trigger_condition || "",
+              message_template: r.message_template || "",
+              priority: r.priority || 0,
             }));
           }
 
@@ -1033,7 +1027,7 @@ function NewOutboundCampaignPageContent() {
             schedule_start_time: savedData.schedule_start_time || campaign.campaign_schedules?.[0]?.start_time?.slice(0, 5) || "09:00",
             schedule_end_time: savedData.schedule_end_time || campaign.campaign_schedules?.[0]?.end_time?.slice(0, 5) || "17:00",
             schedule_timezone: savedData.schedule_timezone || campaign.campaign_schedules?.[0]?.timezone || "America/New_York",
-            sms_templates: savedData.sms_templates || smsTemplates,
+            sms_rules: savedData.sms_rules || smsRules,
             retry_enabled: savedData.retry_enabled ?? campaign.retry_enabled ?? true,
             retry_attempts: savedData.retry_attempts || campaign.retry_attempts || 2,
             retry_delay_minutes: savedData.retry_delay_minutes || campaign.retry_delay_minutes || 60,
@@ -1508,25 +1502,25 @@ function NewOutboundCampaignPageContent() {
     }
   };
 
-  // Add SMS template
-  const addSmsTemplate = () => {
-    updateData("sms_templates", [
-      ...data.sms_templates,
-      { name: "", trigger_type: "call_completed", template_body: "", link_url: "" },
+  // Add SMS rule
+  const addSmsRule = () => {
+    updateData("sms_rules", [
+      ...data.sms_rules,
+      { name: "", trigger_condition: "", message_template: "", priority: 0 },
     ]);
   };
 
-  const removeSmsTemplate = (index: number) => {
+  const removeSmsRule = (index: number) => {
     updateData(
-      "sms_templates",
-      data.sms_templates.filter((_, i) => i !== index)
+      "sms_rules",
+      data.sms_rules.filter((_, i) => i !== index)
     );
   };
 
-  const updateSmsTemplate = (index: number, field: string, value: string) => {
-    const updated = [...data.sms_templates];
+  const updateSmsRule = (index: number, field: string, value: string | number) => {
+    const updated = [...data.sms_rules];
     updated[index] = { ...updated[index], [field]: value };
-    updateData("sms_templates", updated);
+    updateData("sms_rules", updated);
   };
 
   const renderStep = () => {
@@ -1967,75 +1961,90 @@ function NewOutboundCampaignPageContent() {
         return (
           <div className="space-y-6">
             <div>
-              <h2 className="text-xl font-semibold mb-2">SMS Follow-up Templates</h2>
+              <h2 className="text-xl font-semibold mb-2 flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-blue-500" />
+                SMS Follow-up Rules
+              </h2>
               <p className="text-muted-foreground">
-                Configure automated SMS messages to send after calls.
+                AI-powered intent-based SMS triggers. After each call, AI analyzes the conversation
+                and sends SMS messages when it detects matching intents.
               </p>
             </div>
             <div className="space-y-4">
-              {data.sms_templates.map((template, index) => (
-                <Card key={index}>
-                  <CardContent className="pt-4 space-y-4">
-                    <div className="flex justify-between items-start">
-                      <div className="grid gap-4 md:grid-cols-2 flex-1">
-                        <div className="space-y-2">
-                          <Label>Template Name</Label>
-                          <Input
-                            value={template.name}
-                            onChange={(e) => updateSmsTemplate(index, "name", e.target.value)}
-                            placeholder="e.g., Thank You SMS"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Trigger</Label>
-                          <Select
-                            value={template.trigger_type}
-                            onValueChange={(value) => updateSmsTemplate(index, "trigger_type", value)}
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {SMS_TRIGGER_TYPES.map((trigger) => (
-                                <SelectItem key={trigger.value} value={trigger.value}>
-                                  {trigger.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeSmsTemplate(index)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Message Body</Label>
-                      <Textarea
-                        value={template.template_body}
-                        onChange={(e) => updateSmsTemplate(index, "template_body", e.target.value)}
-                        placeholder="Hi {{contact_name}}, thank you for speaking with us..."
-                        rows={3}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Link URL (optional)</Label>
-                      <Input
-                        value={template.link_url}
-                        onChange={(e) => updateSmsTemplate(index, "link_url", e.target.value)}
-                        placeholder="https://example.com/schedule"
-                      />
-                    </div>
+              {data.sms_rules.length === 0 ? (
+                <Card className="border-dashed">
+                  <CardContent className="py-8 text-center text-muted-foreground">
+                    <MessageSquare className="h-12 w-12 mx-auto mb-3 opacity-40" />
+                    <p>No SMS rules configured yet</p>
+                    <p className="text-sm">Add intent-based rules to automatically send SMS after calls</p>
                   </CardContent>
                 </Card>
-              ))}
-              <Button variant="outline" onClick={addSmsTemplate}>
+              ) : (
+                data.sms_rules.map((rule, index) => (
+                  <Card key={index}>
+                    <CardContent className="pt-4 space-y-4">
+                      <div className="flex justify-between items-start">
+                        <div className="grid gap-4 md:grid-cols-2 flex-1">
+                          <div className="space-y-2">
+                            <Label>Rule Name *</Label>
+                            <Input
+                              value={rule.name}
+                              onChange={(e) => updateSmsRule(index, "name", e.target.value)}
+                              placeholder="e.g., Send Appointment Confirmation"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Priority (higher = evaluated first)</Label>
+                            <Input
+                              type="number"
+                              value={rule.priority}
+                              onChange={(e) => updateSmsRule(index, "priority", parseInt(e.target.value) || 0)}
+                              min={0}
+                            />
+                          </div>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeSmsRule(index)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="flex items-center gap-2">
+                          <Sparkles className="h-4 w-4 text-blue-500" />
+                          Trigger Condition (AI Intent) *
+                        </Label>
+                        <Textarea
+                          value={rule.trigger_condition}
+                          onChange={(e) => updateSmsRule(index, "trigger_condition", e.target.value)}
+                          placeholder="Describe in natural language when this SMS should be sent, e.g., 'Customer showed interest in the product and asked for more information'"
+                          rows={2}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          AI will analyze call transcripts and trigger this rule when the conversation matches this intent
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Message Template *</Label>
+                        <Textarea
+                          value={rule.message_template}
+                          onChange={(e) => updateSmsRule(index, "message_template", e.target.value)}
+                          placeholder="Hi {{first_name}}! Thanks for chatting with us. Here's the info you requested: {{link}}"
+                          rows={3}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Available variables: {"{{first_name}}"}, {"{{last_name}}"}, {"{{phone}}"}, {"{{company}}"}, {"{{link}}"}
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+              <Button variant="outline" onClick={addSmsRule}>
                 <Plus className="mr-2 h-4 w-4" />
-                Add SMS Template
+                Add SMS Rule
               </Button>
             </div>
           </div>
