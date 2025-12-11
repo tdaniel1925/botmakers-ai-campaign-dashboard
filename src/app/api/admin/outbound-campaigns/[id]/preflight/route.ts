@@ -109,16 +109,24 @@ export async function GET(
     });
 
     // Check 2: Phone Numbers
+    // When using Vapi with system keys, phone numbers are managed in Vapi dashboard
     const activePhoneNumbers = campaign.campaign_phone_numbers?.filter(
       (p: { is_active: boolean }) => p.is_active
     );
+    const usingVapiSystemKeys = campaign.call_provider === "vapi" && campaign.vapi_key_source === "system";
+    const hasVapiPhoneNumber = usingVapiSystemKeys && !!campaign.vapi_phone_number_id;
+    const hasLocalPhoneNumbers = activePhoneNumbers?.length > 0;
+
     checks.push({
       id: "phone_numbers",
       name: "Phone Numbers",
-      description: "At least one active phone number must be assigned",
-      status: activePhoneNumbers?.length > 0 ? "passed" : "failed",
-      message:
-        activePhoneNumbers?.length > 0
+      description: usingVapiSystemKeys
+        ? "Phone number configured in Vapi"
+        : "At least one active phone number must be assigned",
+      status: hasVapiPhoneNumber || hasLocalPhoneNumbers ? "passed" : "failed",
+      message: hasVapiPhoneNumber
+        ? "Using Vapi phone number (system keys)"
+        : hasLocalPhoneNumbers
           ? `${activePhoneNumbers.length} active phone number(s)`
           : "No active phone numbers",
       fixUrl: `/admin/outbound/${id}/phone-numbers`,
@@ -143,27 +151,38 @@ export async function GET(
     });
 
     // Check 4: Contacts
-    const { count: pendingContactCount } = await supabase
-      .from("campaign_contacts")
-      .select("*", { count: "exact", head: true })
-      .eq("campaign_id", id)
-      .eq("status", "pending");
+    // First try cached counts on the campaign, then fall back to querying
+    let pendingContactCount = campaign.pending_contacts || 0;
+    let totalContactCount = campaign.total_contacts || 0;
 
-    const { count: totalContactCount } = await supabase
-      .from("campaign_contacts")
-      .select("*", { count: "exact", head: true })
-      .eq("campaign_id", id);
+    // If cached counts are 0, try querying (in case counts haven't been synced)
+    if (totalContactCount === 0) {
+      const { count: queryTotal } = await supabase
+        .from("campaign_contacts")
+        .select("*", { count: "exact", head: true })
+        .eq("campaign_id", id);
+      totalContactCount = queryTotal || 0;
+    }
+
+    if (pendingContactCount === 0 && totalContactCount > 0) {
+      const { count: queryPending } = await supabase
+        .from("campaign_contacts")
+        .select("*", { count: "exact", head: true })
+        .eq("campaign_id", id)
+        .eq("status", "pending");
+      pendingContactCount = queryPending || 0;
+    }
 
     checks.push({
       id: "contacts",
       name: "Contacts",
       description: "At least one pending contact to call",
-      status: (pendingContactCount || 0) > 0 ? "passed" : "failed",
+      status: pendingContactCount > 0 ? "passed" : "failed",
       message:
-        (pendingContactCount || 0) > 0
-          ? `${pendingContactCount?.toLocaleString()} pending of ${totalContactCount?.toLocaleString()} total contacts`
-          : totalContactCount && totalContactCount > 0
-          ? `All ${totalContactCount} contacts have been processed - no pending contacts`
+        pendingContactCount > 0
+          ? `${pendingContactCount.toLocaleString()} pending of ${totalContactCount.toLocaleString()} total contacts`
+          : totalContactCount > 0
+          ? `All ${totalContactCount.toLocaleString()} contacts have been processed - no pending contacts`
           : "No contacts uploaded",
       fixUrl: `/admin/outbound/${id}/contacts`,
       required: true,
@@ -214,16 +233,25 @@ export async function GET(
     });
 
     // Check 6: Agent Configuration
-    const hasAgentConfig =
+    // When using Vapi with system keys, the assistant is managed in Vapi dashboard
+    // so local systemPrompt is not required
+    const hasLocalAgentConfig =
       campaign.agent_config && campaign.agent_config.systemPrompt;
+    const hasVapiAssistant = usingVapiSystemKeys && !!campaign.vapi_assistant_id;
+    const agentConfigValid = hasLocalAgentConfig || hasVapiAssistant;
+
     checks.push({
       id: "agent_config",
       name: "AI Agent Configuration",
-      description: "System prompt must be configured for the AI agent",
-      status: hasAgentConfig ? "passed" : "failed",
-      message: hasAgentConfig
-        ? "Agent system prompt configured"
-        : "Missing AI agent system prompt",
+      description: usingVapiSystemKeys
+        ? "Assistant configured in Vapi"
+        : "System prompt must be configured for the AI agent",
+      status: agentConfigValid ? "passed" : "failed",
+      message: hasVapiAssistant
+        ? "Using Vapi assistant (system keys)"
+        : hasLocalAgentConfig
+          ? "Agent system prompt configured"
+          : "Missing AI agent system prompt",
       fixUrl: `/admin/outbound/${id}/agent`,
       required: true,
     });
