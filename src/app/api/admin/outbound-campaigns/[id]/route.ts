@@ -67,6 +67,8 @@ export async function GET(
         vapi_phone_number_id,
         autocalls_assistant_id,
         synthflow_model_id,
+        setup_step,
+        setup_data,
         clients (
           id,
           name,
@@ -268,6 +270,9 @@ export async function PUT(
       scheduled_timezone,
       // Status (for canceling scheduled launch)
       status,
+      // Setup tracking for resume functionality
+      setup_step,
+      setup_data,
     } = body;
 
     // Build update object (only include provided fields)
@@ -363,6 +368,10 @@ export async function PUT(
     if (status !== undefined && status === "draft" && existingCampaign.status === "scheduled") {
       updateData.status = "draft";
     }
+
+    // Setup tracking for resume functionality
+    if (setup_step !== undefined) updateData.setup_step = setup_step;
+    if (setup_data !== undefined) updateData.setup_data = setup_data;
 
     updateData.updated_at = new Date().toISOString();
 

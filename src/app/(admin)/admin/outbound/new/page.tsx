@@ -314,6 +314,9 @@ function ContactsUploadStep({ campaignId, onUploadComplete }: ContactsUploadStep
   } | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [backgroundUploadId, setBackgroundUploadId] = useState<string | null>(null);
+  const [isBackgroundProcessing, setIsBackgroundProcessing] = useState(false);
+  const backgroundPollRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleFileSelect = (selectedFile: File) => {
     if (!selectedFile.name.endsWith(".csv")) {
@@ -360,13 +363,116 @@ function ContactsUploadStep({ campaignId, onUploadComplete }: ContactsUploadStep
     }
   };
 
+  // Check for pending background upload on mount/resume
+  useEffect(() => {
+    async function checkPendingUpload() {
+      try {
+        const response = await fetch(`/api/admin/outbound-campaigns/${campaignId}/contacts/queue-upload`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.active_upload && (data.active_upload.status === "pending" || data.active_upload.status === "processing")) {
+            setBackgroundUploadId(data.active_upload.id);
+            setIsBackgroundProcessing(true);
+            setUploadProgress(data.active_upload.progress || 0);
+            startBackgroundPolling(data.active_upload.id);
+          }
+        }
+      } catch (error) {
+        console.error("Error checking pending uploads:", error);
+      }
+    }
+    checkPendingUpload();
+
+    return () => {
+      if (backgroundPollRef.current) {
+        clearInterval(backgroundPollRef.current);
+      }
+    };
+  }, [campaignId]);
+
+  const startBackgroundPolling = (queueId: string) => {
+    // Poll every 2 seconds for progress
+    backgroundPollRef.current = setInterval(async () => {
+      try {
+        // First process the next chunk
+        const processResponse = await fetch(
+          `/api/admin/outbound-campaigns/${campaignId}/contacts/queue-upload/${queueId}`,
+          { method: "POST" }
+        );
+
+        if (processResponse.ok) {
+          const processData = await processResponse.json();
+
+          if (processData.queue) {
+            setUploadProgress(processData.queue.progress || 0);
+
+            if (processData.queue.status === "completed") {
+              // Upload complete
+              if (backgroundPollRef.current) {
+                clearInterval(backgroundPollRef.current);
+                backgroundPollRef.current = null;
+              }
+              setIsBackgroundProcessing(false);
+              setUploadResult({
+                success: processData.queue.successful_contacts,
+                failed: processData.queue.failed_contacts,
+                duplicates: processData.queue.duplicate_contacts,
+                total: processData.queue.successful_contacts,
+                uploadedContacts: parsedContacts,
+              });
+              if (onUploadComplete) {
+                onUploadComplete(processData.queue.successful_contacts);
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Background polling error:", error);
+      }
+    }, 2000);
+  };
+
   const handleUpload = async () => {
     if (parsedContacts.length === 0) return;
 
     setIsUploading(true);
     setUploadProgress(0);
 
-    // Upload in chunks of 1000 contacts for better progress tracking
+    // Use background processing for large lists (> 2000 contacts)
+    const useBackgroundProcessing = parsedContacts.length > 2000;
+
+    if (useBackgroundProcessing) {
+      try {
+        // Queue for background processing
+        const response = await fetch(`/api/admin/outbound-campaigns/${campaignId}/contacts/queue-upload`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contacts: parsedContacts,
+            fileName: file?.name,
+          }),
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || "Failed to queue upload");
+        }
+
+        const data = await response.json();
+        setBackgroundUploadId(data.queue_id);
+        setIsBackgroundProcessing(true);
+        setIsUploading(false);
+
+        // Start polling for progress
+        startBackgroundPolling(data.queue_id);
+      } catch (error) {
+        alert(error instanceof Error ? error.message : "Upload failed");
+        setIsUploading(false);
+      }
+      return;
+    }
+
+    // For smaller lists, use direct upload
     const chunkSize = 1000;
     const chunks: Record<string, string>[][] = [];
     for (let i = 0; i < parsedContacts.length; i += chunkSize) {
@@ -562,14 +668,38 @@ function ContactsUploadStep({ campaignId, onUploadComplete }: ContactsUploadStep
             </Card>
           )}
 
+          {/* Background Processing Indicator */}
+          {isBackgroundProcessing && (
+            <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/20">
+              <CardContent className="py-4">
+                <div className="flex items-center gap-3 mb-3">
+                  <Loader2 className="h-5 w-5 animate-spin text-amber-600" />
+                  <span className="font-medium text-amber-700 dark:text-amber-300">
+                    Processing contacts in background...
+                  </span>
+                </div>
+                <Progress value={uploadProgress} className="h-2" />
+                <div className="flex justify-between mt-2 text-sm text-amber-600 dark:text-amber-400">
+                  <span>{uploadProgress}% complete</span>
+                  <span>You can navigate away - processing will continue</span>
+                </div>
+                <div className="mt-3 p-2 bg-amber-100 dark:bg-amber-900/30 rounded text-sm text-amber-700 dark:text-amber-300">
+                  <Info className="inline h-4 w-4 mr-1" />
+                  Large contact lists are processed in the background. You can continue with other steps or even close this page - the upload will complete.
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <div className="flex gap-2 justify-end">
-            <Button variant="outline" onClick={clearFile} disabled={isUploading}>
+            <Button variant="outline" onClick={clearFile} disabled={isUploading || isBackgroundProcessing}>
               Cancel
             </Button>
-            <Button onClick={handleUpload} disabled={isUploading || parsedContacts.length === 0}>
+            <Button onClick={handleUpload} disabled={isUploading || isBackgroundProcessing || parsedContacts.length === 0}>
               {isUploading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               <Upload className="mr-2 h-4 w-4" />
               Upload {parsedContacts.length.toLocaleString()} Contacts
+              {parsedContacts.length > 2000 && " (Background)"}
             </Button>
           </div>
         </div>
@@ -782,46 +912,76 @@ function NewOutboundCampaignPageContent() {
 
       setIsLoadingCampaign(true);
       try {
-        const response = await fetch(`/api/admin/outbound-campaigns/${resumeCampaignId}`);
-        if (response.ok) {
-          const campaign = await response.json();
+        // Fetch campaign data and SMS templates in parallel
+        const [campaignResponse, smsResponse] = await Promise.all([
+          fetch(`/api/admin/outbound-campaigns/${resumeCampaignId}`),
+          fetch(`/api/admin/outbound-campaigns/${resumeCampaignId}/sms-rules`),
+        ]);
+
+        if (campaignResponse.ok) {
+          const campaign = await campaignResponse.json();
 
           // Set campaign ID so we update instead of create
           setCreatedCampaignId(campaign.id);
 
-          // Populate form data from existing campaign
+          // Load SMS templates if available
+          let smsTemplates: Array<{
+            name: string;
+            trigger_type: string;
+            template_body: string;
+            link_url: string;
+          }> = [];
+          if (smsResponse.ok) {
+            const smsData = await smsResponse.json();
+            smsTemplates = (smsData || []).map((t: { name: string; trigger_type: string; template_body: string; link_url?: string }) => ({
+              name: t.name || "",
+              trigger_type: t.trigger_type || "call_completed",
+              template_body: t.template_body || "",
+              link_url: t.link_url || "",
+            }));
+          }
+
+          // Use saved setup_data if available, otherwise restore from campaign fields
+          const savedData = campaign.setup_data || {};
           setData((prev) => ({
             ...prev,
-            client_id: campaign.client_id || "",
-            name: campaign.name || "",
-            description: campaign.description || "",
-            call_provider: campaign.call_provider || "vapi",
-            vapi_key_source: campaign.vapi_key_source || "system",
-            vapi_assistant_id: campaign.vapi_assistant_id || "",
-            vapi_phone_number_id: campaign.vapi_phone_number_id || "",
-            autocalls_assistant_id: campaign.autocalls_assistant_id?.toString() || "",
-            synthflow_model_id: campaign.synthflow_model_id || "",
-            schedule_days: campaign.campaign_schedules?.[0]?.days_of_week || [1, 2, 3, 4, 5],
-            schedule_start_time: campaign.campaign_schedules?.[0]?.start_time?.slice(0, 5) || "09:00",
-            schedule_end_time: campaign.campaign_schedules?.[0]?.end_time?.slice(0, 5) || "17:00",
-            schedule_timezone: campaign.campaign_schedules?.[0]?.timezone || "America/New_York",
-            retry_enabled: campaign.retry_enabled ?? true,
-            retry_attempts: campaign.retry_attempts || 2,
-            retry_delay_minutes: campaign.retry_delay_minutes || 60,
-            max_concurrent_calls: campaign.max_concurrent_calls || 5,
-            calls_per_minute: campaign.calls_per_minute || 30,
-            rate_per_minute: campaign.rate_per_minute || "0.15",
-            billing_threshold: campaign.billing_threshold || "100.00",
-            is_test_mode: campaign.is_test_mode ?? true,
-            test_call_limit: campaign.test_call_limit || 10,
+            client_id: savedData.client_id || campaign.client_id || "",
+            name: savedData.name || campaign.name || "",
+            description: savedData.description || campaign.description || "",
+            call_provider: savedData.call_provider || campaign.call_provider || "vapi",
+            vapi_key_source: savedData.vapi_key_source || campaign.vapi_key_source || "system",
+            vapi_api_key: savedData.vapi_api_key || "", // Don't restore encrypted key
+            vapi_assistant_id: savedData.vapi_assistant_id || campaign.vapi_assistant_id || "",
+            vapi_phone_number_id: savedData.vapi_phone_number_id || campaign.vapi_phone_number_id || "",
+            autocalls_key_source: savedData.autocalls_key_source || "system",
+            autocalls_api_key: savedData.autocalls_api_key || "",
+            autocalls_assistant_id: savedData.autocalls_assistant_id || campaign.autocalls_assistant_id?.toString() || "",
+            synthflow_key_source: savedData.synthflow_key_source || "system",
+            synthflow_api_key: savedData.synthflow_api_key || "",
+            synthflow_model_id: savedData.synthflow_model_id || campaign.synthflow_model_id || "",
+            schedule_days: savedData.schedule_days || campaign.campaign_schedules?.[0]?.days_of_week || [1, 2, 3, 4, 5],
+            schedule_start_time: savedData.schedule_start_time || campaign.campaign_schedules?.[0]?.start_time?.slice(0, 5) || "09:00",
+            schedule_end_time: savedData.schedule_end_time || campaign.campaign_schedules?.[0]?.end_time?.slice(0, 5) || "17:00",
+            schedule_timezone: savedData.schedule_timezone || campaign.campaign_schedules?.[0]?.timezone || "America/New_York",
+            sms_templates: savedData.sms_templates || smsTemplates,
+            retry_enabled: savedData.retry_enabled ?? campaign.retry_enabled ?? true,
+            retry_attempts: savedData.retry_attempts || campaign.retry_attempts || 2,
+            retry_delay_minutes: savedData.retry_delay_minutes || campaign.retry_delay_minutes || 60,
+            max_concurrent_calls: savedData.max_concurrent_calls || campaign.max_concurrent_calls || 5,
+            calls_per_minute: savedData.calls_per_minute || campaign.calls_per_minute || 30,
+            rate_per_minute: savedData.rate_per_minute || campaign.rate_per_minute || "0.15",
+            billing_threshold: savedData.billing_threshold || campaign.billing_threshold || "100.00",
+            is_test_mode: savedData.is_test_mode ?? campaign.is_test_mode ?? true,
+            test_call_limit: savedData.test_call_limit || campaign.test_call_limit || 10,
           }));
 
-          // Start at step 3 (call provider) since basic info is already set
-          setCurrentStep(3);
+          // Resume at the saved step, or step 3 if no step was saved
+          const savedStep = campaign.setup_step || 3;
+          setCurrentStep(savedStep);
 
           toast({
             title: "Resuming Setup",
-            description: `Continue setting up "${campaign.name}"`,
+            description: `Continue setting up "${campaign.name}" (Step ${savedStep} of 9)`,
           });
         } else {
           toast({
@@ -843,6 +1003,32 @@ function NewOutboundCampaignPageContent() {
 
     loadCampaignData();
   }, [resumeCampaignId, toast]);
+
+  // Save setup progress when step changes or data changes
+  const saveSetupProgress = async (step: number, wizardData: WizardData) => {
+    if (!createdCampaignId) return;
+
+    try {
+      // Prepare data to save (exclude sensitive API keys)
+      const dataToSave = {
+        ...wizardData,
+        vapi_api_key: "", // Don't save encrypted keys in setup_data
+        autocalls_api_key: "",
+        synthflow_api_key: "",
+      };
+
+      await fetch(`/api/admin/outbound-campaigns/${createdCampaignId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          setup_step: step,
+          setup_data: dataToSave,
+        }),
+      });
+    } catch (error) {
+      console.error("Failed to save setup progress:", error);
+    }
+  };
 
   useEffect(() => {
     async function fetchClients() {
@@ -1183,13 +1369,23 @@ function NewOutboundCampaignPageContent() {
     }
 
     if (currentStep < STEPS.length) {
-      setCurrentStep((prev) => prev + 1);
+      const nextStep = currentStep + 1;
+      setCurrentStep(nextStep);
+      // Save progress after campaign is created (after step 2)
+      if (createdCampaignId) {
+        saveSetupProgress(nextStep, data);
+      }
     }
   };
 
   const handleBack = () => {
     if (currentStep > 1) {
-      setCurrentStep((prev) => prev - 1);
+      const prevStep = currentStep - 1;
+      setCurrentStep(prevStep);
+      // Save progress when going back too
+      if (createdCampaignId) {
+        saveSetupProgress(prevStep, data);
+      }
     }
   };
 
