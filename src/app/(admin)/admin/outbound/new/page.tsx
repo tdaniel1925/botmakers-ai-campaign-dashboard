@@ -155,11 +155,10 @@ const STEPS = [
   { id: 2, title: "Details", icon: FileText },
   { id: 3, title: "Call Provider", icon: Key },
   { id: 4, title: "Schedule", icon: Calendar },
-  { id: 5, title: "SMS", icon: MessageSquare },
-  { id: 6, title: "Contacts", icon: Users },
-  { id: 7, title: "Retry", icon: Settings },
-  { id: 8, title: "Billing", icon: DollarSign },
-  { id: 9, title: "Review", icon: Play },
+  { id: 5, title: "Contacts", icon: Users },
+  { id: 6, title: "Retry", icon: Settings },
+  { id: 7, title: "Billing", icon: DollarSign },
+  { id: 8, title: "Review", icon: Play },
 ];
 
 const CALL_PROVIDERS = [
@@ -1319,7 +1318,7 @@ function NewOutboundCampaignPageContent() {
         }
       case 4:
         return data.schedule_days.length > 0 && !!data.schedule_start_time && !!data.schedule_end_time;
-      case 8:
+      case 7:
         return parseFloat(data.rate_per_minute) > 0;
       default:
         return true;
@@ -1484,11 +1483,6 @@ function NewOutboundCampaignPageContent() {
         throw new Error("Campaign was not created properly");
       }
 
-      // Save SMS rules if any were configured
-      if (data.sms_rules.length > 0) {
-        await saveSmsRules(campaignId);
-      }
-
       toast({
         title: "Campaign Created!",
         description: "Your campaign has been saved as a draft. You can start it from the campaign details page.",
@@ -1505,53 +1499,6 @@ function NewOutboundCampaignPageContent() {
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  // Save SMS rules to the database
-  const saveSmsRules = async (campaignId: string) => {
-    // Filter out incomplete rules (must have name, trigger_condition, and message_template)
-    const validRules = data.sms_rules.filter(
-      (rule) => rule.name.trim() && rule.trigger_condition.trim() && rule.message_template.trim()
-    );
-
-    for (const rule of validRules) {
-      const response = await fetch(`/api/admin/outbound-campaigns/${campaignId}/sms-rules`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: rule.name,
-          trigger_condition: rule.trigger_condition,
-          message_template: rule.message_template,
-          priority: rule.priority,
-          is_active: true,
-        }),
-      });
-
-      if (!response.ok) {
-        console.error("Failed to save SMS rule:", rule.name);
-      }
-    }
-  };
-
-  // Add SMS rule
-  const addSmsRule = () => {
-    updateData("sms_rules", [
-      ...data.sms_rules,
-      { name: "", trigger_condition: "", message_template: "", priority: 0 },
-    ]);
-  };
-
-  const removeSmsRule = (index: number) => {
-    updateData(
-      "sms_rules",
-      data.sms_rules.filter((_, i) => i !== index)
-    );
-  };
-
-  const updateSmsRule = (index: number, field: string, value: string | number) => {
-    const updated = [...data.sms_rules];
-    updated[index] = { ...updated[index], [field]: value };
-    updateData("sms_rules", updated);
   };
 
   const renderStep = () => {
@@ -1992,99 +1939,6 @@ function NewOutboundCampaignPageContent() {
         return (
           <div className="space-y-6">
             <div>
-              <h2 className="text-xl font-semibold mb-2 flex items-center gap-2">
-                <Sparkles className="h-5 w-5 text-blue-500" />
-                SMS Follow-up Rules
-              </h2>
-              <p className="text-muted-foreground">
-                AI-powered intent-based SMS triggers. After each call, AI analyzes the conversation
-                and sends SMS messages when it detects matching intents.
-              </p>
-            </div>
-            <div className="space-y-4">
-              {data.sms_rules.length === 0 ? (
-                <Card className="border-dashed">
-                  <CardContent className="py-8 text-center text-muted-foreground">
-                    <MessageSquare className="h-12 w-12 mx-auto mb-3 opacity-40" />
-                    <p>No SMS rules configured yet</p>
-                    <p className="text-sm">Add intent-based rules to automatically send SMS after calls</p>
-                  </CardContent>
-                </Card>
-              ) : (
-                data.sms_rules.map((rule, index) => (
-                  <Card key={index}>
-                    <CardContent className="pt-4 space-y-4">
-                      <div className="flex justify-between items-start">
-                        <div className="grid gap-4 md:grid-cols-2 flex-1">
-                          <div className="space-y-2">
-                            <Label>Rule Name *</Label>
-                            <Input
-                              value={rule.name}
-                              onChange={(e) => updateSmsRule(index, "name", e.target.value)}
-                              placeholder="e.g., Send Appointment Confirmation"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label>Priority (higher = evaluated first)</Label>
-                            <Input
-                              type="number"
-                              value={rule.priority}
-                              onChange={(e) => updateSmsRule(index, "priority", parseInt(e.target.value) || 0)}
-                              min={0}
-                            />
-                          </div>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeSmsRule(index)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="flex items-center gap-2">
-                          <Sparkles className="h-4 w-4 text-blue-500" />
-                          Trigger Condition (AI Intent) *
-                        </Label>
-                        <Textarea
-                          value={rule.trigger_condition}
-                          onChange={(e) => updateSmsRule(index, "trigger_condition", e.target.value)}
-                          placeholder="Describe in natural language when this SMS should be sent, e.g., 'Customer showed interest in the product and asked for more information'"
-                          rows={2}
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          AI will analyze call transcripts and trigger this rule when the conversation matches this intent
-                        </p>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Message Template *</Label>
-                        <Textarea
-                          value={rule.message_template}
-                          onChange={(e) => updateSmsRule(index, "message_template", e.target.value)}
-                          placeholder="Hi {{first_name}}! Thanks for chatting with us. Here's the info you requested: {{link}}"
-                          rows={3}
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          Available variables: {"{{first_name}}"}, {"{{last_name}}"}, {"{{phone}}"}, {"{{company}}"}, {"{{link}}"}
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))
-              )}
-              <Button variant="outline" onClick={addSmsRule}>
-                <Plus className="mr-2 h-4 w-4" />
-                Add SMS Rule
-              </Button>
-            </div>
-          </div>
-        );
-
-      case 6:
-        return (
-          <div className="space-y-6">
-            <div>
               <h2 className="text-xl font-semibold mb-2">Contact List</h2>
               <p className="text-muted-foreground">
                 Upload your contact list for this campaign. Timezones will be auto-detected from phone area codes.
@@ -2110,7 +1964,7 @@ function NewOutboundCampaignPageContent() {
           </div>
         );
 
-      case 7:
+      case 6:
         return (
           <div className="space-y-6">
             <div>
@@ -2188,7 +2042,7 @@ function NewOutboundCampaignPageContent() {
           </div>
         );
 
-      case 8:
+      case 7:
         return (
           <div className="space-y-6">
             <div>
@@ -2227,7 +2081,7 @@ function NewOutboundCampaignPageContent() {
           </div>
         );
 
-      case 9:
+      case 8:
         return (
           <div className="space-y-6">
             <div>

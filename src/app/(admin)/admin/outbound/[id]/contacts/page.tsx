@@ -665,11 +665,50 @@ export default function ContactsPage({
         });
       }
 
-      // Upload in batches with progress
+      // Upload in batches with progress and retry logic
       const batchSize = 500;
       const totalBatches = Math.ceil(processedContacts.length / batchSize);
+      const maxRetries = 3;
 
       setUploadStatus("Uploading contacts to server...");
+
+      // Helper function for uploading a batch with retry
+      const uploadBatchWithRetry = async (batch: typeof processedContacts, batchIndex: number): Promise<{ success: number; duplicates: number; failed: number; errors?: Array<{ row: number; phone: string; error: string }> }> => {
+        let lastError: Error | null = null;
+
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+          try {
+            const response = await fetch(`/api/admin/outbound-campaigns/${id}/contacts/upload`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                contacts: batch,
+                column_mapping: columnMapping,
+              }),
+            });
+
+            if (!response.ok) {
+              const data = await response.json();
+              throw new Error(data.error || "Failed to upload batch");
+            }
+
+            const result = await response.json();
+            return result.result;
+          } catch (error) {
+            lastError = error instanceof Error ? error : new Error("Unknown error");
+
+            // Don't retry on the last attempt
+            if (attempt < maxRetries - 1) {
+              // Exponential backoff: 1s, 2s, 4s
+              const delay = Math.pow(2, attempt) * 1000;
+              setUploadStatus(`Batch ${batchIndex + 1} failed, retrying in ${delay / 1000}s... (attempt ${attempt + 2}/${maxRetries})`);
+              await new Promise(resolve => setTimeout(resolve, delay));
+            }
+          }
+        }
+
+        throw lastError || new Error("Failed to upload batch after retries");
+      };
 
       for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
         const batch = processedContacts.slice(
@@ -682,27 +721,13 @@ export default function ContactsPage({
         setUploadProgress(uploadProgressPercent);
         setUploadStatus(`Uploading batch ${batchIndex + 1} of ${totalBatches}...`);
 
-        const response = await fetch(`/api/admin/outbound-campaigns/${id}/contacts/upload`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contacts: batch,
-            column_mapping: columnMapping,
-          }),
-        });
+        const result = await uploadBatchWithRetry(batch, batchIndex);
+        report.imported += result.success;
+        report.duplicates += result.duplicates;
+        report.invalid += result.failed;
 
-        if (!response.ok) {
-          const data = await response.json();
-          throw new Error(data.error || "Failed to upload batch");
-        }
-
-        const result = await response.json();
-        report.imported += result.result.success;
-        report.duplicates += result.result.duplicates;
-        report.invalid += result.result.failed;
-
-        if (result.result.errors) {
-          report.errors.push(...result.result.errors);
+        if (result.errors) {
+          report.errors.push(...result.errors);
         }
       }
 
