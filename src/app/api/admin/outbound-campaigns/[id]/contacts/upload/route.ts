@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { verifyAdmin, forbiddenResponse } from "@/lib/admin-auth";
 
+// Allow up to 60 seconds for large chunk uploads
+export const maxDuration = 60;
+
 interface ContactInput {
   phone_number?: string;
   first_name?: string;

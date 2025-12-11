@@ -301,6 +301,7 @@ interface ContactsUploadStepProps {
 }
 
 function ContactsUploadStep({ campaignId, onUploadComplete }: ContactsUploadStepProps) {
+  const { toast } = useToast();
   const [file, setFile] = useState<File | null>(null);
   const [parsedContacts, setParsedContacts] = useState<Record<string, string>[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -443,30 +444,105 @@ function ContactsUploadStep({ campaignId, onUploadComplete }: ContactsUploadStep
 
     if (useBackgroundProcessing) {
       try {
-        // Queue for background processing
-        const response = await fetch(`/api/admin/outbound-campaigns/${campaignId}/contacts/queue-upload`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contacts: parsedContacts,
-            fileName: file?.name,
-          }),
-        });
+        // For very large uploads, we need to chunk the initial queue request
+        // to avoid hitting Vercel's 4.5MB body size limit
+        const CHUNK_SIZE = 10000; // 10k contacts per chunk
 
-        if (!response.ok) {
-          const error = await response.json();
-          throw new Error(error.error || "Failed to queue upload");
+        if (parsedContacts.length <= CHUNK_SIZE) {
+          // Small enough to send in one request
+          const response = await fetch(`/api/admin/outbound-campaigns/${campaignId}/contacts/queue-upload`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contacts: parsedContacts,
+              fileName: file?.name,
+            }),
+          });
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            let errorMessage = "Failed to queue upload";
+            try {
+              const errorJson = JSON.parse(errorText);
+              errorMessage = errorJson.error || errorMessage;
+            } catch {
+              if (response.status === 413) {
+                errorMessage = "File too large. Please try a smaller file or contact support.";
+              }
+            }
+            throw new Error(errorMessage);
+          }
+
+          const data = await response.json();
+          setBackgroundUploadId(data.queue_id);
+          setIsBackgroundProcessing(true);
+          setIsUploading(false);
+          startBackgroundPolling(data.queue_id);
+        } else {
+          // Very large upload - chunk and send to direct upload endpoint
+          // with progress tracking
+          setUploadProgress(0);
+
+          const chunks: Record<string, string>[][] = [];
+          for (let i = 0; i < parsedContacts.length; i += CHUNK_SIZE) {
+            chunks.push(parsedContacts.slice(i, i + CHUNK_SIZE));
+          }
+
+          let totalSuccess = 0;
+          let totalFailed = 0;
+          let totalDuplicates = 0;
+
+          for (let i = 0; i < chunks.length; i++) {
+            const chunk = chunks[i];
+            const response = await fetch(`/api/admin/outbound-campaigns/${campaignId}/contacts/upload`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ contacts: chunk }),
+            });
+
+            if (!response.ok) {
+              const errorText = await response.text();
+              let errorMessage = "Upload failed";
+              try {
+                const errorJson = JSON.parse(errorText);
+                errorMessage = errorJson.error || errorMessage;
+              } catch {
+                if (response.status === 413) {
+                  errorMessage = "Chunk too large. Please contact support.";
+                }
+              }
+              throw new Error(errorMessage);
+            }
+
+            const data = await response.json();
+            totalSuccess += data.result?.success || 0;
+            totalFailed += data.result?.failed || 0;
+            totalDuplicates += data.result?.duplicates || 0;
+
+            // Update progress
+            const progress = Math.round(((i + 1) / chunks.length) * 100);
+            setUploadProgress(progress);
+          }
+
+          // Get final contact count
+          const countResponse = await fetch(`/api/admin/outbound-campaigns/${campaignId}/contacts`);
+          const countData = countResponse.ok ? await countResponse.json() : { total: 0 };
+
+          setUploadResult({
+            success: totalSuccess,
+            failed: totalFailed,
+            duplicates: totalDuplicates,
+            total: countData.total || totalSuccess,
+            uploadedContacts: parsedContacts,
+          });
+          setIsUploading(false);
         }
-
-        const data = await response.json();
-        setBackgroundUploadId(data.queue_id);
-        setIsBackgroundProcessing(true);
-        setIsUploading(false);
-
-        // Start polling for progress
-        startBackgroundPolling(data.queue_id);
       } catch (error) {
-        alert(error instanceof Error ? error.message : "Upload failed");
+        toast({
+          title: "Upload Failed",
+          description: error instanceof Error ? error.message : "Upload failed",
+          variant: "destructive",
+        });
         setIsUploading(false);
       }
       return;

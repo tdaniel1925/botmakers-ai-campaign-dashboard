@@ -1,6 +1,9 @@
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { verifyAdmin, forbiddenResponse } from "@/lib/admin-auth";
+
+// Increase body size limit to 50MB for large contact uploads (App Router)
+export const maxDuration = 60; // Allow up to 60 seconds for large uploads
 
 interface Contact {
   phone_number?: string;
