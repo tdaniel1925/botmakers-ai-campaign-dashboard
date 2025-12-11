@@ -79,12 +79,10 @@ interface WizardData {
   vapi_api_key: string;
   vapi_assistant_id: string;
   vapi_phone_number_id: string;
-  // AutoCalls-specific
-  autocalls_key_source: "system" | "client";
+  // AutoCalls-specific (no system keys - client must provide their own)
   autocalls_api_key: string;
   autocalls_assistant_id: string;
-  // Synthflow-specific
-  synthflow_key_source: "system" | "client";
+  // Synthflow-specific (no system keys - client must provide their own)
   synthflow_api_key: string;
   synthflow_model_id: string;
   // Step 4: Schedule
@@ -935,10 +933,8 @@ const initialData: WizardData = {
   vapi_api_key: "",
   vapi_assistant_id: "",
   vapi_phone_number_id: "",
-  autocalls_key_source: "system",
   autocalls_api_key: "",
   autocalls_assistant_id: "",
-  synthflow_key_source: "system",
   synthflow_api_key: "",
   synthflow_model_id: "",
   schedule_days: [1, 2, 3, 4, 5], // Mon-Fri
@@ -1029,10 +1025,8 @@ function NewOutboundCampaignPageContent() {
             vapi_api_key: savedData.vapi_api_key || "", // Don't restore encrypted key
             vapi_assistant_id: savedData.vapi_assistant_id || campaign.vapi_assistant_id || "",
             vapi_phone_number_id: savedData.vapi_phone_number_id || campaign.vapi_phone_number_id || "",
-            autocalls_key_source: savedData.autocalls_key_source || "system",
             autocalls_api_key: savedData.autocalls_api_key || "",
             autocalls_assistant_id: savedData.autocalls_assistant_id || campaign.autocalls_assistant_id?.toString() || "",
-            synthflow_key_source: savedData.synthflow_key_source || "system",
             synthflow_api_key: savedData.synthflow_api_key || "",
             synthflow_model_id: savedData.synthflow_model_id || campaign.synthflow_model_id || "",
             schedule_days: savedData.schedule_days || campaign.campaign_schedules?.[0]?.days_of_week || [1, 2, 3, 4, 5],
@@ -1149,11 +1143,9 @@ function NewOutboundCampaignPageContent() {
       let assistantId = "";
       let modelId = "";
 
-      // Check if using system keys - call server-side API for verification
-      const useSystemKey =
-        (data.call_provider === "vapi" && data.vapi_key_source === "system") ||
-        (data.call_provider === "autocalls" && data.autocalls_key_source === "system") ||
-        (data.call_provider === "synthflow" && data.synthflow_key_source === "system");
+      // Check if using system keys - only Vapi supports system keys
+      // AutoCalls and Synthflow always require client-provided API keys
+      const useSystemKey = data.call_provider === "vapi" && data.vapi_key_source === "system";
 
       switch (data.call_provider) {
         case "vapi":
@@ -1161,11 +1153,11 @@ function NewOutboundCampaignPageContent() {
           assistantId = data.vapi_assistant_id;
           break;
         case "autocalls":
-          apiKey = data.autocalls_key_source === "system" ? "" : data.autocalls_api_key;
+          apiKey = data.autocalls_api_key;
           assistantId = data.autocalls_assistant_id;
           break;
         case "synthflow":
-          apiKey = data.synthflow_key_source === "system" ? "" : data.synthflow_api_key;
+          apiKey = data.synthflow_api_key;
           modelId = data.synthflow_model_id;
           break;
       }
@@ -1273,17 +1265,10 @@ function NewOutboundCampaignPageContent() {
           break;
 
         case "autocalls":
-          // If using system keys, only validate assistant ID
-          if (data.autocalls_key_source === "system") {
-            if (!data.autocalls_assistant_id.trim()) {
-              setVapiValidationError("Assistant ID is required");
-              return false;
-            }
-          } else {
-            if (!data.autocalls_api_key || !data.autocalls_assistant_id) {
-              setVapiValidationError("API Key and Assistant ID are required for AutoCalls");
-              return false;
-            }
+          // AutoCalls always requires client-provided API key
+          if (!data.autocalls_api_key || !data.autocalls_assistant_id) {
+            setVapiValidationError("API Key and Assistant ID are required for AutoCalls");
+            return false;
           }
           // Basic format validation (AutoCalls uses integer IDs)
           if (isNaN(parseInt(data.autocalls_assistant_id))) {
@@ -1293,17 +1278,10 @@ function NewOutboundCampaignPageContent() {
           break;
 
         case "synthflow":
-          // If using system keys, only validate agent ID
-          if (data.synthflow_key_source === "system") {
-            if (!data.synthflow_model_id.trim()) {
-              setVapiValidationError("Agent ID is required");
-              return false;
-            }
-          } else {
-            if (!data.synthflow_api_key || !data.synthflow_model_id) {
-              setVapiValidationError("API Key and Agent ID are required for Synthflow");
-              return false;
-            }
+          // Synthflow always requires client-provided API key
+          if (!data.synthflow_api_key || !data.synthflow_model_id) {
+            setVapiValidationError("API Key and Agent ID are required for Synthflow");
+            return false;
           }
           break;
       }
@@ -1337,14 +1315,10 @@ function NewOutboundCampaignPageContent() {
             }
             return !!data.vapi_api_key.trim() && !!data.vapi_assistant_id.trim();
           case "autocalls":
-            if (data.autocalls_key_source === "system") {
-              return !!data.autocalls_assistant_id.trim();
-            }
+            // AutoCalls always requires client API key
             return !!data.autocalls_api_key.trim() && !!data.autocalls_assistant_id.trim();
           case "synthflow":
-            if (data.synthflow_key_source === "system") {
-              return !!data.synthflow_model_id.trim();
-            }
+            // Synthflow always requires client API key
             return !!data.synthflow_api_key.trim() && !!data.synthflow_model_id.trim();
           default:
             return false;
@@ -1732,68 +1706,43 @@ function NewOutboundCampaignPageContent() {
               {/* AutoCalls Configuration */}
               {data.call_provider === "autocalls" && (
                 <>
-                  <div className="space-y-2">
-                    <Label>API Key Source</Label>
-                    <Select
-                      value={data.autocalls_key_source}
-                      onValueChange={(value: "system" | "client") => updateData("autocalls_key_source", value)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="system">System Keys (Bill to Client)</SelectItem>
-                        <SelectItem value="client">Client&apos;s Own Keys</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {data.autocalls_key_source === "system" && (
-                      <p className="text-xs text-muted-foreground">
-                        Platform-level API keys from Settings will be used. Usage will be billed to the client.
-                      </p>
-                    )}
+                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                    <div className="flex gap-3">
+                      <Key className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                      <div className="space-y-1">
+                        <p className="font-medium text-blue-900 dark:text-blue-100">AutoCalls.ai Credentials Required</p>
+                        <p className="text-sm text-blue-700 dark:text-blue-300">
+                          Get your API key and Assistant ID from{" "}
+                          <a href="https://app.autocalls.ai" target="_blank" rel="noopener noreferrer" className="underline">
+                            app.autocalls.ai <ExternalLink className="inline h-3 w-3" />
+                          </a>
+                        </p>
+                      </div>
+                    </div>
                   </div>
 
-                  {data.autocalls_key_source === "client" && (
-                    <>
-                      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                        <div className="flex gap-3">
-                          <Key className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                          <div className="space-y-1">
-                            <p className="font-medium text-blue-900 dark:text-blue-100">AutoCalls.ai Credentials</p>
-                            <p className="text-sm text-blue-700 dark:text-blue-300">
-                              Get your API key and Assistant ID from{" "}
-                              <a href="https://app.autocalls.ai" target="_blank" rel="noopener noreferrer" className="underline">
-                                app.autocalls.ai <ExternalLink className="inline h-3 w-3" />
-                              </a>
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="autocalls_api_key">API Key *</Label>
-                        <div className="relative">
-                          <Input
-                            id="autocalls_api_key"
-                            type={showApiKey ? "text" : "password"}
-                            value={data.autocalls_api_key}
-                            onChange={(e) => updateData("autocalls_api_key", e.target.value)}
-                            placeholder="Your AutoCalls API key"
-                            className="pr-10"
-                          />
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-                            onClick={() => setShowApiKey(!showApiKey)}
-                          >
-                            {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                          </Button>
-                        </div>
-                      </div>
-                    </>
-                  )}
+                  <div className="space-y-2">
+                    <Label htmlFor="autocalls_api_key">API Key *</Label>
+                    <div className="relative">
+                      <Input
+                        id="autocalls_api_key"
+                        type={showApiKey ? "text" : "password"}
+                        value={data.autocalls_api_key}
+                        onChange={(e) => updateData("autocalls_api_key", e.target.value)}
+                        placeholder="Your AutoCalls API key"
+                        className="pr-10"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                        onClick={() => setShowApiKey(!showApiKey)}
+                      >
+                        {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                  </div>
 
                   <div className="space-y-2">
                     <Label htmlFor="autocalls_assistant_id">Assistant ID *</Label>
@@ -1811,68 +1760,43 @@ function NewOutboundCampaignPageContent() {
               {/* Synthflow Configuration */}
               {data.call_provider === "synthflow" && (
                 <>
-                  <div className="space-y-2">
-                    <Label>API Key Source</Label>
-                    <Select
-                      value={data.synthflow_key_source}
-                      onValueChange={(value: "system" | "client") => updateData("synthflow_key_source", value)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="system">System Keys (Bill to Client)</SelectItem>
-                        <SelectItem value="client">Client&apos;s Own Keys</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {data.synthflow_key_source === "system" && (
-                      <p className="text-xs text-muted-foreground">
-                        Platform-level API keys from Settings will be used. Usage will be billed to the client.
-                      </p>
-                    )}
+                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                    <div className="flex gap-3">
+                      <Key className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                      <div className="space-y-1">
+                        <p className="font-medium text-blue-900 dark:text-blue-100">Synthflow Credentials Required</p>
+                        <p className="text-sm text-blue-700 dark:text-blue-300">
+                          Get your API key and Agent ID from{" "}
+                          <a href="https://app.synthflow.ai" target="_blank" rel="noopener noreferrer" className="underline">
+                            app.synthflow.ai <ExternalLink className="inline h-3 w-3" />
+                          </a>
+                        </p>
+                      </div>
+                    </div>
                   </div>
 
-                  {data.synthflow_key_source === "client" && (
-                    <>
-                      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                        <div className="flex gap-3">
-                          <Key className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                          <div className="space-y-1">
-                            <p className="font-medium text-blue-900 dark:text-blue-100">Synthflow Credentials</p>
-                            <p className="text-sm text-blue-700 dark:text-blue-300">
-                              Get your API key and Agent ID from{" "}
-                              <a href="https://app.synthflow.ai" target="_blank" rel="noopener noreferrer" className="underline">
-                                app.synthflow.ai <ExternalLink className="inline h-3 w-3" />
-                              </a>
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="synthflow_api_key">API Key *</Label>
-                        <div className="relative">
-                          <Input
-                            id="synthflow_api_key"
-                            type={showApiKey ? "text" : "password"}
-                            value={data.synthflow_api_key}
-                            onChange={(e) => updateData("synthflow_api_key", e.target.value)}
-                            placeholder="Your Synthflow API key"
-                            className="pr-10"
-                          />
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-                            onClick={() => setShowApiKey(!showApiKey)}
-                          >
-                            {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                          </Button>
-                        </div>
-                      </div>
-                    </>
-                  )}
+                  <div className="space-y-2">
+                    <Label htmlFor="synthflow_api_key">API Key *</Label>
+                    <div className="relative">
+                      <Input
+                        id="synthflow_api_key"
+                        type={showApiKey ? "text" : "password"}
+                        value={data.synthflow_api_key}
+                        onChange={(e) => updateData("synthflow_api_key", e.target.value)}
+                        placeholder="Your Synthflow API key"
+                        className="pr-10"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                        onClick={() => setShowApiKey(!showApiKey)}
+                      >
+                        {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                  </div>
 
                   <div className="space-y-2">
                     <Label htmlFor="synthflow_model_id">Agent ID (model_id) *</Label>
@@ -2296,9 +2220,7 @@ function NewOutboundCampaignPageContent() {
                         {" "}
                         ({data.call_provider === "vapi"
                           ? (data.vapi_key_source === "system" ? "System Keys" : "Client Keys")
-                          : data.call_provider === "autocalls"
-                          ? (data.autocalls_key_source === "system" ? "System Keys" : "Client Keys")
-                          : (data.synthflow_key_source === "system" ? "System Keys" : "Client Keys")
+                          : "Client Keys"
                         })
                       </p>
                     </div>
