@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 import { verifyAdmin, forbiddenResponse } from "@/lib/admin-auth";
 
 interface CheckItem {
@@ -40,7 +40,7 @@ export async function GET(
       return forbiddenResponse(authResult.error);
     }
 
-    const supabase = await createClient();
+    const supabase = await createServiceClient();
 
     // Get campaign with all required data
     const { data: campaign, error: fetchError } = await supabase
