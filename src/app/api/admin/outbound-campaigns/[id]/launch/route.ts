@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 import { verifyAdmin, forbiddenResponse } from "@/lib/admin-auth";
 import { createVapiAssistant } from "@/lib/vapi/assistant";
 import { scheduleCampaignProcessor } from "@/lib/scheduler/qstash";
@@ -29,9 +29,10 @@ export async function POST(
       return forbiddenResponse(authResult.error);
     }
 
-    const supabase = await createClient();
+    const supabase = await createServiceClient();
 
     // Get campaign with all required data
+    // Note: Use explicit relationship hint for campaign_phone_numbers due to ambiguous FK
     const { data: campaign, error: fetchError } = await supabase
       .from("outbound_campaigns")
       .select(
@@ -42,7 +43,7 @@ export async function POST(
           name,
           email
         ),
-        campaign_phone_numbers (
+        campaign_phone_numbers!campaign_phone_numbers_campaign_id_fkey (
           id,
           phone_number,
           provider,
@@ -82,11 +83,15 @@ export async function POST(
     // Validation checks
     const errors: string[] = [];
 
+    // Check if using Vapi with system keys
+    const usingVapiSystemKeys = campaign.call_provider === "vapi" && campaign.vapi_key_source === "system";
+
     // Check phone number
     const activePhoneNumbers = campaign.campaign_phone_numbers?.filter(
       (p: { is_active: boolean }) => p.is_active
     );
-    if (!activePhoneNumbers || activePhoneNumbers.length === 0) {
+    const hasVapiPhoneNumber = usingVapiSystemKeys && !!campaign.vapi_phone_number_id;
+    if (!hasVapiPhoneNumber && (!activePhoneNumbers || activePhoneNumbers.length === 0)) {
       errors.push("Campaign must have an active phone number assigned");
     }
 
@@ -98,19 +103,40 @@ export async function POST(
       errors.push("Campaign must have an active schedule configured");
     }
 
-    // Check contacts
-    const { count: contactCount } = await supabase
-      .from("campaign_contacts")
-      .select("*", { count: "exact", head: true })
-      .eq("campaign_id", id)
-      .eq("status", "pending");
+    // Check contacts - use cached counts for large campaigns
+    let contactCount = campaign.pending_contacts || 0;
+    if (contactCount === 0) {
+      // For draft campaigns that have never been launched, all contacts are pending
+      if (campaign.status === "draft" && !campaign.launched_at && campaign.total_contacts > 0) {
+        contactCount = campaign.total_contacts;
+      } else if (campaign.total_contacts < 50000) {
+        // For smaller campaigns, do actual count
+        const { count } = await supabase
+          .from("campaign_contacts")
+          .select("*", { count: "exact", head: true })
+          .eq("campaign_id", id)
+          .eq("status", "pending");
+        contactCount = count || 0;
+      } else {
+        // For large campaigns, check if any pending exist
+        const { data: anyPending } = await supabase
+          .from("campaign_contacts")
+          .select("id")
+          .eq("campaign_id", id)
+          .eq("status", "pending")
+          .limit(1);
+        contactCount = anyPending && anyPending.length > 0 ? 1 : 0;
+      }
+    }
 
-    if (!contactCount || contactCount === 0) {
+    if (contactCount === 0) {
       errors.push("Campaign must have at least one pending contact to call");
     }
 
-    // Check agent config
-    if (!campaign.agent_config || !campaign.agent_config.systemPrompt) {
+    // Check agent config - Vapi system keys use external assistant
+    const hasVapiAssistant = usingVapiSystemKeys && !!campaign.vapi_assistant_id;
+    const hasLocalAgentConfig = campaign.agent_config && campaign.agent_config.systemPrompt;
+    if (!hasVapiAssistant && !hasLocalAgentConfig) {
       errors.push("Campaign must have AI agent configuration (system prompt required)");
     }
 
@@ -156,10 +182,10 @@ export async function POST(
       );
     }
 
-    // Create Vapi assistant if not exists
+    // Create Vapi assistant if not exists (skip for system keys - assistant managed externally)
     let vapiAssistantId = campaign.vapi_assistant_id;
 
-    if (!vapiAssistantId) {
+    if (!vapiAssistantId && !usingVapiSystemKeys) {
       try {
         const assistant = await createVapiAssistant({
           name: `${campaign.name} - ${campaign.clients?.name || "Campaign"}`,
