@@ -43,6 +43,7 @@ export async function GET(
     const supabase = await createServiceClient();
 
     // Get campaign with all required data
+    // Note: Use explicit relationship hint for campaign_phone_numbers due to ambiguous FK
     const { data: campaign, error: fetchError } = await supabase
       .from("outbound_campaigns")
       .select(
@@ -53,7 +54,7 @@ export async function GET(
           name,
           email
         ),
-        campaign_phone_numbers (
+        campaign_phone_numbers!campaign_phone_numbers_campaign_id_fkey (
           id,
           phone_number,
           provider,
