@@ -1484,6 +1484,11 @@ function NewOutboundCampaignPageContent() {
         throw new Error("Campaign was not created properly");
       }
 
+      // Save SMS rules if any were configured
+      if (data.sms_rules.length > 0) {
+        await saveSmsRules(campaignId);
+      }
+
       toast({
         title: "Campaign Created!",
         description: "Your campaign has been saved as a draft. You can start it from the campaign details page.",
@@ -1499,6 +1504,32 @@ function NewOutboundCampaignPageContent() {
       });
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  // Save SMS rules to the database
+  const saveSmsRules = async (campaignId: string) => {
+    // Filter out incomplete rules (must have name, trigger_condition, and message_template)
+    const validRules = data.sms_rules.filter(
+      (rule) => rule.name.trim() && rule.trigger_condition.trim() && rule.message_template.trim()
+    );
+
+    for (const rule of validRules) {
+      const response = await fetch(`/api/admin/outbound-campaigns/${campaignId}/sms-rules`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: rule.name,
+          trigger_condition: rule.trigger_condition,
+          message_template: rule.message_template,
+          priority: rule.priority,
+          is_active: true,
+        }),
+      });
+
+      if (!response.ok) {
+        console.error("Failed to save SMS rule:", rule.name);
+      }
     }
   };
 
