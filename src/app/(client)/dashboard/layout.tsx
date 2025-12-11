@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { ClientSidebar, MobileMenuButton } from "@/components/dashboard/client-sidebar";
 import { createClient } from "@/lib/supabase/client";
 import { SessionTimeoutWarning } from "@/components/shared/session-timeout-warning";
+import { WelcomeModal } from "@/components/shared/welcome-modal";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Eye } from "lucide-react";
 import { ClientContext } from "@/contexts/client-context";
@@ -21,6 +22,8 @@ export default function DashboardLayout({
   const [isLoading, setIsLoading] = useState(true);
   const [isImpersonating, setIsImpersonating] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(false);
+  const [welcomeChecked, setWelcomeChecked] = useState(false);
   const supabase = createClient();
 
   const handleBackToAdmin = () => {
@@ -138,6 +141,40 @@ export default function DashboardLayout({
     fetchData();
   }, [supabase]);
 
+  // Check if welcome message should be shown
+  useEffect(() => {
+    const checkWelcome = async () => {
+      if (isLoading || isImpersonating || welcomeChecked || !clientId) return;
+
+      try {
+        const response = await fetch("/api/client/welcome-dismissed");
+        if (response.ok) {
+          const data = await response.json();
+          if (!data.dismissed) {
+            setShowWelcome(true);
+          }
+        }
+      } catch (error) {
+        console.error("Error checking welcome status:", error);
+      } finally {
+        setWelcomeChecked(true);
+      }
+    };
+
+    checkWelcome();
+  }, [isLoading, isImpersonating, welcomeChecked, clientId]);
+
+  const handleDismissWelcome = async () => {
+    try {
+      await fetch("/api/client/welcome-dismissed", {
+        method: "POST",
+      });
+    } catch (error) {
+      console.error("Error dismissing welcome:", error);
+    }
+    setShowWelcome(false);
+  };
+
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
 
   return (
@@ -193,6 +230,15 @@ export default function DashboardLayout({
           </main>
         </div>
         {!isImpersonating && <SessionTimeoutWarning logoutUrl="/login" />}
+
+        {/* Welcome Modal for New Clients */}
+        <WelcomeModal
+          open={showWelcome}
+          onClose={() => setShowWelcome(false)}
+          onDismissForever={handleDismissWelcome}
+          clientName={clientName}
+          companyName={companyName}
+        />
       </div>
     </ClientContext.Provider>
   );
