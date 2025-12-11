@@ -69,6 +69,7 @@ export async function GET(
     const { data: contacts, error, count } = await query;
 
     if (error) {
+      console.error("Contacts query error:", error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
