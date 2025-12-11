@@ -810,10 +810,16 @@ export default function ContactsPage({
 
     setIsDeleting(true);
     try {
+      // If all pending contacts are selected, use delete_all_pending for efficiency
+      // This avoids sending thousands of IDs in the request body
+      const requestBody = selectAllMode === "all"
+        ? { delete_all_pending: true }
+        : { contact_ids: selectedContacts };
+
       const response = await fetch(`/api/admin/outbound-campaigns/${id}/contacts`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contact_ids: selectedContacts }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
@@ -824,12 +830,14 @@ export default function ContactsPage({
       const data = await response.json();
       toast({
         title: "Deleted",
-        description: `${data.deleted_count} contacts removed`,
+        description: `${data.deleted_count.toLocaleString()} contacts removed`,
       });
 
       setShowDeleteModal(false);
       setSelectedContacts([]);
+      setSelectAllMode(null);
       fetchContacts();
+      fetchPendingCount();
     } catch (error) {
       toast({
         title: "Error",
