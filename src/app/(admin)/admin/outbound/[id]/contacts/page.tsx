@@ -228,6 +228,8 @@ export default function ContactsPage({
   const [outcomeFilter, setOutcomeFilter] = useState("all");
   const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
   const [selectAllMode, setSelectAllMode] = useState<"page" | "all" | null>(null);
+  const [pendingCount, setPendingCount] = useState<number | null>(null);
+  const [isSelectingAll, setIsSelectingAll] = useState(false);
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 50,
@@ -852,6 +854,7 @@ export default function ContactsPage({
 
   const handleSelectAllRecords = async () => {
     // Fetch all pending contact IDs for the campaign
+    setIsSelectingAll(true);
     try {
       const params = new URLSearchParams({
         status: "pending",
@@ -869,6 +872,7 @@ export default function ContactsPage({
       if (!response.ok) throw new Error("Failed to fetch contact IDs");
       const data = await response.json();
       setSelectedContacts(data.contact_ids || []);
+      setPendingCount(data.total || data.contact_ids?.length || 0);
       setSelectAllMode("all");
     } catch (error) {
       console.error("Error fetching all contact IDs:", error);
@@ -877,8 +881,33 @@ export default function ContactsPage({
         description: "Failed to select all records",
         variant: "destructive",
       });
+    } finally {
+      setIsSelectingAll(false);
     }
   };
+
+  // Fetch pending count when component mounts or filters change
+  const fetchPendingCount = async () => {
+    try {
+      const params = new URLSearchParams({
+        status: "pending",
+        ids_only: "true",
+      });
+      if (searchQuery) params.set("search", searchQuery);
+
+      const response = await fetch(`/api/admin/outbound-campaigns/${id}/contacts?${params}`);
+      if (response.ok) {
+        const data = await response.json();
+        setPendingCount(data.total || 0);
+      }
+    } catch (error) {
+      console.error("Error fetching pending count:", error);
+    }
+  };
+
+  useEffect(() => {
+    fetchPendingCount();
+  }, [id, searchQuery, statusFilter]);
 
   const clearSelection = () => {
     setSelectedContacts([]);
@@ -1008,21 +1037,29 @@ export default function ContactsPage({
       {/* Bulk Actions */}
       {selectedContacts.length > 0 && (
         <div className="flex flex-col gap-2 p-4 bg-muted rounded-lg">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-sm font-medium">
                 {selectAllMode === "all"
                   ? `All ${selectedContacts.length.toLocaleString()} pending contact${selectedContacts.length !== 1 ? "s" : ""} selected`
                   : `${selectedContacts.length} contact${selectedContacts.length !== 1 ? "s" : ""} selected`}
               </span>
-              {selectAllMode === "page" && pagination.total > contacts.length && (
+              {selectAllMode === "page" && pendingCount !== null && pendingCount > selectedContacts.length && (
                 <Button
                   variant="link"
                   size="sm"
                   className="h-auto p-0 text-primary"
                   onClick={handleSelectAllRecords}
+                  disabled={isSelectingAll}
                 >
-                  Select all {pagination.total.toLocaleString()} pending contacts
+                  {isSelectingAll ? (
+                    <>
+                      <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                      Loading...
+                    </>
+                  ) : (
+                    `Select all ${pendingCount.toLocaleString()} pending contacts`
+                  )}
                 </Button>
               )}
               {selectAllMode === "all" && (

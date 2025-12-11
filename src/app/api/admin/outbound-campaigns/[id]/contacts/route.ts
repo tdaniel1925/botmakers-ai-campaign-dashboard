@@ -44,33 +44,52 @@ export async function GET(
 
     // If requesting IDs only, fetch all matching contact IDs (for select all functionality)
     if (idsOnly) {
-      let idsQuery = supabase
-        .from("campaign_contacts")
-        .select("id")
-        .eq("campaign_id", id);
+      // Supabase has a default limit of 1000 rows, so we need to paginate
+      // to get all IDs for large datasets
+      const allIds: string[] = [];
+      const batchSize = 10000; // Fetch in larger batches
+      let offset = 0;
+      let hasMore = true;
 
-      if (status) {
-        idsQuery = idsQuery.eq("status", status);
-      }
-      if (outcome) {
-        idsQuery = idsQuery.eq("outcome", outcome);
-      }
-      if (search) {
-        idsQuery = idsQuery.or(
-          `phone_number.ilike.%${search}%,first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%`
-        );
-      }
+      while (hasMore) {
+        let idsQuery = supabase
+          .from("campaign_contacts")
+          .select("id")
+          .eq("campaign_id", id)
+          .range(offset, offset + batchSize - 1);
 
-      const { data: ids, error: idsError } = await idsQuery;
+        if (status) {
+          idsQuery = idsQuery.eq("status", status);
+        }
+        if (outcome) {
+          idsQuery = idsQuery.eq("outcome", outcome);
+        }
+        if (search) {
+          idsQuery = idsQuery.or(
+            `phone_number.ilike.%${search}%,first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%`
+          );
+        }
 
-      if (idsError) {
-        console.error("IDs query error:", idsError);
-        return NextResponse.json({ error: idsError.message }, { status: 500 });
+        const { data: ids, error: idsError } = await idsQuery;
+
+        if (idsError) {
+          console.error("IDs query error:", idsError);
+          return NextResponse.json({ error: idsError.message }, { status: 500 });
+        }
+
+        if (ids && ids.length > 0) {
+          allIds.push(...ids.map((c) => c.id));
+          offset += batchSize;
+          // If we got fewer results than the batch size, we've reached the end
+          hasMore = ids.length === batchSize;
+        } else {
+          hasMore = false;
+        }
       }
 
       return NextResponse.json({
-        contact_ids: ids?.map((c) => c.id) || [],
-        total: ids?.length || 0,
+        contact_ids: allIds,
+        total: allIds.length,
       });
     }
 
