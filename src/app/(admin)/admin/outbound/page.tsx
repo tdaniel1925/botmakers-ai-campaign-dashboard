@@ -50,10 +50,8 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Plus,
   Search,
-  MoreVertical,
   Phone,
   Users,
-  Clock,
   Play,
   Pause,
   Square,
@@ -63,9 +61,6 @@ import {
   Loader2,
   RefreshCw,
   PhoneOutgoing,
-  Calendar,
-  LayoutList,
-  LayoutGrid,
   MoreHorizontal,
   AlertTriangle,
   Settings,
@@ -131,7 +126,6 @@ export default function OutboundCampaignsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedCampaign, setSelectedCampaign] = useState<OutboundCampaign | null>(null);
@@ -471,22 +465,6 @@ export default function OutboundCampaignsPage() {
             <SelectItem value="completed">Completed</SelectItem>
           </SelectContent>
         </Select>
-        <div className="flex gap-1 border rounded-md p-1">
-          <Button
-            variant={viewMode === "list" ? "secondary" : "ghost"}
-            size="sm"
-            onClick={() => setViewMode("list")}
-          >
-            <LayoutList className="h-4 w-4" />
-          </Button>
-          <Button
-            variant={viewMode === "grid" ? "secondary" : "ghost"}
-            size="sm"
-            onClick={() => setViewMode("grid")}
-          >
-            <LayoutGrid className="h-4 w-4" />
-          </Button>
-        </div>
         <Button variant="outline" size="icon" onClick={fetchCampaigns} disabled={isLoading}>
           <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
         </Button>
@@ -548,14 +526,13 @@ export default function OutboundCampaignsPage() {
         </div>
       )}
 
-      {/* Campaign List/Grid */}
+      {/* Campaign List */}
       {isLoading ? (
         <div className="flex items-center justify-center h-64">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
       ) : filteredCampaigns.length > 0 ? (
-        viewMode === "list" ? (
-          <Card>
+        <Card>
             <CardHeader>
               <CardTitle>All Outbound Campaigns</CardTitle>
               <CardDescription>
@@ -724,205 +701,6 @@ export default function OutboundCampaignsPage() {
               </Table>
             </CardContent>
           </Card>
-        ) : (
-          /* Grid View */
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {filteredCampaigns.map((campaign) => (
-              <Card key={campaign.id} className="relative overflow-hidden">
-                {/* Status indicator bar */}
-                <div
-                  className={`absolute top-0 left-0 right-0 h-1 ${
-                    campaign.status === "active"
-                      ? "bg-green-500"
-                      : campaign.status === "paused"
-                      ? "bg-yellow-500"
-                      : campaign.status === "stopped"
-                      ? "bg-red-500"
-                      : campaign.status === "completed"
-                      ? "bg-blue-500"
-                      : "bg-gray-300"
-                  }`}
-                />
-
-                <div className="absolute top-3 left-3">
-                  <Checkbox
-                    checked={selectedIds.has(campaign.id)}
-                    onCheckedChange={() => toggleSelect(campaign.id)}
-                  />
-                </div>
-
-                <CardHeader className="pb-3 pl-10">
-                  <div className="flex items-start justify-between">
-                    <div className="space-y-1 flex-1 min-w-0">
-                      <Link href={`/admin/outbound/${campaign.id}`} className="hover:underline">
-                        <CardTitle className="text-lg truncate cursor-pointer hover:text-primary">
-                          {campaign.name}
-                          {campaign.is_test_mode && (
-                            <Badge variant="outline" className="ml-2 text-xs">Test</Badge>
-                          )}
-                        </CardTitle>
-                      </Link>
-                      <CardDescription className="truncate">
-                        {campaign.clients?.name}
-                        {campaign.clients?.company_name && ` (${campaign.clients.company_name})`}
-                      </CardDescription>
-                    </div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem asChild>
-                          <Link href={`/admin/outbound/${campaign.id}`}>
-                            <Edit className="mr-2 h-4 w-4" />
-                            Edit Campaign
-                          </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem asChild>
-                          <Link href={`/admin/outbound/${campaign.id}/analytics`}>
-                            <BarChart3 className="mr-2 h-4 w-4" />
-                            View Analytics
-                          </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        {campaign.status === "active" && (
-                          <DropdownMenuItem onClick={() => handleAction(campaign, "pause")}>
-                            <Pause className="mr-2 h-4 w-4" />
-                            Pause Campaign
-                          </DropdownMenuItem>
-                        )}
-                        {campaign.status === "paused" && (
-                          <DropdownMenuItem onClick={() => handleAction(campaign, "resume")}>
-                            <Play className="mr-2 h-4 w-4" />
-                            Resume Campaign
-                          </DropdownMenuItem>
-                        )}
-                        {(campaign.status === "active" || campaign.status === "paused") && (
-                          <DropdownMenuItem onClick={() => handleAction(campaign, "stop")}>
-                            <Square className="mr-2 h-4 w-4" />
-                            Stop Campaign
-                          </DropdownMenuItem>
-                        )}
-                        {campaign.status === "draft" && (
-                          <>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onClick={() => {
-                                setSelectedCampaign(campaign);
-                                setShowDeleteModal(true);
-                              }}
-                              className="text-red-600"
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Delete
-                            </DropdownMenuItem>
-                          </>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </CardHeader>
-
-                <CardContent className="space-y-4">
-                  {/* Stats Row */}
-                  <div className="grid grid-cols-3 gap-2 text-center">
-                    <div className="p-2 bg-muted/50 rounded-lg">
-                      <div className="text-lg font-semibold">{campaign.total_contacts}</div>
-                      <div className="text-xs text-muted-foreground">Contacts</div>
-                    </div>
-                    <div className="p-2 bg-muted/50 rounded-lg">
-                      <div className="text-lg font-semibold">{campaign.stats?.totalCalls || 0}</div>
-                      <div className="text-xs text-muted-foreground">Calls</div>
-                    </div>
-                    <div className="p-2 bg-muted/50 rounded-lg">
-                      <div className="text-lg font-semibold text-green-600">
-                        {campaign.stats?.positiveRate?.toFixed(0) || 0}%
-                      </div>
-                      <div className="text-xs text-muted-foreground">Positive</div>
-                    </div>
-                  </div>
-
-                  {/* Progress bar */}
-                  {campaign.status !== "draft" && (
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>Progress</span>
-                        <span>{getProgress(campaign)}%</span>
-                      </div>
-                      <Progress value={getProgress(campaign)} className="h-2" />
-                    </div>
-                  )}
-
-                  {/* Status and Launch Info */}
-                  <div className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      {campaign.launched_at ? (
-                        <>
-                          <Calendar className="h-3 w-3" />
-                          Launched {formatDistanceToNow(new Date(campaign.launched_at), { addSuffix: true })}
-                        </>
-                      ) : (
-                        <>
-                          <Clock className="h-3 w-3" />
-                          Created {formatDistanceToNow(new Date(campaign.created_at), { addSuffix: true })}
-                        </>
-                      )}
-                    </div>
-                    {getStatusBadge(campaign.status)}
-                  </div>
-
-                  {/* Action Buttons */}
-                  <div className="grid grid-cols-2 gap-2 pt-2">
-                    {campaign.status === "draft" ? (
-                      !isSetupComplete(campaign) ? (
-                        <>
-                          <Button variant="outline" size="sm" className="w-full col-span-2" asChild>
-                            <Link href={`/admin/outbound/new?resume=${campaign.id}`}>
-                              <Settings className="mr-2 h-4 w-4" />
-                              Continue Setup
-                            </Link>
-                          </Button>
-                        </>
-                      ) : (
-                        <>
-                          <Button variant="outline" size="sm" className="w-full" asChild>
-                            <Link href={`/admin/outbound/${campaign.id}`}>
-                              <Edit className="mr-2 h-4 w-4" />
-                              Edit
-                            </Link>
-                          </Button>
-                          <Button size="sm" className="w-full" asChild>
-                            <Link href={`/admin/outbound/${campaign.id}`}>
-                              <Play className="mr-2 h-4 w-4" />
-                              Launch
-                            </Link>
-                          </Button>
-                        </>
-                      )
-                    ) : (
-                      <>
-                        <Button variant="outline" size="sm" className="w-full" asChild>
-                          <Link href={`/admin/outbound/${campaign.id}/contacts`}>
-                            <Users className="mr-2 h-4 w-4" />
-                            Contacts
-                          </Link>
-                        </Button>
-                        <Button variant="outline" size="sm" className="w-full" asChild>
-                          <Link href={`/admin/outbound/${campaign.id}/analytics`}>
-                            <BarChart3 className="mr-2 h-4 w-4" />
-                            Analytics
-                          </Link>
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )
       ) : (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">

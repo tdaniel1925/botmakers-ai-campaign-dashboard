@@ -10,9 +10,6 @@ import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import {
   Select,
@@ -25,19 +22,19 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Search,
   Phone,
-  Users,
   Clock,
   Play,
   Pause,
-  Square,
   BarChart3,
   Loader2,
   RefreshCw,
   PhoneOutgoing,
   Calendar,
+  Users,
   TrendingUp,
+  ChevronRight,
 } from "lucide-react";
-import { format, formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow } from "date-fns";
 
 interface OutboundCampaign {
   id: string;
@@ -201,147 +198,125 @@ export default function ClientOutboundCampaignsPage() {
         </Button>
       </div>
 
-      {/* Campaigns */}
+      {/* Campaigns List */}
       {isLoading ? (
         <div className="flex items-center justify-center h-64">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
       ) : filteredCampaigns.length > 0 ? (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="space-y-2">
           {filteredCampaigns.map((campaign) => (
-            <Card key={campaign.id} className="relative overflow-hidden">
-              {/* Status indicator bar */}
-              <div
-                className={`absolute top-0 left-0 right-0 h-1 ${
-                  campaign.status === "active"
-                    ? "bg-green-500"
-                    : campaign.status === "paused"
-                    ? "bg-yellow-500"
-                    : campaign.status === "stopped"
-                    ? "bg-red-500"
-                    : campaign.status === "completed"
-                    ? "bg-blue-500"
-                    : "bg-gray-300"
-                }`}
-              />
+            <Card key={campaign.id} className="hover:bg-muted/50 transition-colors">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-4">
+                  {/* Status indicator */}
+                  <div
+                    className={`w-1 h-16 rounded-full flex-shrink-0 ${
+                      campaign.status === "active"
+                        ? "bg-green-500"
+                        : campaign.status === "paused"
+                        ? "bg-yellow-500"
+                        : campaign.status === "stopped"
+                        ? "bg-red-500"
+                        : campaign.status === "completed"
+                        ? "bg-blue-500"
+                        : "bg-gray-300"
+                    }`}
+                  />
 
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                  <div className="space-y-1 flex-1 min-w-0">
-                    <CardTitle className="text-lg truncate">
-                      {campaign.name}
+                  {/* Main content */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="font-semibold truncate">{campaign.name}</h3>
                       {campaign.is_test_mode && (
-                        <Badge variant="outline" className="ml-2 text-xs">Test</Badge>
+                        <Badge variant="outline" className="text-xs">Test</Badge>
                       )}
-                    </CardTitle>
+                      {getStatusBadge(campaign.status)}
+                    </div>
                     {campaign.description && (
-                      <CardDescription className="line-clamp-2">
+                      <p className="text-sm text-muted-foreground truncate mb-2">
                         {campaign.description}
-                      </CardDescription>
+                      </p>
+                    )}
+                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <Users className="h-3.5 w-3.5" />
+                        {campaign.total_contacts} contacts
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Phone className="h-3.5 w-3.5" />
+                        {campaign.stats?.totalCalls || 0} calls
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <TrendingUp className="h-3.5 w-3.5" />
+                        {campaign.stats?.positiveRate?.toFixed(0) || 0}% positive
+                      </span>
+                      <span className="flex items-center gap-1">
+                        {campaign.launched_at ? (
+                          <>
+                            <Calendar className="h-3.5 w-3.5" />
+                            Launched {formatDistanceToNow(new Date(campaign.launched_at), { addSuffix: true })}
+                          </>
+                        ) : (
+                          <>
+                            <Clock className="h-3.5 w-3.5" />
+                            Created {formatDistanceToNow(new Date(campaign.created_at), { addSuffix: true })}
+                          </>
+                        )}
+                      </span>
+                    </div>
+                    {/* Progress bar for non-draft campaigns */}
+                    {campaign.status !== "draft" && campaign.total_contacts > 0 && (
+                      <div className="mt-2 flex items-center gap-2">
+                        <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-primary transition-all"
+                            style={{ width: `${getProgress(campaign)}%` }}
+                          />
+                        </div>
+                        <span className="text-xs text-muted-foreground w-10">{getProgress(campaign)}%</span>
+                      </div>
                     )}
                   </div>
-                  {getStatusBadge(campaign.status)}
-                </div>
-              </CardHeader>
 
-              <CardContent className="space-y-4">
-                {/* Stats Row */}
-                <div className="grid grid-cols-3 gap-2 text-center">
-                  <div className="p-2 bg-muted/50 rounded-lg">
-                    <div className="text-lg font-semibold">{campaign.total_contacts}</div>
-                    <div className="text-xs text-muted-foreground">Contacts</div>
-                  </div>
-                  <div className="p-2 bg-muted/50 rounded-lg">
-                    <div className="text-lg font-semibold">{campaign.stats?.totalCalls || 0}</div>
-                    <div className="text-xs text-muted-foreground">Calls</div>
-                  </div>
-                  <div className="p-2 bg-muted/50 rounded-lg">
-                    <div className="text-lg font-semibold text-green-600">
-                      {campaign.stats?.positiveRate?.toFixed(0) || 0}%
-                    </div>
-                    <div className="text-xs text-muted-foreground">Positive</div>
-                  </div>
-                </div>
-
-                {/* Progress bar */}
-                {campaign.status !== "draft" && (
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                      <span>Progress</span>
-                      <span>{getProgress(campaign)}%</span>
-                    </div>
-                    <div className="h-2 bg-muted rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-primary transition-all"
-                        style={{ width: `${getProgress(campaign)}%` }}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Launch Info */}
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  {campaign.launched_at ? (
-                    <>
-                      <Calendar className="h-3 w-3" />
-                      Launched {formatDistanceToNow(new Date(campaign.launched_at), { addSuffix: true })}
-                    </>
-                  ) : (
-                    <>
-                      <Clock className="h-3 w-3" />
-                      Created {formatDistanceToNow(new Date(campaign.created_at), { addSuffix: true })}
-                    </>
-                  )}
-                </div>
-
-                {/* Action Buttons */}
-                <div className="grid grid-cols-2 gap-2 pt-2">
-                  <Button variant="outline" size="sm" className="w-full" asChild>
-                    <Link href={`/dashboard/outbound/${campaign.id}`}>
-                      <BarChart3 className="mr-2 h-4 w-4" />
-                      View Details
-                    </Link>
-                  </Button>
-                  {campaign.status === "active" && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full"
-                      onClick={() => handleAction(campaign.id, "pause")}
-                      disabled={actionLoading === campaign.id}
-                    >
-                      {actionLoading === campaign.id ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <Pause className="mr-2 h-4 w-4" />
-                      )}
-                      Pause
-                    </Button>
-                  )}
-                  {campaign.status === "paused" && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full"
-                      onClick={() => handleAction(campaign.id, "resume")}
-                      disabled={actionLoading === campaign.id}
-                    >
-                      {actionLoading === campaign.id ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <Play className="mr-2 h-4 w-4" />
-                      )}
-                      Resume
-                    </Button>
-                  )}
-                  {(campaign.status === "completed" || campaign.status === "stopped") && (
-                    <Button variant="outline" size="sm" className="w-full" asChild>
-                      <Link href={`/dashboard/outbound/${campaign.id}/calls`}>
-                        <Phone className="mr-2 h-4 w-4" />
-                        Call Logs
+                  {/* Actions */}
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {campaign.status === "active" && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleAction(campaign.id, "pause")}
+                        disabled={actionLoading === campaign.id}
+                      >
+                        {actionLoading === campaign.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Pause className="h-4 w-4" />
+                        )}
+                      </Button>
+                    )}
+                    {campaign.status === "paused" && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleAction(campaign.id, "resume")}
+                        disabled={actionLoading === campaign.id}
+                      >
+                        {actionLoading === campaign.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Play className="h-4 w-4" />
+                        )}
+                      </Button>
+                    )}
+                    <Button variant="outline" size="sm" asChild>
+                      <Link href={`/dashboard/outbound/${campaign.id}`}>
+                        <BarChart3 className="h-4 w-4 mr-1" />
+                        Details
+                        <ChevronRight className="h-4 w-4 ml-1" />
                       </Link>
                     </Button>
-                  )}
+                  </div>
                 </div>
               </CardContent>
             </Card>

@@ -53,18 +53,13 @@ import {
   MoreHorizontal,
   PhoneIncoming,
   Eye,
-  Settings,
   Trash2,
   Copy,
   Phone,
   Loader2,
-  LayoutGrid,
-  LayoutList,
   RefreshCw,
   Pause,
   Play,
-  CheckCircle2,
-  XCircle,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
@@ -102,7 +97,6 @@ export default function InboundCampaignsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -409,22 +403,6 @@ export default function InboundCampaignsPage() {
             <SelectItem value="paused">Paused</SelectItem>
           </SelectContent>
         </Select>
-        <div className="flex gap-1 border rounded-md p-1">
-          <Button
-            variant={viewMode === "list" ? "secondary" : "ghost"}
-            size="sm"
-            onClick={() => setViewMode("list")}
-          >
-            <LayoutList className="h-4 w-4" />
-          </Button>
-          <Button
-            variant={viewMode === "grid" ? "secondary" : "ghost"}
-            size="sm"
-            onClick={() => setViewMode("grid")}
-          >
-            <LayoutGrid className="h-4 w-4" />
-          </Button>
-        </div>
         <Button variant="outline" size="icon" onClick={fetchCampaigns} disabled={isLoading}>
           <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
         </Button>
@@ -510,7 +488,7 @@ export default function InboundCampaignsPage() {
                 </Link>
               )}
             </div>
-          ) : viewMode === "list" ? (
+          ) : (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -632,68 +610,6 @@ export default function InboundCampaignsPage() {
                 ))}
               </TableBody>
             </Table>
-          ) : (
-            /* Grid View */
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {filteredCampaigns.map((campaign) => (
-                <Card key={campaign.id} className="relative">
-                  <div className="absolute top-3 left-3">
-                    <Checkbox
-                      checked={selectedIds.has(campaign.id)}
-                      onCheckedChange={() => toggleSelect(campaign.id)}
-                    />
-                  </div>
-                  <CardHeader className="pl-10">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <Link href={`/admin/inbound/${campaign.id}`}>
-                          <CardTitle className="text-lg hover:underline cursor-pointer">
-                            {campaign.name}
-                          </CardTitle>
-                        </Link>
-                        <CardDescription>
-                          {campaign.clients?.name}
-                          {campaign.clients?.company_name && ` (${campaign.clients.company_name})`}
-                        </CardDescription>
-                      </div>
-                      <Badge
-                        variant="secondary"
-                        className={campaign.is_active ? statusColors.active : statusColors.paused}
-                      >
-                        {campaign.is_active ? "Active" : "Paused"}
-                      </Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div>
-                        <p className="text-muted-foreground">Total Calls</p>
-                        <p className="font-medium">{campaign.total_calls || 0}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground">Completed</p>
-                        <p className="font-medium">{campaign.calls_completed || 0}</p>
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button variant="outline" size="sm" className="flex-1" asChild>
-                        <Link href={`/admin/inbound/${campaign.id}`}>
-                          <Eye className="mr-2 h-4 w-4" />
-                          View
-                        </Link>
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => copyWebhookUrl(campaign.webhook_token)}
-                      >
-                        <Copy className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
           )}
         </CardContent>
       </Card>

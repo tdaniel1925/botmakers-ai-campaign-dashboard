@@ -10,9 +10,6 @@ import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import {
   Select,
@@ -31,6 +28,8 @@ import {
   RefreshCw,
   PhoneIncoming,
   TrendingUp,
+  ChevronRight,
+  Calendar,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
@@ -145,85 +144,76 @@ export default function ClientInboundCampaignsPage() {
         </Button>
       </div>
 
-      {/* Campaigns */}
+      {/* Campaigns List */}
       {isLoading ? (
         <div className="flex items-center justify-center h-64">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
       ) : filteredCampaigns.length > 0 ? (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="space-y-2">
           {filteredCampaigns.map((campaign) => (
-            <Card key={campaign.id} className="relative overflow-hidden">
-              {/* Status indicator bar */}
-              <div
-                className={`absolute top-0 left-0 right-0 h-1 ${
-                  campaign.is_active ? "bg-green-500" : "bg-gray-300"
-                }`}
-              />
+            <Card key={campaign.id} className="hover:bg-muted/50 transition-colors">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-4">
+                  {/* Status indicator */}
+                  <div
+                    className={`w-1 h-16 rounded-full flex-shrink-0 ${
+                      campaign.is_active ? "bg-green-500" : "bg-gray-300"
+                    }`}
+                  />
 
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                  <div className="space-y-1 flex-1 min-w-0">
-                    <CardTitle className="text-lg truncate">
-                      {campaign.name}
-                    </CardTitle>
-                    {campaign.description && (
-                      <CardDescription className="line-clamp-2">
-                        {campaign.description}
-                      </CardDescription>
-                    )}
-                  </div>
-                  <Badge variant={campaign.is_active ? "success" : "secondary"}>
-                    {campaign.is_active ? "Active" : "Inactive"}
-                  </Badge>
-                </div>
-              </CardHeader>
-
-              <CardContent className="space-y-4">
-                {/* Stats Row */}
-                <div className="grid grid-cols-3 gap-2 text-center">
-                  <div className="p-2 bg-muted/50 rounded-lg">
-                    <div className="text-lg font-semibold">{campaign.stats.totalCalls}</div>
-                    <div className="text-xs text-muted-foreground">Total Calls</div>
-                  </div>
-                  <div className="p-2 bg-muted/50 rounded-lg">
-                    <div className="text-lg font-semibold">{campaign.stats.completedCalls}</div>
-                    <div className="text-xs text-muted-foreground">Completed</div>
-                  </div>
-                  <div className="p-2 bg-muted/50 rounded-lg">
-                    <div className="text-lg font-semibold text-green-600 flex items-center justify-center gap-1">
-                      {campaign.stats.positiveRate > 50 && (
-                        <TrendingUp className="h-3 w-3" />
-                      )}
-                      {campaign.stats.positiveRate}%
+                  {/* Main content */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="font-semibold truncate">{campaign.name}</h3>
+                      <Badge variant={campaign.is_active ? "success" : "secondary"}>
+                        {campaign.is_active ? "Active" : "Inactive"}
+                      </Badge>
                     </div>
-                    <div className="text-xs text-muted-foreground">Positive</div>
+                    {campaign.description && (
+                      <p className="text-sm text-muted-foreground truncate mb-2">
+                        {campaign.description}
+                      </p>
+                    )}
+                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <Phone className="h-3.5 w-3.5" />
+                        {campaign.stats.totalCalls} calls
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <BarChart3 className="h-3.5 w-3.5" />
+                        {campaign.stats.completedCalls} completed
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <TrendingUp className="h-3.5 w-3.5" />
+                        {campaign.stats.positiveRate}% positive
+                      </span>
+                      <span className="flex items-center gap-1">
+                        {campaign.last_call_at ? (
+                          <>
+                            <Phone className="h-3.5 w-3.5" />
+                            Last call {formatDistanceToNow(new Date(campaign.last_call_at), { addSuffix: true })}
+                          </>
+                        ) : (
+                          <>
+                            <Calendar className="h-3.5 w-3.5" />
+                            Created {formatDistanceToNow(new Date(campaign.created_at), { addSuffix: true })}
+                          </>
+                        )}
+                      </span>
+                    </div>
                   </div>
-                </div>
 
-                {/* Last Call Info */}
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  {campaign.last_call_at ? (
-                    <>
-                      <Phone className="h-3 w-3" />
-                      Last call {formatDistanceToNow(new Date(campaign.last_call_at), { addSuffix: true })}
-                    </>
-                  ) : (
-                    <>
-                      <Clock className="h-3 w-3" />
-                      Created {formatDistanceToNow(new Date(campaign.created_at), { addSuffix: true })}
-                    </>
-                  )}
-                </div>
-
-                {/* Action Buttons */}
-                <div className="pt-2">
-                  <Button variant="outline" size="sm" className="w-full" asChild>
-                    <Link href={`/dashboard/inbound/${campaign.id}`}>
-                      <BarChart3 className="mr-2 h-4 w-4" />
-                      View Details
-                    </Link>
-                  </Button>
+                  {/* Actions */}
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <Button variant="outline" size="sm" asChild>
+                      <Link href={`/dashboard/inbound/${campaign.id}`}>
+                        <BarChart3 className="h-4 w-4 mr-1" />
+                        Details
+                        <ChevronRight className="h-4 w-4 ml-1" />
+                      </Link>
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
