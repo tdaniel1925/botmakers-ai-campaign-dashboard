@@ -73,11 +73,20 @@ export async function GET(
       .single();
 
     if (fetchError || !campaign) {
+      console.error("[preflight] Campaign fetch error:", {
+        id,
+        fetchError,
+        errorMessage: fetchError?.message,
+        errorCode: fetchError?.code,
+        errorDetails: fetchError?.details
+      });
       return NextResponse.json(
-        { error: "Campaign not found" },
+        { error: "Campaign not found", details: fetchError?.message },
         { status: 404 }
       );
     }
+
+    console.log("[preflight] Campaign found:", campaign.name);
 
     // Initialize checks array
     const checks: CheckItem[] = [];
