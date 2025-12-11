@@ -130,12 +130,12 @@ export function PreLaunchChecklist({
     }
   }, [campaignId]);
 
-  // Run checks when dialog opens
+  // Run checks when dialog opens (only once per open)
   useEffect(() => {
-    if (isOpen && !hasRun && !isRunning) {
+    if (isOpen && !hasRun && !isRunning && !error) {
       runPreflightChecks();
     }
-  }, [isOpen, hasRun, isRunning, runPreflightChecks]);
+  }, [isOpen, hasRun, isRunning, error, runPreflightChecks]);
 
   // Reset when dialog closes
   useEffect(() => {
