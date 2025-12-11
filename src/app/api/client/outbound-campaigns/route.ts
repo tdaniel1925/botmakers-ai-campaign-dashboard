@@ -19,6 +19,11 @@ export async function GET(request: Request) {
 
     const clientId = clientAuth.clientId;
 
+    console.log("[client-outbound-campaigns] Fetching campaigns:", {
+      clientId,
+      isImpersonating: clientAuth.isImpersonating
+    });
+
     // Use service client when impersonating to bypass RLS
     const supabase = clientAuth.isImpersonating
       ? await createServiceClient()
@@ -63,6 +68,12 @@ export async function GET(request: Request) {
       .eq("client_id", clientId)
       .order("created_at", { ascending: false });
 
+    console.log("[client-outbound-campaigns] Query result:", {
+      campaignCount: campaigns?.length || 0,
+      error: error?.message,
+      errorCode: error?.code
+    });
+
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
@@ -78,7 +89,7 @@ export async function GET(request: Request) {
         : 0,
     }));
 
-    return NextResponse.json(campaignsWithProgress || []);
+    return NextResponse.json({ campaigns: campaignsWithProgress || [] });
   } catch (error) {
     console.error("Error fetching client campaigns:", error);
     return NextResponse.json(
