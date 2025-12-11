@@ -41,11 +41,14 @@ export async function POST(request: NextRequest) {
         id,
         status,
         vapi_assistant_id,
+        vapi_phone_number_id,
+        vapi_key_source,
+        call_provider,
         agent_config,
         retry_enabled,
         retry_attempts,
         retry_delay_minutes,
-        campaign_phone_numbers (
+        campaign_phone_numbers!campaign_phone_numbers_campaign_id_fkey (
           id,
           phone_number,
           vapi_phone_id,
@@ -66,14 +69,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ status: "campaign_not_active" });
     }
 
-    // Get active phone number
+    // Check for Vapi system keys mode
+    const usingVapiSystemKeys = campaign.call_provider === "vapi" && campaign.vapi_key_source === "system";
+
+    // Get active phone number - for Vapi system keys, use campaign's vapi_phone_number_id
     const activePhone = campaign.campaign_phone_numbers?.find(
       (p: { is_active: boolean }) => p.is_active
     );
-    if (!activePhone || !activePhone.vapi_phone_id) {
+    const hasVapiPhoneNumber = usingVapiSystemKeys && !!campaign.vapi_phone_number_id;
+
+    if (!hasVapiPhoneNumber && (!activePhone || !activePhone.vapi_phone_id)) {
       console.log(`Campaign ${campaignId} has no active phone number`);
       return NextResponse.json({ status: "no_active_phone" });
     }
+
+    // Determine the phone number ID to use for Vapi calls
+    const vapiPhoneNumberId = usingVapiSystemKeys
+      ? campaign.vapi_phone_number_id
+      : activePhone?.vapi_phone_id;
 
     // Get contact details
     const { data: contact, error: contactError } = await supabase
@@ -154,7 +167,7 @@ export async function POST(request: NextRequest) {
         campaign_id: campaignId,
         contact_id: contactId,
         phone_number: phoneNumber,
-        phone_number_id: activePhone.id,
+        phone_number_id: activePhone?.id || null, // May be null for Vapi system keys
         status: "initiated",
         call_attempts: attemptNumber,
       })
@@ -175,7 +188,7 @@ export async function POST(request: NextRequest) {
       // Initiate the call via Vapi
       const vapiCall = await initiateOutboundCall({
         assistantId: campaign.vapi_assistant_id,
-        phoneNumberId: activePhone.vapi_phone_id,
+        phoneNumberId: vapiPhoneNumberId, // Use resolved phone ID (from campaign for system keys, or from activePhone)
         customerNumber: phoneNumber,
         metadata: {
           campaignId,

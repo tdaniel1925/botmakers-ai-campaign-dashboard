@@ -56,6 +56,9 @@ export async function POST(request: NextRequest) {
           is_test_mode,
           test_call_limit,
           vapi_assistant_id,
+          vapi_phone_number_id,
+          vapi_key_source,
+          call_provider,
           campaign_schedules (
             days_of_week,
             start_time,
@@ -63,7 +66,7 @@ export async function POST(request: NextRequest) {
             timezone,
             is_active
           ),
-          campaign_phone_numbers (
+          campaign_phone_numbers!campaign_phone_numbers_campaign_id_fkey (
             id,
             phone_number,
             vapi_phone_id,
@@ -99,11 +102,14 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ status: "no_active_schedule" });
       }
 
-      // Get active phone number
+      // Get active phone number - check both local phone numbers and Vapi system keys
+      const usingVapiSystemKeys = campaign.call_provider === "vapi" && campaign.vapi_key_source === "system";
       const activePhone = campaign.campaign_phone_numbers?.find(
         (p: { is_active: boolean }) => p.is_active
       );
-      if (!activePhone || !activePhone.vapi_phone_id) {
+      const hasVapiPhoneNumber = usingVapiSystemKeys && !!campaign.vapi_phone_number_id;
+
+      if (!hasVapiPhoneNumber && (!activePhone || !activePhone.vapi_phone_id)) {
         console.log(`Campaign ${campaignId} has no active phone number`);
         return NextResponse.json({ status: "no_active_phone" });
       }
