@@ -6,6 +6,34 @@
 import { getApiKeys } from "@/lib/api-keys";
 
 const VAPI_API_URL = "https://api.vapi.ai";
+const DEFAULT_TIMEOUT_MS = 30000; // 30 seconds
+
+/**
+ * Fetch with timeout support
+ */
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit,
+  timeoutMs: number = DEFAULT_TIMEOUT_MS
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    return response;
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error(`Request timed out after ${timeoutMs}ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
 
 interface VapiAssistantConfig {
   name: string;
@@ -158,7 +186,7 @@ export async function createVapiAssistant(
     };
   }
 
-  const response = await fetch(`${VAPI_API_URL}/assistant`, {
+  const response = await fetchWithTimeout(`${VAPI_API_URL}/assistant`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -222,7 +250,7 @@ export async function updateVapiAssistant(
     updatePayload.endCallPhrases = config.endCallConditions;
   }
 
-  const response = await fetch(`${VAPI_API_URL}/assistant/${assistantId}`, {
+  const response = await fetchWithTimeout(`${VAPI_API_URL}/assistant/${assistantId}`, {
     method: "PATCH",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -249,7 +277,7 @@ export async function updateVapiAssistant(
 export async function deleteVapiAssistant(assistantId: string): Promise<void> {
   const apiKey = await getVapiApiKey();
 
-  const response = await fetch(`${VAPI_API_URL}/assistant/${assistantId}`, {
+  const response = await fetchWithTimeout(`${VAPI_API_URL}/assistant/${assistantId}`, {
     method: "DELETE",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -273,7 +301,7 @@ export async function getVapiAssistant(
 ): Promise<VapiAssistant | null> {
   const apiKey = await getVapiApiKey();
 
-  const response = await fetch(`${VAPI_API_URL}/assistant/${assistantId}`, {
+  const response = await fetchWithTimeout(`${VAPI_API_URL}/assistant/${assistantId}`, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${apiKey}`,

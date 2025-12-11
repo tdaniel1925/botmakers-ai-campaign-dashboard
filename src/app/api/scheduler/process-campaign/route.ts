@@ -7,7 +7,7 @@ import {
   isWithinCallingWindow,
   CampaignScheduleConfig,
 } from "@/lib/scheduler/qstash";
-import { outboundCallRateLimiter } from "@/lib/rate-limiter";
+import { outboundCallRateLimiter, campaignProcessingLock } from "@/lib/rate-limiter";
 
 interface ProcessCampaignBody {
   campaignId: string;
@@ -34,228 +34,241 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = await createClient();
+    // Acquire distributed lock to prevent race conditions
+    // when multiple processors try to schedule calls simultaneously
+    const lockAcquired = await campaignProcessingLock.tryAcquire(campaignId);
+    if (!lockAcquired) {
+      console.log(`Campaign ${campaignId} is being processed by another instance, skipping`);
+      return NextResponse.json({ status: "processing_in_progress" });
+    }
 
-    // Get campaign details
-    const { data: campaign, error: campaignError } = await supabase
-      .from("outbound_campaigns")
-      .select(`
-        id,
-        status,
-        max_concurrent_calls,
-        calls_per_minute,
-        is_test_mode,
-        test_call_limit,
-        vapi_assistant_id,
-        campaign_schedules (
-          days_of_week,
-          start_time,
-          end_time,
-          timezone,
-          is_active
-        ),
-        campaign_phone_numbers (
+    try {
+      const supabase = await createClient();
+
+      // Get campaign details
+      const { data: campaign, error: campaignError } = await supabase
+        .from("outbound_campaigns")
+        .select(`
           id,
-          phone_number,
-          vapi_phone_id,
-          is_active
-        )
-      `)
-      .eq("id", campaignId)
-      .single();
+          status,
+          max_concurrent_calls,
+          calls_per_minute,
+          is_test_mode,
+          test_call_limit,
+          vapi_assistant_id,
+          campaign_schedules (
+            days_of_week,
+            start_time,
+            end_time,
+            timezone,
+            is_active
+          ),
+          campaign_phone_numbers (
+            id,
+            phone_number,
+            vapi_phone_id,
+            is_active
+          )
+        `)
+        .eq("id", campaignId)
+        .single();
 
-    if (campaignError || !campaign) {
-      console.log(`Campaign ${campaignId} not found, stopping processor`);
-      return NextResponse.json({ status: "campaign_not_found" });
-    }
+      if (campaignError || !campaign) {
+        console.log(`Campaign ${campaignId} not found, stopping processor`);
+        return NextResponse.json({ status: "campaign_not_found" });
+      }
 
-    // Check if campaign is still active
-    if (campaign.status !== "active") {
-      console.log(`Campaign ${campaignId} is ${campaign.status}, stopping processor`);
-      return NextResponse.json({ status: "campaign_not_active" });
-    }
+      // Check if campaign is still active
+      if (campaign.status !== "active") {
+        console.log(`Campaign ${campaignId} is ${campaign.status}, stopping processor`);
+        return NextResponse.json({ status: "campaign_not_active" });
+      }
 
-    // Get active schedule
-    const activeSchedule = campaign.campaign_schedules?.find(
-      (s: { is_active: boolean }) => s.is_active
-    );
-    if (!activeSchedule) {
-      console.log(`Campaign ${campaignId} has no active schedule`);
-      // Reschedule processor for later
-      await scheduleCampaignProcessor(
-        campaignId,
-        getBaseUrl(request),
-        15 // Check again in 15 minutes
+      // Get active schedule
+      const activeSchedule = campaign.campaign_schedules?.find(
+        (s: { is_active: boolean }) => s.is_active
       );
-      return NextResponse.json({ status: "no_active_schedule" });
-    }
+      if (!activeSchedule) {
+        console.log(`Campaign ${campaignId} has no active schedule`);
+        // Reschedule processor for later
+        await scheduleCampaignProcessor(
+          campaignId,
+          getBaseUrl(request),
+          15 // Check again in 15 minutes
+        );
+        return NextResponse.json({ status: "no_active_schedule" });
+      }
 
-    // Get active phone number
-    const activePhone = campaign.campaign_phone_numbers?.find(
-      (p: { is_active: boolean }) => p.is_active
-    );
-    if (!activePhone || !activePhone.vapi_phone_id) {
-      console.log(`Campaign ${campaignId} has no active phone number`);
-      return NextResponse.json({ status: "no_active_phone" });
-    }
-
-    // Count current active calls
-    const { count: activeCalls } = await supabase
-      .from("campaign_calls")
-      .select("*", { count: "exact", head: true })
-      .eq("campaign_id", campaignId)
-      .in("status", ["initiated", "ringing", "answered"]);
-
-    const availableSlots = campaign.max_concurrent_calls - (activeCalls || 0);
-
-    if (availableSlots <= 0) {
-      // All slots occupied, reschedule
-      await scheduleCampaignProcessor(
-        campaignId,
-        getBaseUrl(request),
-        1 // Check again in 1 minute
+      // Get active phone number
+      const activePhone = campaign.campaign_phone_numbers?.find(
+        (p: { is_active: boolean }) => p.is_active
       );
-      return NextResponse.json({ status: "slots_full", activeCalls });
-    }
+      if (!activePhone || !activePhone.vapi_phone_id) {
+        console.log(`Campaign ${campaignId} has no active phone number`);
+        return NextResponse.json({ status: "no_active_phone" });
+      }
 
-    // Check calls-per-minute rate limit
-    const callsPerMinute = campaign.calls_per_minute || 30; // Default to 30 if not set
-    const rateLimitStatus = await outboundCallRateLimiter.canMakeCall(
-      campaignId,
-      callsPerMinute
-    );
-
-    if (!rateLimitStatus.allowed) {
-      // Rate limit reached, wait until reset
-      const waitSeconds = Math.ceil(rateLimitStatus.resetInMs / 1000);
-      console.log(
-        `Campaign ${campaignId} rate limited (${rateLimitStatus.currentCount}/${callsPerMinute} calls/min). ` +
-        `Resets in ${waitSeconds}s`
-      );
-      await scheduleCampaignProcessor(
-        campaignId,
-        getBaseUrl(request),
-        1 // Check again in 1 minute
-      );
-      return NextResponse.json({
-        status: "rate_limited",
-        currentCount: rateLimitStatus.currentCount,
-        maxCalls: callsPerMinute,
-        resetInMs: rateLimitStatus.resetInMs,
-      });
-    }
-
-    // Calculate how many calls we can make within the rate limit
-    const callsAvailableInWindow = rateLimitStatus.remaining;
-
-    // Check test mode limit
-    let testLimit: number | null = null;
-    if (campaign.is_test_mode) {
-      const { count: testCalls } = await supabase
+      // Count current active calls
+      const { count: activeCalls } = await supabase
         .from("campaign_calls")
         .select("*", { count: "exact", head: true })
-        .eq("campaign_id", campaignId);
-
-      if ((testCalls || 0) >= campaign.test_call_limit) {
-        // Test limit reached, pause campaign
-        await supabase
-          .from("outbound_campaigns")
-          .update({ status: "paused" })
-          .eq("id", campaignId);
-
-        return NextResponse.json({ status: "test_limit_reached" });
-      }
-
-      testLimit = campaign.test_call_limit - (testCalls || 0);
-    }
-
-    // Get pending contacts that can be called now
-    // Consider: available concurrent slots, rate limit window, and test mode limit
-    const contactsToFetch = Math.min(
-      availableSlots,
-      callsAvailableInWindow,
-      testLimit ?? availableSlots
-    );
-
-    const { data: contacts } = await supabase
-      .from("campaign_contacts")
-      .select("id, phone_number, timezone, first_name, last_name")
-      .eq("campaign_id", campaignId)
-      .eq("status", "pending")
-      .limit(contactsToFetch * 3); // Fetch more to account for timezone filtering
-
-    if (!contacts || contacts.length === 0) {
-      // No more contacts, check if campaign is complete
-      const { count: pendingCount } = await supabase
-        .from("campaign_contacts")
-        .select("*", { count: "exact", head: true })
         .eq("campaign_id", campaignId)
-        .eq("status", "pending");
+        .in("status", ["initiated", "ringing", "answered"]);
 
-      if (pendingCount === 0) {
-        await supabase
-          .from("outbound_campaigns")
-          .update({ status: "completed" })
-          .eq("id", campaignId);
+      const availableSlots = campaign.max_concurrent_calls - (activeCalls || 0);
 
-        return NextResponse.json({ status: "campaign_completed" });
+      if (availableSlots <= 0) {
+        // All slots occupied, reschedule
+        await scheduleCampaignProcessor(
+          campaignId,
+          getBaseUrl(request),
+          1 // Check again in 1 minute
+        );
+        return NextResponse.json({ status: "slots_full", activeCalls });
       }
 
-      // Contacts exist but none eligible now, reschedule
+      // Check calls-per-minute rate limit
+      const callsPerMinute = campaign.calls_per_minute || 30; // Default to 30 if not set
+      const rateLimitStatus = await outboundCallRateLimiter.canMakeCall(
+        campaignId,
+        callsPerMinute
+      );
+
+      if (!rateLimitStatus.allowed) {
+        // Rate limit reached, wait until reset
+        const waitSeconds = Math.ceil(rateLimitStatus.resetInMs / 1000);
+        console.log(
+          `Campaign ${campaignId} rate limited (${rateLimitStatus.currentCount}/${callsPerMinute} calls/min). ` +
+          `Resets in ${waitSeconds}s`
+        );
+        await scheduleCampaignProcessor(
+          campaignId,
+          getBaseUrl(request),
+          1 // Check again in 1 minute
+        );
+        return NextResponse.json({
+          status: "rate_limited",
+          currentCount: rateLimitStatus.currentCount,
+          maxCalls: callsPerMinute,
+          resetInMs: rateLimitStatus.resetInMs,
+        });
+      }
+
+      // Calculate how many calls we can make within the rate limit
+      const callsAvailableInWindow = rateLimitStatus.remaining;
+
+      // Check test mode limit
+      let testLimit: number | null = null;
+      if (campaign.is_test_mode) {
+        const { count: testCalls } = await supabase
+          .from("campaign_calls")
+          .select("*", { count: "exact", head: true })
+          .eq("campaign_id", campaignId);
+
+        if ((testCalls || 0) >= campaign.test_call_limit) {
+          // Test limit reached, pause campaign
+          await supabase
+            .from("outbound_campaigns")
+            .update({ status: "paused" })
+            .eq("id", campaignId);
+
+          return NextResponse.json({ status: "test_limit_reached" });
+        }
+
+        testLimit = campaign.test_call_limit - (testCalls || 0);
+      }
+
+      // Get pending contacts that can be called now
+      // Consider: available concurrent slots, rate limit window, and test mode limit
+      const contactsToFetch = Math.min(
+        availableSlots,
+        callsAvailableInWindow,
+        testLimit ?? availableSlots
+      );
+
+      const { data: contacts } = await supabase
+        .from("campaign_contacts")
+        .select("id, phone_number, timezone, first_name, last_name")
+        .eq("campaign_id", campaignId)
+        .eq("status", "pending")
+        .limit(contactsToFetch * 3); // Fetch more to account for timezone filtering
+
+      if (!contacts || contacts.length === 0) {
+        // No more contacts, check if campaign is complete
+        const { count: pendingCount } = await supabase
+          .from("campaign_contacts")
+          .select("*", { count: "exact", head: true })
+          .eq("campaign_id", campaignId)
+          .eq("status", "pending");
+
+        if (pendingCount === 0) {
+          await supabase
+            .from("outbound_campaigns")
+            .update({ status: "completed" })
+            .eq("id", campaignId);
+
+          return NextResponse.json({ status: "campaign_completed" });
+        }
+
+        // Contacts exist but none eligible now, reschedule
+        await scheduleCampaignProcessor(
+          campaignId,
+          getBaseUrl(request),
+          5
+        );
+        return NextResponse.json({ status: "no_eligible_contacts" });
+      }
+
+      // Filter contacts by timezone and schedule
+      const scheduleConfig: CampaignScheduleConfig = {
+        campaignId,
+        daysOfWeek: activeSchedule.days_of_week,
+        startTime: activeSchedule.start_time,
+        endTime: activeSchedule.end_time,
+        timezone: activeSchedule.timezone,
+        maxConcurrentCalls: campaign.max_concurrent_calls,
+      };
+
+      const eligibleContacts = contacts.filter((contact) => {
+        const timezone = contact.timezone || activeSchedule.timezone;
+        return isWithinCallingWindow(scheduleConfig, timezone);
+      });
+
+      // Schedule calls for eligible contacts
+      const callsToSchedule = eligibleContacts.slice(0, contactsToFetch).map((contact) => ({
+        campaignId,
+        contactId: contact.id,
+        phoneNumber: contact.phone_number,
+        scheduledFor: new Date(),
+        attemptNumber: 1,
+      }));
+
+      if (callsToSchedule.length > 0) {
+        const result = await scheduleCallBatch(callsToSchedule, getBaseUrl(request));
+        console.log(`Scheduled ${result.scheduled} calls for campaign ${campaignId}`);
+
+        // Record each scheduled call in the rate limiter
+        for (let i = 0; i < result.scheduled; i++) {
+          await outboundCallRateLimiter.recordCall(campaignId, callsPerMinute);
+        }
+      }
+
+      // Reschedule processor
       await scheduleCampaignProcessor(
         campaignId,
         getBaseUrl(request),
-        5
+        1 // Check again in 1 minute for continuous processing
       );
-      return NextResponse.json({ status: "no_eligible_contacts" });
+
+      return NextResponse.json({
+        status: "processed",
+        scheduled: callsToSchedule.length,
+        availableSlots,
+      });
+    } finally {
+      // Always release the lock when done
+      await campaignProcessingLock.release(campaignId);
     }
-
-    // Filter contacts by timezone and schedule
-    const scheduleConfig: CampaignScheduleConfig = {
-      campaignId,
-      daysOfWeek: activeSchedule.days_of_week,
-      startTime: activeSchedule.start_time,
-      endTime: activeSchedule.end_time,
-      timezone: activeSchedule.timezone,
-      maxConcurrentCalls: campaign.max_concurrent_calls,
-    };
-
-    const eligibleContacts = contacts.filter((contact) => {
-      const timezone = contact.timezone || activeSchedule.timezone;
-      return isWithinCallingWindow(scheduleConfig, timezone);
-    });
-
-    // Schedule calls for eligible contacts
-    const callsToSchedule = eligibleContacts.slice(0, contactsToFetch).map((contact) => ({
-      campaignId,
-      contactId: contact.id,
-      phoneNumber: contact.phone_number,
-      scheduledFor: new Date(),
-      attemptNumber: 1,
-    }));
-
-    if (callsToSchedule.length > 0) {
-      const result = await scheduleCallBatch(callsToSchedule, getBaseUrl(request));
-      console.log(`Scheduled ${result.scheduled} calls for campaign ${campaignId}`);
-
-      // Record each scheduled call in the rate limiter
-      for (let i = 0; i < result.scheduled; i++) {
-        await outboundCallRateLimiter.recordCall(campaignId, callsPerMinute);
-      }
-    }
-
-    // Reschedule processor
-    await scheduleCampaignProcessor(
-      campaignId,
-      getBaseUrl(request),
-      1 // Check again in 1 minute for continuous processing
-    );
-
-    return NextResponse.json({
-      status: "processed",
-      scheduled: callsToSchedule.length,
-      availableSlots,
-    });
   } catch (error) {
     console.error("Error processing campaign:", error);
     return NextResponse.json(

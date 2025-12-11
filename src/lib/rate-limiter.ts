@@ -659,6 +659,92 @@ class OutboundCallRateLimiter {
 
 export const outboundCallRateLimiter = new OutboundCallRateLimiter();
 
+// ============= Campaign Processing Lock =============
+
+/**
+ * Distributed lock for campaign processing to prevent race conditions
+ * when multiple processors try to schedule calls for the same campaign
+ */
+class CampaignProcessingLock {
+  private redis: Redis | null;
+  private inMemoryLocks: Map<string, number> = new Map();
+  private readonly lockTtlMs: number = 30000; // 30 second lock
+
+  constructor() {
+    this.redis = redis;
+
+    // Cleanup stale in-memory locks periodically
+    if (typeof setInterval !== "undefined") {
+      setInterval(() => this.cleanupMemory(), 10000);
+    }
+  }
+
+  /**
+   * Try to acquire a lock for processing a campaign
+   * Returns true if lock acquired, false if already locked
+   */
+  async tryAcquire(campaignId: string): Promise<boolean> {
+    const lockKey = `campaign:lock:${campaignId}`;
+
+    if (this.redis) {
+      try {
+        // Use SET NX with TTL for atomic lock acquisition
+        const result = await this.redis.set(lockKey, Date.now().toString(), {
+          nx: true,
+          px: this.lockTtlMs,
+        });
+        return result === "OK";
+      } catch (error) {
+        console.warn("Redis lock failed, using in-memory fallback:", error);
+        return this.tryAcquireMemory(campaignId);
+      }
+    }
+
+    return this.tryAcquireMemory(campaignId);
+  }
+
+  /**
+   * Release a lock for a campaign
+   */
+  async release(campaignId: string): Promise<void> {
+    const lockKey = `campaign:lock:${campaignId}`;
+
+    if (this.redis) {
+      try {
+        await this.redis.del(lockKey);
+      } catch (error) {
+        console.warn("Redis unlock failed:", error);
+      }
+    }
+
+    this.inMemoryLocks.delete(campaignId);
+  }
+
+  private tryAcquireMemory(campaignId: string): boolean {
+    const now = Date.now();
+    const existingLock = this.inMemoryLocks.get(campaignId);
+
+    // If no lock or lock expired, acquire it
+    if (!existingLock || now - existingLock > this.lockTtlMs) {
+      this.inMemoryLocks.set(campaignId, now);
+      return true;
+    }
+
+    return false;
+  }
+
+  private cleanupMemory(): void {
+    const now = Date.now();
+    for (const [key, timestamp] of this.inMemoryLocks.entries()) {
+      if (now - timestamp > this.lockTtlMs) {
+        this.inMemoryLocks.delete(key);
+      }
+    }
+  }
+}
+
+export const campaignProcessingLock = new CampaignProcessingLock();
+
 // ============= Health Check =============
 
 export async function getRateLimiterHealth(): Promise<{

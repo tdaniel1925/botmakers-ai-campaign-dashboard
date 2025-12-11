@@ -6,6 +6,34 @@
 import { getApiKeys } from "@/lib/api-keys";
 
 const VAPI_API_URL = "https://api.vapi.ai";
+const DEFAULT_TIMEOUT_MS = 30000; // 30 seconds
+
+/**
+ * Fetch with timeout support
+ */
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit,
+  timeoutMs: number = DEFAULT_TIMEOUT_MS
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    return response;
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error(`Request timed out after ${timeoutMs}ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
 
 interface VapiPhoneNumber {
   id: string;
@@ -61,7 +89,7 @@ async function getVapiApiKey(): Promise<string> {
 export async function listVapiPhoneNumbers(): Promise<VapiPhoneNumber[]> {
   const apiKey = await getVapiApiKey();
 
-  const response = await fetch(`${VAPI_API_URL}/phone-number`, {
+  const response = await fetchWithTimeout(`${VAPI_API_URL}/phone-number`, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -88,7 +116,7 @@ export async function getVapiPhoneNumber(
 ): Promise<VapiPhoneNumber | null> {
   const apiKey = await getVapiApiKey();
 
-  const response = await fetch(`${VAPI_API_URL}/phone-number/${phoneNumberId}`, {
+  const response = await fetchWithTimeout(`${VAPI_API_URL}/phone-number/${phoneNumberId}`, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -138,7 +166,7 @@ export async function provisionVapiPhoneNumber(
     payload.serverUrl = config.serverUrl;
   }
 
-  const response = await fetch(`${VAPI_API_URL}/phone-number`, {
+  const response = await fetchWithTimeout(`${VAPI_API_URL}/phone-number`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -191,7 +219,7 @@ export async function importTwilioPhoneNumber(
   }
 
   // Use the dedicated Twilio import endpoint
-  const response = await fetch(`${VAPI_API_URL}/phone-number/import/twilio`, {
+  const response = await fetchWithTimeout(`${VAPI_API_URL}/phone-number/import/twilio`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -239,7 +267,7 @@ export async function updateVapiPhoneNumber(
     payload.serverUrl = updates.serverUrl;
   }
 
-  const response = await fetch(`${VAPI_API_URL}/phone-number/${phoneNumberId}`, {
+  const response = await fetchWithTimeout(`${VAPI_API_URL}/phone-number/${phoneNumberId}`, {
     method: "PATCH",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -266,7 +294,7 @@ export async function updateVapiPhoneNumber(
 export async function deleteVapiPhoneNumber(phoneNumberId: string): Promise<void> {
   const apiKey = await getVapiApiKey();
 
-  const response = await fetch(`${VAPI_API_URL}/phone-number/${phoneNumberId}`, {
+  const response = await fetchWithTimeout(`${VAPI_API_URL}/phone-number/${phoneNumberId}`, {
     method: "DELETE",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -320,7 +348,7 @@ export async function searchAvailablePhoneNumbers(
 ): Promise<Array<{ phoneNumber: string; friendlyName: string; locality: string; region: string }>> {
   const url = `https://api.twilio.com/2010-04-01/Accounts/${twilioAccountSid}/AvailablePhoneNumbers/US/Local.json?AreaCode=${areaCode}&VoiceEnabled=true&Limit=${limit}`;
 
-  const response = await fetch(url, {
+  const response = await fetchWithTimeout(url, {
     headers: {
       Authorization: `Basic ${Buffer.from(`${twilioAccountSid}:${twilioAuthToken}`).toString("base64")}`,
     },
@@ -357,7 +385,7 @@ export async function purchaseTwilioPhoneNumber(
     formData.append("FriendlyName", friendlyName);
   }
 
-  const response = await fetch(url, {
+  const response = await fetchWithTimeout(url, {
     method: "POST",
     headers: {
       Authorization: `Basic ${Buffer.from(`${twilioAccountSid}:${twilioAuthToken}`).toString("base64")}`,

@@ -93,6 +93,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ status: "contact_not_eligible" });
     }
 
+    // Check for existing active calls for this contact to prevent duplicates
+    const { count: existingActiveCalls } = await supabase
+      .from("campaign_calls")
+      .select("*", { count: "exact", head: true })
+      .eq("contact_id", contactId)
+      .in("status", ["initiated", "ringing", "answered"]);
+
+    if (existingActiveCalls && existingActiveCalls > 0) {
+      console.log(`Contact ${contactId} already has an active call, skipping`);
+      return NextResponse.json({ status: "call_already_active" });
+    }
+
     // Mark contact as in progress
     await supabase
       .from("campaign_contacts")

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { scheduleSmsFollowup, scheduleRetryCall } from "@/lib/scheduler/qstash";
+import { webhookDeduplicator } from "@/lib/rate-limiter";
 
 /**
  * POST /api/webhooks/vapi-outbound
@@ -25,6 +26,16 @@ export async function POST(request: NextRequest) {
     if (!callRecordId) {
       console.log("No call record ID in metadata, skipping");
       return NextResponse.json({ status: "no_call_record" });
+    }
+
+    // Deduplicate webhooks - use callRecordId + message type as key
+    const vapiCallId = message.call?.id || callRecordId;
+    const dedupeKey = `${vapiCallId}:${message.type}`;
+    const isDuplicate = await webhookDeduplicator.isDuplicate(campaignId || "vapi", dedupeKey);
+
+    if (isDuplicate) {
+      console.log(`Duplicate webhook detected for ${dedupeKey}, skipping`);
+      return NextResponse.json({ status: "duplicate", key: dedupeKey });
     }
 
     // Handle different message types

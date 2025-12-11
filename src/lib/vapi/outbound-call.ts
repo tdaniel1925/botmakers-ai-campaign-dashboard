@@ -6,6 +6,35 @@
 import { getApiKeys } from "@/lib/api-keys";
 
 const VAPI_API_URL = "https://api.vapi.ai";
+const DEFAULT_TIMEOUT_MS = 30000; // 30 seconds
+
+/**
+ * Fetch with timeout support
+ * Prevents hanging requests from blocking the call processing pipeline
+ */
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit,
+  timeoutMs: number = DEFAULT_TIMEOUT_MS
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    return response;
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error(`Request timed out after ${timeoutMs}ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
 
 interface OutboundCallConfig {
   assistantId: string;
@@ -78,7 +107,7 @@ export async function initiateOutboundCall(
     payload.assistantOverrides = config.assistantOverrides;
   }
 
-  const response = await fetch(`${VAPI_API_URL}/call`, {
+  const response = await fetchWithTimeout(`${VAPI_API_URL}/call`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -105,7 +134,7 @@ export async function initiateOutboundCall(
 export async function getCallStatus(callId: string): Promise<VapiCall> {
   const apiKey = await getVapiApiKey();
 
-  const response = await fetch(`${VAPI_API_URL}/call/${callId}`, {
+  const response = await fetchWithTimeout(`${VAPI_API_URL}/call/${callId}`, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -126,7 +155,7 @@ export async function getCallStatus(callId: string): Promise<VapiCall> {
 export async function endCall(callId: string): Promise<void> {
   const apiKey = await getVapiApiKey();
 
-  const response = await fetch(`${VAPI_API_URL}/call/${callId}`, {
+  const response = await fetchWithTimeout(`${VAPI_API_URL}/call/${callId}`, {
     method: "DELETE",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -152,7 +181,7 @@ export async function listActiveCalls(
   }
   params.set("status", "in-progress");
 
-  const response = await fetch(`${VAPI_API_URL}/call?${params}`, {
+  const response = await fetchWithTimeout(`${VAPI_API_URL}/call?${params}`, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -175,7 +204,7 @@ export async function getVapiPhoneNumberId(
 ): Promise<string | null> {
   const apiKey = await getVapiApiKey();
 
-  const response = await fetch(`${VAPI_API_URL}/phone-number`, {
+  const response = await fetchWithTimeout(`${VAPI_API_URL}/phone-number`, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -204,7 +233,7 @@ export async function importPhoneNumberToVapi(
 ): Promise<string> {
   const apiKey = await getVapiApiKey();
 
-  const response = await fetch(`${VAPI_API_URL}/phone-number`, {
+  const response = await fetchWithTimeout(`${VAPI_API_URL}/phone-number`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
