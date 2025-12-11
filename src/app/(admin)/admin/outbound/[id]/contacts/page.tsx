@@ -80,6 +80,25 @@ import { formatDistanceToNow } from "date-fns";
 const MAX_FILE_SIZE = 1024 * 1024 * 1024;
 const MAX_FILE_SIZE_DISPLAY = "1 GB";
 
+// Inspirational quotes about time and value
+const INSPIRATIONAL_QUOTES = [
+  { quote: "Time is more valuable than money. You can get more money, but you cannot get more time.", author: "Jim Rohn" },
+  { quote: "The key is in not spending time, but in investing it.", author: "Stephen R. Covey" },
+  { quote: "Lost time is never found again.", author: "Benjamin Franklin" },
+  { quote: "Time is what we want most, but what we use worst.", author: "William Penn" },
+  { quote: "The two most powerful warriors are patience and time.", author: "Leo Tolstoy" },
+  { quote: "Time is the scarcest resource and unless it is managed nothing else can be managed.", author: "Peter Drucker" },
+  { quote: "Don't count every hour in the day, make every hour in the day count.", author: "Unknown" },
+  { quote: "Your time is limited, don't waste it living someone else's life.", author: "Steve Jobs" },
+  { quote: "The best time to plant a tree was 20 years ago. The second best time is now.", author: "Chinese Proverb" },
+  { quote: "Time is a created thing. To say 'I don't have time' is to say 'I don't want to.'", author: "Lao Tzu" },
+  { quote: "It is not that we have a short time to live, but that we waste a lot of it.", author: "Seneca" },
+  { quote: "Time flies over us, but leaves its shadow behind.", author: "Nathaniel Hawthorne" },
+  { quote: "The bad news is time flies. The good news is you're the pilot.", author: "Michael Altshuler" },
+  { quote: "Time is the most valuable thing a man can spend.", author: "Theophrastus" },
+  { quote: "Until we can manage time, we can manage nothing else.", author: "Peter Drucker" },
+];
+
 // US area code to timezone mapping (simplified for common cases)
 const AREA_CODE_TIMEZONE: Record<string, string> = {
   // Eastern
@@ -266,7 +285,13 @@ export default function ContactsPage({
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStatus, setUploadStatus] = useState("");
   const [uploadReport, setUploadReport] = useState<UploadReport | null>(null);
+  const [uploadedCount, setUploadedCount] = useState(0);
+  const [uploadStartTime, setUploadStartTime] = useState<number | null>(null);
+  const [currentQuote, setCurrentQuote] = useState(() =>
+    INSPIRATIONAL_QUOTES[Math.floor(Math.random() * INSPIRATIONAL_QUOTES.length)]
+  );
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const quoteIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Variable mapping for provider
   const [variableMappings, setVariableMappings] = useState<VariableMapping[]>([]);
@@ -560,7 +585,14 @@ export default function ContactsPage({
     setIsUploading(true);
     setUploadStep("processing");
     setUploadProgress(0);
+    setUploadedCount(0);
+    setUploadStartTime(Date.now());
     setUploadStatus("Preparing contacts...");
+
+    // Start rotating quotes every 8 seconds
+    quoteIntervalRef.current = setInterval(() => {
+      setCurrentQuote(INSPIRATIONAL_QUOTES[Math.floor(Math.random() * INSPIRATIONAL_QUOTES.length)]);
+    }, 8000);
 
     const report: UploadReport = {
       totalRows: csvData.length,
@@ -729,9 +761,21 @@ export default function ContactsPage({
         report.duplicates += result.duplicates;
         report.invalid += result.failed;
 
+        // Update uploaded count for progress display
+        setUploadedCount((batchIndex + 1) * batchSize > processedContacts.length
+          ? processedContacts.length
+          : (batchIndex + 1) * batchSize
+        );
+
         if (result.errors) {
           report.errors.push(...result.errors);
         }
+      }
+
+      // Stop quote rotation
+      if (quoteIntervalRef.current) {
+        clearInterval(quoteIntervalRef.current);
+        quoteIntervalRef.current = null;
       }
 
       setUploadProgress(100);
@@ -762,6 +806,12 @@ export default function ContactsPage({
     setUploadProgress(0);
     setUploadStatus("");
     setUploadReport(null);
+    setUploadedCount(0);
+    setUploadStartTime(null);
+    if (quoteIntervalRef.current) {
+      clearInterval(quoteIntervalRef.current);
+      quoteIntervalRef.current = null;
+    }
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -1602,10 +1652,20 @@ export default function ContactsPage({
           {/* Processing Step */}
           {uploadStep === "processing" && (
             <div className="space-y-6 py-4">
+              {/* Brief explanation */}
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                <p className="text-sm text-blue-700 dark:text-blue-300">
+                  Your contacts are being processed in batches and uploaded to the server.
+                  Each contact is validated, phone numbers are normalized to E.164 format,
+                  and timezones are auto-detected from area codes when not provided.
+                </p>
+              </div>
+
               <div className="text-center">
                 <Loader2 className="h-12 w-12 animate-spin mx-auto mb-4 text-primary" />
-                <p className="font-medium">{uploadStatus}</p>
+                <p className="font-medium text-lg">{uploadStatus}</p>
               </div>
+
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span>Progress</span>
@@ -1613,10 +1673,51 @@ export default function ContactsPage({
                 </div>
                 <Progress value={uploadProgress} className="h-3" />
               </div>
+
+              {/* Detailed progress stats */}
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div className="bg-muted rounded-lg p-3">
+                  <div className="text-2xl font-bold text-green-600">{uploadedCount.toLocaleString()}</div>
+                  <div className="text-xs text-muted-foreground">Processed</div>
+                </div>
+                <div className="bg-muted rounded-lg p-3">
+                  <div className="text-2xl font-bold text-orange-600">{(csvData.length - uploadedCount).toLocaleString()}</div>
+                  <div className="text-xs text-muted-foreground">Remaining</div>
+                </div>
+                <div className="bg-muted rounded-lg p-3">
+                  <div className="text-2xl font-bold text-blue-600">
+                    {uploadStartTime && uploadedCount > 0 ? (
+                      (() => {
+                        const elapsed = (Date.now() - uploadStartTime) / 1000;
+                        const rate = uploadedCount / elapsed;
+                        const remaining = csvData.length - uploadedCount;
+                        const estimatedSeconds = remaining / rate;
+                        if (estimatedSeconds < 60) return `${Math.ceil(estimatedSeconds)}s`;
+                        if (estimatedSeconds < 3600) return `${Math.ceil(estimatedSeconds / 60)}m`;
+                        return `${Math.floor(estimatedSeconds / 3600)}h ${Math.ceil((estimatedSeconds % 3600) / 60)}m`;
+                      })()
+                    ) : (
+                      "..."
+                    )}
+                  </div>
+                  <div className="text-xs text-muted-foreground">Est. Time Left</div>
+                </div>
+              </div>
+
               <div className="bg-muted rounded-lg p-3 text-sm">
                 <div className="flex items-center gap-2">
                   <Clock className="h-4 w-4" />
-                  <span>Processing {csvData.length.toLocaleString()} contacts...</span>
+                  <span>Processing {csvData.length.toLocaleString()} contacts in batches of 500...</span>
+                </div>
+              </div>
+
+              {/* Inspirational quote */}
+              <div className="border-t pt-4">
+                <div className="bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 rounded-lg p-4 text-center">
+                  <p className="text-sm italic text-gray-700 dark:text-gray-300 mb-2">
+                    &quot;{currentQuote.quote}&quot;
+                  </p>
+                  <p className="text-xs text-muted-foreground">— {currentQuote.author}</p>
                 </div>
               </div>
             </div>
