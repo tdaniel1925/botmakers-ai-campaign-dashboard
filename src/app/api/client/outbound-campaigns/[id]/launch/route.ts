@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { createVapiAssistant } from "@/lib/vapi/assistant";
 import { scheduleCampaignProcessor } from "@/lib/scheduler/qstash";
+import { getClientId } from "@/lib/client-auth";
 
 function getBaseUrl(request: NextRequest): string {
   const host = request.headers.get("host") || "localhost:3000";
@@ -23,26 +24,28 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
-    const supabase = await createClient();
 
-    // Get authenticated user
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
+    // Get client ID (supports impersonation)
+    const clientAuth = await getClientId(request);
+    if (!clientAuth.authenticated || !clientAuth.clientId) {
       return NextResponse.json(
-        { error: "Not authenticated" },
-        { status: 401 }
+        { error: clientAuth.error || "Not authenticated" },
+        { status: clientAuth.error === "Not authenticated" ? 401 : 403 }
       );
     }
 
-    // Get client by email
+    const clientId = clientAuth.clientId;
+
+    // Use service client when impersonating to bypass RLS
+    const supabase = clientAuth.isImpersonating
+      ? await createServiceClient()
+      : await createClient();
+
+    // Get client info for logging
     const { data: client, error: clientError } = await supabase
       .from("clients")
       .select("id, name, email")
-      .eq("email", user.email)
+      .eq("id", clientId)
       .single();
 
     if (clientError || !client) {
@@ -71,7 +74,7 @@ export async function POST(
       `
       )
       .eq("id", id)
-      .eq("client_id", client.id)
+      .eq("client_id", clientId)
       .single();
 
     if (fetchError || !campaign) {

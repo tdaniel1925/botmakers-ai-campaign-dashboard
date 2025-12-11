@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { getClientId } from "@/lib/client-auth";
 
 /**
  * GET /api/client/outbound-campaigns/[id]/contacts
@@ -11,41 +12,29 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const supabase = await createClient();
 
-    // Get authenticated user
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
+    // Get client ID (supports impersonation)
+    const clientAuth = await getClientId(request);
+    if (!clientAuth.authenticated || !clientAuth.clientId) {
       return NextResponse.json(
-        { error: "Not authenticated" },
-        { status: 401 }
+        { error: clientAuth.error || "Not authenticated" },
+        { status: clientAuth.error === "Not authenticated" ? 401 : 403 }
       );
     }
 
-    // Get client by email
-    const { data: client, error: clientError } = await supabase
-      .from("clients")
-      .select("id")
-      .eq("email", user.email)
-      .single();
+    const clientId = clientAuth.clientId;
 
-    if (clientError || !client) {
-      return NextResponse.json(
-        { error: "Client not found" },
-        { status: 404 }
-      );
-    }
+    // Use service client when impersonating to bypass RLS
+    const supabase = clientAuth.isImpersonating
+      ? await createServiceClient()
+      : await createClient();
 
     // Verify campaign belongs to this client
     const { data: campaign, error: campaignError } = await supabase
       .from("outbound_campaigns")
       .select("id")
       .eq("id", id)
-      .eq("client_id", client.id)
+      .eq("client_id", clientId)
       .single();
 
     if (campaignError || !campaign) {
@@ -121,34 +110,22 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
-    const supabase = await createClient();
 
-    // Get authenticated user
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
+    // Get client ID (supports impersonation)
+    const clientAuth = await getClientId(request);
+    if (!clientAuth.authenticated || !clientAuth.clientId) {
       return NextResponse.json(
-        { error: "Not authenticated" },
-        { status: 401 }
+        { error: clientAuth.error || "Not authenticated" },
+        { status: clientAuth.error === "Not authenticated" ? 401 : 403 }
       );
     }
 
-    // Get client by email
-    const { data: client, error: clientError } = await supabase
-      .from("clients")
-      .select("id")
-      .eq("email", user.email)
-      .single();
+    const clientId = clientAuth.clientId;
 
-    if (clientError || !client) {
-      return NextResponse.json(
-        { error: "Client not found" },
-        { status: 404 }
-      );
-    }
+    // Use service client when impersonating to bypass RLS
+    const supabase = clientAuth.isImpersonating
+      ? await createServiceClient()
+      : await createClient();
 
     const body = await request.json();
     const { phone_number, first_name, last_name, email, custom_data } = body;
@@ -165,7 +142,7 @@ export async function POST(
       .from("outbound_campaigns")
       .select("id, status")
       .eq("id", id)
-      .eq("client_id", client.id)
+      .eq("client_id", clientId)
       .single();
 
     if (campaignError || !campaign) {
@@ -239,34 +216,22 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const supabase = await createClient();
 
-    // Get authenticated user
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
+    // Get client ID (supports impersonation)
+    const clientAuth = await getClientId(request);
+    if (!clientAuth.authenticated || !clientAuth.clientId) {
       return NextResponse.json(
-        { error: "Not authenticated" },
-        { status: 401 }
+        { error: clientAuth.error || "Not authenticated" },
+        { status: clientAuth.error === "Not authenticated" ? 401 : 403 }
       );
     }
 
-    // Get client by email
-    const { data: client, error: clientError } = await supabase
-      .from("clients")
-      .select("id")
-      .eq("email", user.email)
-      .single();
+    const clientId = clientAuth.clientId;
 
-    if (clientError || !client) {
-      return NextResponse.json(
-        { error: "Client not found" },
-        { status: 404 }
-      );
-    }
+    // Use service client when impersonating to bypass RLS
+    const supabase = clientAuth.isImpersonating
+      ? await createServiceClient()
+      : await createClient();
 
     const body = await request.json();
     const { contact_ids, delete_all_pending } = body;
@@ -276,7 +241,7 @@ export async function DELETE(
       .from("outbound_campaigns")
       .select("id, status")
       .eq("id", id)
-      .eq("client_id", client.id)
+      .eq("client_id", clientId)
       .single();
 
     if (campaignError || !campaign) {
