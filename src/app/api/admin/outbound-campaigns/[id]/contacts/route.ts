@@ -27,10 +27,10 @@ export async function GET(
 
     const supabase = await createServiceClient();
 
-    // Verify campaign exists
+    // Verify campaign exists and get total_contacts for fast pagination
     const { data: campaign, error: campaignError } = await supabase
       .from("outbound_campaigns")
-      .select("id, name")
+      .select("id, name, total_contacts")
       .eq("id", id)
       .single();
 
@@ -41,10 +41,16 @@ export async function GET(
       );
     }
 
-    // Build query
+    // For filtered queries, we need to count; for unfiltered, use campaign.total_contacts
+    const hasFilters = status || outcome || search;
+
+    // Build query - only use count for filtered queries
     let query = supabase
       .from("campaign_contacts")
-      .select("*", { count: "exact" })
+      .select(
+        "id, campaign_id, phone_number, first_name, last_name, email, status, outcome, call_attempts, last_called_at, timezone, created_at",
+        { count: hasFilters ? "exact" : undefined }
+      )
       .eq("campaign_id", id)
       .order("created_at", { ascending: false });
 
@@ -73,13 +79,16 @@ export async function GET(
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    // Use campaign total_contacts for unfiltered queries, otherwise use count
+    const total = hasFilters ? (count || 0) : (campaign.total_contacts || 0);
+
     return NextResponse.json({
       contacts,
       pagination: {
         page,
         limit,
-        total: count || 0,
-        totalPages: Math.ceil((count || 0) / limit),
+        total,
+        totalPages: Math.ceil(total / limit),
       },
     });
   } catch (error) {
