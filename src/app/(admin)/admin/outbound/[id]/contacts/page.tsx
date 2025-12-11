@@ -1212,14 +1212,14 @@ export default function ContactsPage({
                   <div className="space-y-2">
                     <Label>First Name Column</Label>
                     <Select
-                      value={columnMapping.first_name}
-                      onValueChange={(value) => setColumnMapping({ ...columnMapping, first_name: value })}
+                      value={columnMapping.first_name || "__none__"}
+                      onValueChange={(value) => setColumnMapping({ ...columnMapping, first_name: value === "__none__" ? "" : value })}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Select column" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">— None —</SelectItem>
+                        <SelectItem value="__none__">— None —</SelectItem>
                         {csvHeaders.map((header) => (
                           <SelectItem key={header} value={header}>
                             {header}
@@ -1231,14 +1231,14 @@ export default function ContactsPage({
                   <div className="space-y-2">
                     <Label>Last Name Column</Label>
                     <Select
-                      value={columnMapping.last_name}
-                      onValueChange={(value) => setColumnMapping({ ...columnMapping, last_name: value })}
+                      value={columnMapping.last_name || "__none__"}
+                      onValueChange={(value) => setColumnMapping({ ...columnMapping, last_name: value === "__none__" ? "" : value })}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Select column" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">— None —</SelectItem>
+                        <SelectItem value="__none__">— None —</SelectItem>
                         {csvHeaders.map((header) => (
                           <SelectItem key={header} value={header}>
                             {header}
@@ -1253,14 +1253,14 @@ export default function ContactsPage({
                   <div className="space-y-2">
                     <Label>Full Name Column (optional)</Label>
                     <Select
-                      value={columnMapping.full_name}
-                      onValueChange={(value) => setColumnMapping({ ...columnMapping, full_name: value })}
+                      value={columnMapping.full_name || "__none__"}
+                      onValueChange={(value) => setColumnMapping({ ...columnMapping, full_name: value === "__none__" ? "" : value })}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Select column" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">— None —</SelectItem>
+                        <SelectItem value="__none__">— None —</SelectItem>
                         {csvHeaders.map((header) => (
                           <SelectItem key={header} value={header}>
                             {header}
@@ -1277,14 +1277,14 @@ export default function ContactsPage({
                   <div className="space-y-2">
                     <Label>Email Column</Label>
                     <Select
-                      value={columnMapping.email}
-                      onValueChange={(value) => setColumnMapping({ ...columnMapping, email: value })}
+                      value={columnMapping.email || "__none__"}
+                      onValueChange={(value) => setColumnMapping({ ...columnMapping, email: value === "__none__" ? "" : value })}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Select column" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">— None —</SelectItem>
+                        <SelectItem value="__none__">— None —</SelectItem>
                         {csvHeaders.map((header) => (
                           <SelectItem key={header} value={header}>
                             {header}
@@ -1299,14 +1299,14 @@ export default function ContactsPage({
                       Timezone Column
                     </Label>
                     <Select
-                      value={columnMapping.timezone}
-                      onValueChange={(value) => setColumnMapping({ ...columnMapping, timezone: value })}
+                      value={columnMapping.timezone || "__none__"}
+                      onValueChange={(value) => setColumnMapping({ ...columnMapping, timezone: value === "__none__" ? "" : value })}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Auto-detect from phone" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">— Auto-detect from phone —</SelectItem>
+                        <SelectItem value="__none__">— Auto-detect from phone —</SelectItem>
                         {csvHeaders.map((header) => (
                           <SelectItem key={header} value={header}>
                             {header}
