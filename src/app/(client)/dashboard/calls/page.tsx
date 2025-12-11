@@ -370,9 +370,9 @@ export default function CallsPage() {
       </div>
 
       {/* Main Content */}
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="flex gap-6">
         {/* Calls List */}
-        <div className={selectedCall ? "lg:col-span-2" : "lg:col-span-3"}>
+        <div className={`flex-1 min-w-0 ${selectedCall ? "max-w-[calc(100%-400px)]" : ""}`}>
           <Card>
             <CardHeader>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -392,7 +392,7 @@ export default function CallsPage() {
                         setSearchQuery(e.target.value);
                         setPage(1);
                       }}
-                      className="pl-10 w-[180px]"
+                      className="pl-10 w-[150px]"
                     />
                   </div>
                   <Select
@@ -402,7 +402,7 @@ export default function CallsPage() {
                       setPage(1);
                     }}
                   >
-                    <SelectTrigger className="w-[130px]">
+                    <SelectTrigger className="w-[110px]">
                       <SelectValue placeholder="Type" />
                     </SelectTrigger>
                     <SelectContent>
@@ -419,11 +419,11 @@ export default function CallsPage() {
                       setPage(1);
                     }}
                   >
-                    <SelectTrigger className="w-[130px]">
-                      <SelectValue placeholder="Sentiment" />
+                    <SelectTrigger className="w-[100px]">
+                      <SelectValue placeholder="All..." />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Sentiments</SelectItem>
+                      <SelectItem value="all">All</SelectItem>
                       <SelectItem value="positive">Positive</SelectItem>
                       <SelectItem value="negative">Negative</SelectItem>
                       <SelectItem value="neutral">Neutral</SelectItem>
@@ -449,100 +449,152 @@ export default function CallsPage() {
                 </div>
               ) : (
                 <>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        {isSelectionMode && <TableHead className="w-[40px]" />}
-                        <TableHead>Type</TableHead>
-                        <TableHead>Campaign</TableHead>
-                        <TableHead>Phone</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Sentiment</TableHead>
-                        <TableHead>Duration</TableHead>
-                        <TableHead>Time</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
+                  {/* Card-based list view when sidebar is open */}
+                  {selectedCall ? (
+                    <div className="space-y-2">
                       {calls.map((call) => {
                         const callKey = `${call.campaign_type}-${call.id}`;
+                        const isSelected = selectedCall?.id === call.id && selectedCall?.campaign_type === call.campaign_type;
                         return (
-                          <TableRow
+                          <div
                             key={callKey}
-                            className={`cursor-pointer hover:bg-muted/50 ${
-                              selectedCall?.id === call.id &&
-                              selectedCall?.campaign_type === call.campaign_type
-                                ? "bg-muted"
-                                : ""
+                            className={`p-3 rounded-lg border cursor-pointer transition-colors ${
+                              isSelected
+                                ? "bg-primary/10 border-primary"
+                                : "hover:bg-muted/50 border-transparent bg-muted/30"
                             }`}
                             onClick={() => {
                               if (isSelectionMode) {
-                                handleSelectCall(
-                                  callKey,
-                                  !selectedCalls.has(callKey)
-                                );
+                                handleSelectCall(callKey, !selectedCalls.has(callKey));
                               } else {
                                 setSelectedCall(call);
                               }
                             }}
                           >
-                            {isSelectionMode && (
-                              <TableCell>
-                                <input
-                                  type="checkbox"
-                                  checked={selectedCalls.has(callKey)}
-                                  onChange={(e) =>
-                                    handleSelectCall(callKey, e.target.checked)
-                                  }
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="h-4 w-4"
-                                />
-                              </TableCell>
-                            )}
-                            <TableCell>
-                              {getCampaignTypeBadge(call.campaign_type)}
-                            </TableCell>
-                            <TableCell>
-                              <Link
-                                href={getCampaignLink(call)}
-                                className="font-medium hover:underline"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                {call.campaign_name}
-                              </Link>
-                            </TableCell>
-                            <TableCell>
-                              <code className="text-sm">
-                                {call.caller_phone || "—"}
-                              </code>
-                            </TableCell>
-                            <TableCell>{getStatusBadge(call.status)}</TableCell>
-                            <TableCell>
-                              {getSentimentBadge(call.sentiment) || "—"}
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-1">
-                                <Clock className="h-4 w-4 text-muted-foreground" />
-                                {formatDuration(call.duration_seconds)}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <div className="text-sm">
-                                {format(
-                                  new Date(call.created_at),
-                                  "MMM d, h:mm a"
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex items-center gap-2 min-w-0">
+                                {isSelectionMode && (
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedCalls.has(callKey)}
+                                    onChange={(e) => handleSelectCall(callKey, e.target.checked)}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="h-4 w-4 flex-shrink-0"
+                                  />
                                 )}
+                                {getCampaignTypeBadge(call.campaign_type)}
+                                <span className="font-medium truncate">{call.campaign_name}</span>
                               </div>
-                              <div className="text-xs text-muted-foreground">
-                                {formatDistanceToNow(new Date(call.created_at), {
-                                  addSuffix: true,
-                                })}
+                              {getStatusBadge(call.status)}
+                            </div>
+                            <div className="flex items-center justify-between mt-2 text-sm text-muted-foreground">
+                              <div className="flex items-center gap-3">
+                                {call.sentiment && getSentimentBadge(call.sentiment)}
+                                <span className="flex items-center gap-1">
+                                  <Clock className="h-3 w-3" />
+                                  {formatDuration(call.duration_seconds)}
+                                </span>
                               </div>
-                            </TableCell>
-                          </TableRow>
+                              <span>{format(new Date(call.created_at), "MMM d, h:mm a")}</span>
+                            </div>
+                          </div>
                         );
                       })}
-                    </TableBody>
-                  </Table>
+                    </div>
+                  ) : (
+                    /* Full table view when sidebar is closed */
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            {isSelectionMode && <TableHead className="w-[40px]" />}
+                            <TableHead>Type</TableHead>
+                            <TableHead>Campaign</TableHead>
+                            <TableHead>Phone</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead>Sentiment</TableHead>
+                            <TableHead>Duration</TableHead>
+                            <TableHead>Time</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {calls.map((call) => {
+                            const callKey = `${call.campaign_type}-${call.id}`;
+                            return (
+                              <TableRow
+                                key={callKey}
+                                className="cursor-pointer hover:bg-muted/50"
+                                onClick={() => {
+                                  if (isSelectionMode) {
+                                    handleSelectCall(
+                                      callKey,
+                                      !selectedCalls.has(callKey)
+                                    );
+                                  } else {
+                                    setSelectedCall(call);
+                                  }
+                                }}
+                              >
+                                {isSelectionMode && (
+                                  <TableCell>
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedCalls.has(callKey)}
+                                      onChange={(e) =>
+                                        handleSelectCall(callKey, e.target.checked)
+                                      }
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="h-4 w-4"
+                                    />
+                                  </TableCell>
+                                )}
+                                <TableCell>
+                                  {getCampaignTypeBadge(call.campaign_type)}
+                                </TableCell>
+                                <TableCell>
+                                  <Link
+                                    href={getCampaignLink(call)}
+                                    className="font-medium hover:underline"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    {call.campaign_name}
+                                  </Link>
+                                </TableCell>
+                                <TableCell>
+                                  <code className="text-sm">
+                                    {call.caller_phone || "—"}
+                                  </code>
+                                </TableCell>
+                                <TableCell>{getStatusBadge(call.status)}</TableCell>
+                                <TableCell>
+                                  {getSentimentBadge(call.sentiment) || "—"}
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex items-center gap-1">
+                                    <Clock className="h-4 w-4 text-muted-foreground" />
+                                    {formatDuration(call.duration_seconds)}
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="text-sm">
+                                    {format(
+                                      new Date(call.created_at),
+                                      "MMM d, h:mm a"
+                                    )}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {formatDistanceToNow(new Date(call.created_at), {
+                                      addSuffix: true,
+                                    })}
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
 
                   {/* Pagination */}
                   {totalPages > 1 && (
@@ -580,7 +632,7 @@ export default function CallsPage() {
 
         {/* Call Detail Panel */}
         {selectedCall && (
-          <div className="lg:col-span-1">
+          <div className="w-[380px] flex-shrink-0">
             <Card className="sticky top-4">
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">

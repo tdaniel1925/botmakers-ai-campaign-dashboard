@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getClientId } from "@/lib/client-auth";
 
 /**
  * GET /api/client/outbound-campaigns/[id]
@@ -13,32 +14,16 @@ export async function GET(
     const { id } = await params;
     const supabase = await createClient();
 
-    // Get authenticated user
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
+    // Get client ID (supports impersonation)
+    const clientAuth = await getClientId(request);
+    if (!clientAuth.authenticated || !clientAuth.clientId) {
       return NextResponse.json(
-        { error: "Not authenticated" },
-        { status: 401 }
+        { error: clientAuth.error || "Not authenticated" },
+        { status: clientAuth.error === "Not authenticated" ? 401 : 403 }
       );
     }
 
-    // Get client by email
-    const { data: client, error: clientError } = await supabase
-      .from("clients")
-      .select("id")
-      .eq("email", user.email)
-      .single();
-
-    if (clientError || !client) {
-      return NextResponse.json(
-        { error: "Client not found" },
-        { status: 404 }
-      );
-    }
+    const clientId = clientAuth.clientId;
 
     // Get campaign - ensure it belongs to this client
     const { data: campaign, error } = await supabase
@@ -72,7 +57,7 @@ export async function GET(
       `
       )
       .eq("id", id)
-      .eq("client_id", client.id)
+      .eq("client_id", clientId)
       .single();
 
     if (error) {

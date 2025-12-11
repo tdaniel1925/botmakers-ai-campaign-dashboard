@@ -1,37 +1,12 @@
 "use client";
 
-import { useState, useEffect, createContext, useContext } from "react";
+import { useState, useEffect } from "react";
 import { ClientSidebar, MobileMenuButton } from "@/components/dashboard/client-sidebar";
 import { createClient } from "@/lib/supabase/client";
 import { SessionTimeoutWarning } from "@/components/shared/session-timeout-warning";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Eye } from "lucide-react";
-
-interface ClientContextType {
-  clientId: string | null;
-  clientName: string;
-  companyName: string;
-  userEmail: string;
-  userRole: string;
-  isLoading: boolean;
-  isImpersonating: boolean;
-  refetch: () => Promise<void>;
-}
-
-const ClientContext = createContext<ClientContextType>({
-  clientId: null,
-  clientName: "User",
-  companyName: "",
-  userEmail: "",
-  userRole: "owner",
-  isLoading: true,
-  isImpersonating: false,
-  refetch: async () => {},
-});
-
-export function useClient() {
-  return useContext(ClientContext);
-}
+import { ClientContext } from "@/contexts/client-context";
 
 export default function DashboardLayout({
   children,

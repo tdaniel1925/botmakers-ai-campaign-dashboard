@@ -4,6 +4,7 @@ import { useState, useEffect, use } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { clientFetch } from "@/hooks/use-client-fetch";
 import {
   Card,
   CardContent,
@@ -116,7 +117,7 @@ export default function ClientCampaignDetailPage({
 
   const fetchCampaign = async () => {
     try {
-      const response = await fetch(`/api/client/outbound-campaigns/${id}`);
+      const response = await clientFetch(`/api/client/outbound-campaigns/${id}`);
       if (!response.ok) throw new Error("Failed to fetch campaign");
       const data = await response.json();
       setCampaign(data);
@@ -135,7 +136,7 @@ export default function ClientCampaignDetailPage({
       const startDate = format(subDays(new Date(), parseInt(dateRange)), "yyyy-MM-dd");
       const endDate = format(new Date(), "yyyy-MM-dd");
 
-      const response = await fetch(
+      const response = await clientFetch(
         `/api/client/outbound-campaigns/${id}/activity?start_date=${startDate}&end_date=${endDate}`
       );
       if (!response.ok) throw new Error("Failed to fetch analytics");
@@ -164,7 +165,7 @@ export default function ClientCampaignDetailPage({
   const handleAction = async (action: "pause" | "resume" | "stop") => {
     setIsActionLoading(true);
     try {
-      const response = await fetch(`/api/client/outbound-campaigns/${id}/${action}`, {
+      const response = await clientFetch(`/api/client/outbound-campaigns/${id}/${action}`, {
         method: "POST",
       });
       if (!response.ok) {
