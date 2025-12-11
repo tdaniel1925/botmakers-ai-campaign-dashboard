@@ -736,11 +736,19 @@ export default function OutboundCampaignDetailPage({
         });
       } else {
         setVerificationResult(result);
+        let description = "";
+        if (result.assistant?.name) {
+          description = `Assistant: "${result.assistant.name}"`;
+        }
+        if (result.phoneNumber?.number) {
+          description += description ? ` | Phone: ${result.phoneNumber.number}` : `Phone: ${result.phoneNumber.number}`;
+        }
+        if (!description) {
+          description = "API key is valid";
+        }
         toast({
           title: "Connection Verified!",
-          description: result.assistant?.name
-            ? `Successfully connected to "${result.assistant.name}"`
-            : "API key is valid",
+          description,
         });
       }
     } catch (error) {

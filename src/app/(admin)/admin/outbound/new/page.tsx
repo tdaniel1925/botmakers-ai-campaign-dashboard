@@ -1073,66 +1073,23 @@ function NewOutboundCampaignPageContent() {
       let assistantId = "";
       let modelId = "";
 
+      // Check if using system keys - call server-side API for verification
+      const useSystemKey =
+        (data.call_provider === "vapi" && data.vapi_key_source === "system") ||
+        (data.call_provider === "autocalls" && data.autocalls_key_source === "system") ||
+        (data.call_provider === "synthflow" && data.synthflow_key_source === "system");
+
       switch (data.call_provider) {
         case "vapi":
-          if (data.vapi_key_source === "system") {
-            // For system keys, we can't verify from client - show a different message
-            setVerificationResult({
-              success: true,
-              provider: "vapi",
-              assistant: {
-                id: data.vapi_assistant_id,
-                name: "System keys will be used (cannot verify from here)",
-              },
-            });
-            toast({
-              title: "System Keys Selected",
-              description: "Assistant ID will be verified when the campaign is launched.",
-            });
-            setIsVerifying(false);
-            return;
-          }
-          apiKey = data.vapi_api_key;
+          apiKey = data.vapi_key_source === "system" ? "" : data.vapi_api_key;
           assistantId = data.vapi_assistant_id;
           break;
         case "autocalls":
-          if (data.autocalls_key_source === "system") {
-            setVerificationResult({
-              success: true,
-              provider: "autocalls",
-              assistant: {
-                id: data.autocalls_assistant_id,
-                name: "System keys will be used (cannot verify from here)",
-              },
-            });
-            toast({
-              title: "System Keys Selected",
-              description: "Assistant ID will be verified when the campaign is launched.",
-            });
-            setIsVerifying(false);
-            return;
-          }
-          apiKey = data.autocalls_api_key;
+          apiKey = data.autocalls_key_source === "system" ? "" : data.autocalls_api_key;
           assistantId = data.autocalls_assistant_id;
           break;
         case "synthflow":
-          if (data.synthflow_key_source === "system") {
-            setVerificationResult({
-              success: true,
-              provider: "synthflow",
-              assistant: {
-                id: data.synthflow_model_id,
-                name: "System keys will be used (cannot verify from here)",
-              },
-            });
-            toast({
-              title: "System Keys Selected",
-              description: "Agent ID will be verified when the campaign is launched.",
-            });
-            setIsVerifying(false);
-            return;
-          }
-          apiKey = data.synthflow_api_key;
+          apiKey = data.synthflow_key_source === "system" ? "" : data.synthflow_api_key;
           modelId = data.synthflow_model_id;
           break;
       }
@@ -1142,9 +1099,11 @@ function NewOutboundCampaignPageContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           provider: data.call_provider,
-          api_key: apiKey,
+          api_key: apiKey || undefined,
           assistant_id: assistantId || undefined,
           model_id: modelId || undefined,
+          phone_number_id: data.call_provider === "vapi" ? data.vapi_phone_number_id : undefined,
+          use_system_key: useSystemKey,
         }),
       });
 
@@ -1164,11 +1123,19 @@ function NewOutboundCampaignPageContent() {
         });
       } else {
         setVerificationResult(result);
+        let description = "";
+        if (result.assistant?.name) {
+          description = `Assistant: "${result.assistant.name}"`;
+        }
+        if (result.phoneNumber?.number) {
+          description += description ? ` | Phone: ${result.phoneNumber.number}` : `Phone: ${result.phoneNumber.number}`;
+        }
+        if (!description) {
+          description = "API key is valid";
+        }
         toast({
           title: "Connection Verified!",
-          description: result.assistant?.name
-            ? `Successfully connected to "${result.assistant.name}"`
-            : "API key is valid",
+          description,
         });
       }
     } catch (error) {
