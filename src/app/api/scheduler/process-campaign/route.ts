@@ -197,26 +197,46 @@ export async function POST(request: NextRequest) {
         .select("id, phone_number, timezone, first_name, last_name")
         .eq("campaign_id", campaignId)
         .eq("status", "pending")
+        .not("timezone", "is", null) // Only fetch contacts with a timezone
         .limit(contactsToFetch * 3); // Fetch more to account for timezone filtering
 
       if (!contacts || contacts.length === 0) {
-        // No more contacts, check if campaign is complete
-        const { count: pendingCount } = await supabase
+        // No more contacts with timezone, check if campaign is complete
+        // Only count contacts that have a timezone (callable contacts)
+        const { count: pendingWithTimezone } = await supabase
           .from("campaign_contacts")
           .select("*", { count: "exact", head: true })
           .eq("campaign_id", campaignId)
-          .eq("status", "pending");
+          .eq("status", "pending")
+          .not("timezone", "is", null);
 
-        if (pendingCount === 0) {
+        if (pendingWithTimezone === 0) {
+          // Check if there are contacts without timezone (they won't be called)
+          const { count: pendingWithoutTimezone } = await supabase
+            .from("campaign_contacts")
+            .select("*", { count: "exact", head: true })
+            .eq("campaign_id", campaignId)
+            .eq("status", "pending")
+            .is("timezone", null);
+
+          if (pendingWithoutTimezone && pendingWithoutTimezone > 0) {
+            console.log(
+              `Campaign ${campaignId}: ${pendingWithoutTimezone} contacts without timezone will not be called`
+            );
+          }
+
           await supabase
             .from("outbound_campaigns")
             .update({ status: "completed" })
             .eq("id", campaignId);
 
-          return NextResponse.json({ status: "campaign_completed" });
+          return NextResponse.json({
+            status: "campaign_completed",
+            skipped_no_timezone: pendingWithoutTimezone || 0,
+          });
         }
 
-        // Contacts exist but none eligible now, reschedule
+        // Contacts exist but none eligible now (outside calling window), reschedule
         await scheduleCampaignProcessor(
           campaignId,
           getBaseUrl(request),
@@ -236,8 +256,12 @@ export async function POST(request: NextRequest) {
       };
 
       const eligibleContacts = contacts.filter((contact) => {
-        const timezone = contact.timezone || activeSchedule.timezone;
-        return isWithinCallingWindow(scheduleConfig, timezone);
+        // Skip contacts without a timezone - they cannot be called
+        // because we can't determine if it's an appropriate time
+        if (!contact.timezone) {
+          return false;
+        }
+        return isWithinCallingWindow(scheduleConfig, contact.timezone);
       });
 
       // Schedule calls for eligible contacts

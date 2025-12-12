@@ -19,7 +19,9 @@ interface UploadResult {
   success: number;
   failed: number;
   duplicates: number;
+  no_timezone: number;
   errors: Array<{ row: number; phone: string; error: string }>;
+  timezone_breakdown: Record<string, number>;
 }
 
 /**
@@ -80,7 +82,9 @@ export async function POST(
       success: 0,
       failed: 0,
       duplicates: 0,
+      no_timezone: 0,
       errors: [],
+      timezone_breakdown: {},
     };
 
     const validContacts: Array<{
@@ -120,6 +124,13 @@ export async function POST(
           error: "Invalid phone number format",
         });
         continue;
+      }
+
+      // Track timezone breakdown
+      if (timezone) {
+        result.timezone_breakdown[timezone] = (result.timezone_breakdown[timezone] || 0) + 1;
+      } else {
+        result.no_timezone++;
       }
 
       validContacts.push({

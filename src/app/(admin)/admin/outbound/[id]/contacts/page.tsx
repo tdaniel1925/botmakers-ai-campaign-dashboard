@@ -230,8 +230,10 @@ interface UploadReport {
   imported: number;
   duplicates: number;
   invalid: number;
+  noTimezone: number;
   errors: Array<{ row: number; phone: string; error: string }>;
   timezonesAppended: number;
+  timezoneBreakdown: Record<string, number>;
 }
 
 export default function ContactsPage({
@@ -599,8 +601,10 @@ export default function ContactsPage({
       imported: 0,
       duplicates: 0,
       invalid: 0,
+      noTimezone: 0,
       errors: [],
       timezonesAppended: 0,
+      timezoneBreakdown: {},
     };
 
     try {
@@ -642,6 +646,13 @@ export default function ContactsPage({
           if (timezone) {
             report.timezonesAppended++;
           }
+        }
+
+        // Track timezone breakdown
+        if (timezone) {
+          report.timezoneBreakdown[timezone] = (report.timezoneBreakdown[timezone] || 0) + 1;
+        } else {
+          report.noTimezone++;
         }
 
         // Build custom data
@@ -1782,6 +1793,55 @@ export default function ContactsPage({
                   <span className="font-medium text-blue-600">{uploadReport.timezonesAppended.toLocaleString()}</span>
                 </div>
               </div>
+
+              {/* Timezone Breakdown */}
+              {Object.keys(uploadReport.timezoneBreakdown).length > 0 && (
+                <div className="space-y-3">
+                  <Label className="flex items-center gap-2">
+                    <Globe className="h-4 w-4" />
+                    Timezone Distribution
+                  </Label>
+                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      {Object.entries(uploadReport.timezoneBreakdown)
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([tz, count]) => (
+                          <div key={tz} className="flex justify-between">
+                            <span className="text-blue-700 dark:text-blue-300">
+                              {tz.split('/').pop()?.replace('_', ' ')}
+                            </span>
+                            <span className="font-medium">{count.toLocaleString()}</span>
+                          </div>
+                        ))}
+                    </div>
+                    <div className="mt-3 pt-3 border-t border-blue-200 dark:border-blue-700">
+                      <div className="flex items-center gap-2 text-sm text-blue-700 dark:text-blue-300">
+                        <Clock className="h-4 w-4" />
+                        <span>Calls will only be made during scheduled calling windows for each timezone.</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Warning for contacts without timezone */}
+              {uploadReport.noTimezone > 0 && (
+                <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+                  <div className="flex gap-3">
+                    <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-medium text-amber-800 dark:text-amber-200">
+                        {uploadReport.noTimezone.toLocaleString()} contact{uploadReport.noTimezone !== 1 ? 's' : ''} without timezone
+                      </p>
+                      <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                        These contacts will <strong>not be called</strong> because their timezone could not be determined.
+                        This typically happens with international numbers outside the US.
+                        You may need to manually assign timezones or remove these contacts.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Errors */}
               {uploadReport.errors.length > 0 && (
