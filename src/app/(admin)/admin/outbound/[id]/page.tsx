@@ -1594,47 +1594,6 @@ export default function OutboundCampaignDetailPage({
             </CardContent>
           </Card>
 
-          {/* Phone Numbers */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Phone Numbers</CardTitle>
-              <CardDescription>Numbers used for outbound calls</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {campaign.campaign_phone_numbers.length > 0 ? (
-                <div className="space-y-2">
-                  {campaign.campaign_phone_numbers.map((phone) => (
-                    <div key={phone.id} className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <Phone className="h-4 w-4" />
-                        <div>
-                          <p className="font-medium">{phone.phone_number}</p>
-                          {phone.friendly_name && (
-                            <p className="text-sm text-muted-foreground">{phone.friendly_name}</p>
-                          )}
-                        </div>
-                      </div>
-                      <Badge variant={phone.is_active ? "success" : "secondary"}>
-                        {phone.is_active ? "Active" : "Inactive"}
-                      </Badge>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-muted-foreground text-center py-4">
-                  No phone numbers configured
-                </p>
-              )}
-              {campaign.status === "draft" && (
-                <Button variant="outline" className="mt-4" asChild>
-                  <Link href={`/admin/outbound/${id}/phone-numbers`}>
-                    Manage Phone Numbers
-                  </Link>
-                </Button>
-              )}
-            </CardContent>
-          </Card>
-
           {/* Schedule */}
           <Card>
             <CardHeader>
@@ -1696,7 +1655,7 @@ export default function OutboundCampaignDetailPage({
                 />
               </div>
               {formData.retry_enabled && (
-                <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid gap-4 md:grid-cols-3">
                   <div className="space-y-2">
                     <Label>Retry Attempts</Label>
                     <Input
@@ -1709,14 +1668,37 @@ export default function OutboundCampaignDetailPage({
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>Retry Delay (minutes)</Label>
+                    <Label>Retry Delay (Hours)</Label>
                     <Input
                       type="number"
-                      value={formData.retry_delay_minutes}
-                      onChange={(e) => setFormData({ ...formData, retry_delay_minutes: parseInt(e.target.value) || 0 })}
+                      value={Math.floor(formData.retry_delay_minutes / 60)}
+                      onChange={(e) => {
+                        const hours = parseInt(e.target.value) || 0;
+                        const currentMinutes = formData.retry_delay_minutes % 60;
+                        setFormData({ ...formData, retry_delay_minutes: hours * 60 + currentMinutes });
+                      }}
                       disabled={campaign.status !== "draft"}
-                      min={15}
+                      min={0}
+                      max={24}
                     />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Retry Delay (Minutes)</Label>
+                    <Input
+                      type="number"
+                      value={formData.retry_delay_minutes % 60}
+                      onChange={(e) => {
+                        const minutes = parseInt(e.target.value) || 0;
+                        const currentHours = Math.floor(formData.retry_delay_minutes / 60);
+                        setFormData({ ...formData, retry_delay_minutes: currentHours * 60 + minutes });
+                      }}
+                      disabled={campaign.status !== "draft"}
+                      min={0}
+                      max={59}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Total: {Math.floor(formData.retry_delay_minutes / 60)}h {formData.retry_delay_minutes % 60}m
+                    </p>
                   </div>
                 </div>
               )}
