@@ -70,7 +70,7 @@ const AREA_CODE_TO_TIMEZONE: Record<string, string> = {
   "336": "America/New_York", // NC
   "337": "America/Chicago",  // LA
   "339": "America/New_York", // MA
-  "340": "America/Virgin",   // VI (Atlantic)
+  "340": "America/St_Thomas", // VI (Atlantic)
   "341": "America/Los_Angeles", // CA
   "346": "America/Chicago",  // TX
   "347": "America/New_York", // NY

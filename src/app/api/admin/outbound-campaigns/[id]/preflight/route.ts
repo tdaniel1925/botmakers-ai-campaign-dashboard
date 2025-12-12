@@ -154,6 +154,7 @@ export async function GET(
     // First try cached counts on the campaign, then fall back to querying
     let pendingContactCount = campaign.pending_contacts || 0;
     let totalContactCount = campaign.total_contacts || 0;
+    let pendingWithoutTimezone = 0;
 
     // If cached counts are 0, try querying (in case counts haven't been synced)
     if (totalContactCount === 0) {
@@ -193,17 +194,48 @@ export async function GET(
       }
     }
 
+    // Check for contacts without timezone (these won't be called)
+    if (pendingContactCount > 0 && totalContactCount < 100000) {
+      const { count: noTimezoneCount } = await supabase
+        .from("campaign_contacts")
+        .select("*", { count: "exact", head: true })
+        .eq("campaign_id", id)
+        .eq("status", "pending")
+        .is("timezone", null);
+      pendingWithoutTimezone = noTimezoneCount || 0;
+    }
+
+    // Calculate callable contacts (pending with timezone)
+    const callableContacts = pendingContactCount - pendingWithoutTimezone;
+
+    // Build contact status message
+    let contactMessage = "";
+    let contactStatus: "passed" | "failed" | "warning" = "failed";
+
+    if (pendingContactCount === 0) {
+      contactMessage = totalContactCount > 0
+        ? `All ${totalContactCount.toLocaleString()} contacts have been processed - no pending contacts`
+        : "No contacts uploaded";
+      contactStatus = "failed";
+    } else if (pendingWithoutTimezone > 0 && callableContacts === 0) {
+      // All pending contacts are missing timezone
+      contactMessage = `${pendingWithoutTimezone.toLocaleString()} pending contacts without timezone (will NOT be called)`;
+      contactStatus = "failed";
+    } else if (pendingWithoutTimezone > 0) {
+      // Some contacts are callable, some are not
+      contactMessage = `${callableContacts.toLocaleString()} callable contacts (${pendingWithoutTimezone.toLocaleString()} without timezone will be skipped)`;
+      contactStatus = "warning";
+    } else {
+      contactMessage = `${pendingContactCount.toLocaleString()} pending of ${totalContactCount.toLocaleString()} total contacts`;
+      contactStatus = "passed";
+    }
+
     checks.push({
       id: "contacts",
       name: "Contacts",
-      description: "At least one pending contact to call",
-      status: pendingContactCount > 0 ? "passed" : "failed",
-      message:
-        pendingContactCount > 0
-          ? `${pendingContactCount.toLocaleString()} pending of ${totalContactCount.toLocaleString()} total contacts`
-          : totalContactCount > 0
-          ? `All ${totalContactCount.toLocaleString()} contacts have been processed - no pending contacts`
-          : "No contacts uploaded",
+      description: "At least one callable pending contact (with timezone)",
+      status: callableContacts > 0 ? contactStatus : "failed",
+      message: contactMessage,
       fixUrl: `/admin/outbound/${id}/contacts`,
       required: true,
     });
