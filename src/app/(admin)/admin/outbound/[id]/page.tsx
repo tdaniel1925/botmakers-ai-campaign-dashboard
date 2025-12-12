@@ -887,8 +887,8 @@ export default function OutboundCampaignDetailPage({
     );
   }
 
-  const progress = campaign.total_contacts > 0
-    ? Math.round((campaign.contacts_completed / campaign.total_contacts) * 100)
+  const progress = campaign.stats.totalContacts > 0
+    ? Math.round((campaign.stats.completedContacts / campaign.stats.totalContacts) * 100)
     : 0;
 
   return (
@@ -923,7 +923,7 @@ export default function OutboundCampaignDetailPage({
               </Button>
               <Button
                 onClick={() => setShowPreflightDialog(true)}
-                disabled={isActionLoading || campaign.total_contacts === 0}
+                disabled={isActionLoading || campaign.stats.totalContacts === 0}
               >
                 {isActionLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 <Play className="mr-2 h-4 w-4" />
@@ -931,7 +931,7 @@ export default function OutboundCampaignDetailPage({
               </Button>
               <Dialog open={showScheduleDialog} onOpenChange={setShowScheduleDialog}>
                 <DialogTrigger asChild>
-                  <Button variant="outline" disabled={campaign.total_contacts === 0}>
+                  <Button variant="outline" disabled={campaign.stats.totalContacts === 0}>
                     <CalendarClock className="mr-2 h-4 w-4" />
                     Schedule
                   </Button>
@@ -1034,11 +1034,38 @@ export default function OutboundCampaignDetailPage({
             </>
           )}
           {campaign.status === "active" && (
-            <Button variant="outline" onClick={() => handleAction("pause")} disabled={isActionLoading}>
-              {isActionLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              <Pause className="mr-2 h-4 w-4" />
-              Pause
-            </Button>
+            <>
+              <Button variant="outline" onClick={() => handleAction("pause")} disabled={isActionLoading}>
+                {isActionLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                <Pause className="mr-2 h-4 w-4" />
+                Pause
+              </Button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="destructive" disabled={isActionLoading}>
+                    <Square className="mr-2 h-4 w-4" />
+                    Stop
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Stop Campaign?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will permanently stop the campaign. This action cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => handleAction("stop")}
+                      className="bg-destructive text-destructive-foreground"
+                    >
+                      Stop Campaign
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </>
           )}
           {campaign.status === "paused" && (
             <>
