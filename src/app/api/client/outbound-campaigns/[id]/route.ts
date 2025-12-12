@@ -101,8 +101,15 @@ export async function GET(
       ? Math.round((campaign.contacts_completed / campaign.total_contacts) * 100)
       : 0;
 
-    const positiveRate = campaign.contacts_completed > 0
-      ? Math.round((campaign.positive_outcomes / campaign.contacts_completed) * 100)
+    // Use stored campaign stats (these are updated by the webhook handler)
+    const totalCalls = campaign.contacts_called || 0;
+    const positiveCalls = campaign.positive_outcomes || 0;
+    const negativeCalls = campaign.negative_outcomes || 0;
+    const totalMinutes = parseFloat(campaign.total_minutes || "0");
+    const totalCost = parseFloat(campaign.total_cost || "0");
+
+    const positiveRate = totalCalls > 0
+      ? Math.round((positiveCalls / totalCalls) * 100)
       : 0;
 
     const avgCallDuration = recentCalls && recentCalls.length > 0
@@ -115,8 +122,15 @@ export async function GET(
     return NextResponse.json({
       ...campaign,
       stats: {
-        progress,
+        // Primary stats expected by the frontend detail page
+        totalCalls,
+        positiveCalls,
+        negativeCalls,
         positiveRate,
+        totalMinutes,
+        totalCost,
+        // Additional stats
+        progress,
         avgCallDuration,
         contactsRemaining: campaign.total_contacts - campaign.contacts_completed,
       },

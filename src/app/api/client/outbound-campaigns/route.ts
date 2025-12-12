@@ -78,16 +78,28 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Calculate progress for each campaign
-    const campaignsWithProgress = campaigns?.map((campaign) => ({
-      ...campaign,
-      progress: campaign.total_contacts > 0
-        ? Math.round((campaign.contacts_completed / campaign.total_contacts) * 100)
-        : 0,
-      positive_rate: campaign.contacts_completed > 0
-        ? Math.round((campaign.positive_outcomes / campaign.contacts_completed) * 100)
-        : 0,
-    }));
+    // Calculate progress and stats for each campaign
+    const campaignsWithProgress = campaigns?.map((campaign) => {
+      const totalCalls = campaign.contacts_called || 0;
+      const positiveCalls = campaign.positive_outcomes || 0;
+      const positiveRate = totalCalls > 0
+        ? Math.round((positiveCalls / totalCalls) * 100)
+        : 0;
+
+      return {
+        ...campaign,
+        progress: campaign.total_contacts > 0
+          ? Math.round((campaign.contacts_completed / campaign.total_contacts) * 100)
+          : 0,
+        positive_rate: positiveRate,
+        // Add stats object for frontend compatibility
+        stats: {
+          totalCalls,
+          positiveCalls,
+          positiveRate,
+        },
+      };
+    });
 
     return NextResponse.json({ campaigns: campaignsWithProgress || [] });
   } catch (error) {
