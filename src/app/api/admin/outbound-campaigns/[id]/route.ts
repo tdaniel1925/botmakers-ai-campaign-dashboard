@@ -144,7 +144,7 @@ export async function GET(
       .from("campaign_contacts")
       .select(`
         id,
-        phone
+        phone_number
       `)
       .eq("campaign_id", id);
 
@@ -164,7 +164,7 @@ export async function GET(
 
         // Count contacts that are in the blacklist
         smsOptedOutCount = optedOutContacts.filter((contact) =>
-          blacklistSet.has(normalizePhone(contact.phone || ""))
+          blacklistSet.has(normalizePhone(contact.phone_number || ""))
         ).length;
       }
     }

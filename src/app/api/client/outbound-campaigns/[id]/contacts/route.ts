@@ -307,6 +307,22 @@ export async function DELETE(
       );
     }
 
+    // Update campaign total_contacts count after deletion
+    if (deletedCount > 0) {
+      const { count: newTotal } = await supabase
+        .from("campaign_contacts")
+        .select("*", { count: "exact", head: true })
+        .eq("campaign_id", id);
+
+      await supabase
+        .from("outbound_campaigns")
+        .update({
+          total_contacts: newTotal || 0,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id);
+    }
+
     return NextResponse.json({
       success: true,
       deleted_count: deletedCount,
