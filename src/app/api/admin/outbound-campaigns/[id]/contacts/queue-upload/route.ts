@@ -1,6 +1,7 @@
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdmin, forbiddenResponse } from "@/lib/admin-auth";
+import { getTimezoneFromAreaCode } from "@/lib/utils/area-code-timezone";
 
 // Increase body size limit to 50MB for large contact uploads (App Router)
 export const maxDuration = 60; // Allow up to 60 seconds for large uploads
@@ -37,6 +38,17 @@ export async function POST(
       );
     }
 
+    // Pre-process contacts to add timezone from area code if not provided
+    const processedContacts = contacts.map((contact) => {
+      if (!contact.timezone && contact.phone_number) {
+        const inferredTimezone = getTimezoneFromAreaCode(contact.phone_number);
+        if (inferredTimezone) {
+          return { ...contact, timezone: inferredTimezone };
+        }
+      }
+      return contact;
+    });
+
     const supabase = await createClient();
 
     // Verify campaign exists
@@ -59,8 +71,8 @@ export async function POST(
       .insert({
         campaign_id: campaignId,
         file_name: fileName || "uploaded_contacts.csv",
-        total_contacts: contacts.length,
-        pending_data: contacts,
+        total_contacts: processedContacts.length,
+        pending_data: processedContacts,
         status: "pending",
       })
       .select()
@@ -86,7 +98,7 @@ export async function POST(
     return NextResponse.json({
       success: true,
       queue_id: queueEntry.id,
-      total_contacts: contacts.length,
+      total_contacts: processedContacts.length,
       status: "processing",
       message: "Upload queued for background processing",
       initial_result: processResult,

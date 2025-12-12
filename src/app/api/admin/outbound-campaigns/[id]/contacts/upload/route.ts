@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { verifyAdmin, forbiddenResponse } from "@/lib/admin-auth";
+import { getTimezoneFromAreaCode } from "@/lib/utils/area-code-timezone";
 
 // Allow up to 60 seconds for large chunk uploads
 export const maxDuration = 60;
@@ -103,11 +104,13 @@ export async function POST(
       const firstName = contact.first_name || "";
       const lastName = contact.last_name || "";
       const email = contact.email || "";
-      const timezone = contact.timezone || undefined;
       const customData = contact.custom_data || {};
 
       // Normalize phone number (in case frontend didn't normalize it)
       const normalizedPhone = normalizePhoneNumber(rawPhone);
+
+      // Determine timezone: use explicit value from CSV, or auto-detect from area code
+      const timezone = contact.timezone || (normalizedPhone ? getTimezoneFromAreaCode(normalizedPhone) : null) || undefined;
 
       if (!normalizedPhone) {
         result.failed++;
