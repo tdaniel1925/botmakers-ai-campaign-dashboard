@@ -324,19 +324,46 @@ function ContactsUploadStep({ campaignId, onUploadComplete }: ContactsUploadStep
       const text = e.target?.result as string;
       const contacts = parseCSV(text);
 
-      // Add timezone detection - check multiple phone column variations
+      // Add timezone detection and normalize field names for server
       const contactsWithTimezone = contacts.map(contact => {
+        // Normalize phone field - check multiple column name variations
         const phone =
           contact.phone_number || contact.phone ||
           contact.Phone || contact.Phone_Number || contact.PhoneNumber ||
           contact.mobile || contact.Mobile || contact.cell || contact.Cell ||
           contact.telephone || contact.Telephone || contact.tel || contact.Tel ||
           "";
+
+        // Normalize first_name field - check multiple column name variations
+        const firstName =
+          contact.first_name || contact.firstName || contact.FirstName ||
+          contact["First Name"] || contact["first name"] || contact.fname ||
+          contact.Fname || contact.FName || contact.given_name || contact.givenName ||
+          "";
+
+        // Normalize last_name field - check multiple column name variations
+        const lastName =
+          contact.last_name || contact.lastName || contact.LastName ||
+          contact["Last Name"] || contact["last name"] || contact.lname ||
+          contact.Lname || contact.LName || contact.surname || contact.Surname ||
+          contact.family_name || contact.familyName ||
+          "";
+
+        // Normalize email field - check multiple column name variations
+        const email =
+          contact.email || contact.Email || contact.EMAIL ||
+          contact.e_mail || contact["E-mail"] || contact["e-mail"] ||
+          contact.email_address || contact.emailAddress || contact.EmailAddress ||
+          "";
+
         const timezone = getTimezoneFromPhone(phone);
         return {
           ...contact,
-          // Normalize phone field name for server
+          // Normalize field names for server - PostgreSQL function expects these exact keys
           phone_number: phone,
+          first_name: firstName,
+          last_name: lastName,
+          email: email,
           timezone: contact.timezone || timezone || "",
         };
       });
