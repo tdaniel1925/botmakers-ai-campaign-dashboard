@@ -398,7 +398,7 @@ export async function PUT(
 
 /**
  * DELETE /api/admin/outbound-campaigns/[id]
- * Delete an outbound campaign (only allowed for draft campaigns)
+ * Delete an outbound campaign (allowed for draft, stopped, and completed campaigns)
  */
 export async function DELETE(
   request: NextRequest,
@@ -414,10 +414,10 @@ export async function DELETE(
 
     const supabase = await createClient();
 
-    // Check campaign exists and is in draft status
+    // Check campaign exists
     const { data: existingCampaign, error: fetchError } = await supabase
       .from("outbound_campaigns")
-      .select("id, status, vapi_assistant_id")
+      .select("id, status, name, client_id, vapi_assistant_id")
       .eq("id", id)
       .single();
 
@@ -428,18 +428,22 @@ export async function DELETE(
       );
     }
 
-    // Only draft campaigns can be deleted
-    if (existingCampaign.status !== "draft") {
+    // Only draft, stopped, and completed campaigns can be deleted
+    // Active and paused campaigns must be stopped first
+    const deletableStatuses = ["draft", "stopped", "completed"];
+    if (!deletableStatuses.includes(existingCampaign.status)) {
       return NextResponse.json(
         {
           error:
-            "Only draft campaigns can be deleted. Stop the campaign first if you need to remove it.",
+            "Active and paused campaigns cannot be deleted. Stop the campaign first.",
         },
         { status: 400 }
       );
     }
 
-    // Delete the campaign (cascade will handle related records)
+    // Delete the campaign (cascade will handle related records via ON DELETE CASCADE)
+    // This automatically deletes: campaign_contacts, campaign_calls, campaign_sms,
+    // campaign_sms_templates, campaign_schedules, campaign_phone_numbers, campaign_billing
     const { error } = await supabase
       .from("outbound_campaigns")
       .delete()
@@ -448,6 +452,21 @@ export async function DELETE(
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
+
+    // Log the deletion
+    await supabase.from("audit_logs").insert({
+      user_id: authResult.admin!.id,
+      user_type: "admin",
+      user_email: authResult.admin!.email,
+      action: "campaign_deleted",
+      resource_type: "outbound_campaign",
+      resource_id: id,
+      details: {
+        campaign_name: existingCampaign.name,
+        client_id: existingCampaign.client_id,
+        previous_status: existingCampaign.status,
+      },
+    });
 
     return NextResponse.json({ success: true, message: "Campaign deleted" });
   } catch (error) {

@@ -340,18 +340,18 @@ export default function OutboundCampaignsPage() {
   const handleBulkDelete = async () => {
     setIsSubmitting(true);
     try {
-      const draftCampaigns = Array.from(selectedIds).filter((id) => {
+      const deletableCampaigns = Array.from(selectedIds).filter((id) => {
         const campaign = campaigns.find((c) => c.id === id);
-        return campaign?.status === "draft";
+        return campaign && ["draft", "stopped", "completed"].includes(campaign.status);
       });
       await Promise.all(
-        draftCampaigns.map((id) =>
+        deletableCampaigns.map((id) =>
           fetch(`/api/admin/outbound-campaigns/${id}`, { method: "DELETE" })
         )
       );
       toast({
         title: "Campaigns Deleted",
-        description: `${draftCampaigns.length} draft campaign(s) have been deleted`,
+        description: `${deletableCampaigns.length} campaign(s) have been deleted`,
       });
       setSelectedIds(new Set());
       setShowBulkDeleteDialog(false);
@@ -380,11 +380,12 @@ export default function OutboundCampaignsPage() {
     return Math.round((campaign.contacts_completed / campaign.total_contacts) * 100);
   };
 
-  // Count draft campaigns in selection for delete action
-  const draftCountInSelection = Array.from(selectedIds).filter((id) => {
-    const campaign = campaigns.find((c) => c.id === id);
-    return campaign?.status === "draft";
-  }).length;
+  // Count campaigns by status in selection for bulk actions
+  const selectedCampaigns = Array.from(selectedIds).map((id) => campaigns.find((c) => c.id === id)).filter(Boolean) as OutboundCampaign[];
+  const activeCountInSelection = selectedCampaigns.filter((c) => c.status === "active").length;
+  const pausedCountInSelection = selectedCampaigns.filter((c) => c.status === "paused").length;
+  const stoppableCountInSelection = selectedCampaigns.filter((c) => c.status === "active" || c.status === "paused").length;
+  const deletableCountInSelection = selectedCampaigns.filter((c) => ["draft", "stopped", "completed"].includes(c.status)).length;
 
   return (
     <div className="space-y-6">
@@ -511,34 +512,40 @@ export default function OutboundCampaignsPage() {
               )}
             </div>
             <div className="flex gap-2 flex-wrap">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleBulkResume}
-                disabled={isSubmitting}
-              >
-                <Play className="mr-2 h-4 w-4" />
-                Resume
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleBulkPause}
-                disabled={isSubmitting}
-              >
-                <Pause className="mr-2 h-4 w-4" />
-                Pause
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleBulkStop}
-                disabled={isSubmitting}
-              >
-                <Square className="mr-2 h-4 w-4" />
-                Stop
-              </Button>
-              {draftCountInSelection > 0 && (
+              {pausedCountInSelection > 0 && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleBulkResume}
+                  disabled={isSubmitting}
+                >
+                  <Play className="mr-2 h-4 w-4" />
+                  Resume ({pausedCountInSelection})
+                </Button>
+              )}
+              {activeCountInSelection > 0 && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleBulkPause}
+                  disabled={isSubmitting}
+                >
+                  <Pause className="mr-2 h-4 w-4" />
+                  Pause ({activeCountInSelection})
+                </Button>
+              )}
+              {stoppableCountInSelection > 0 && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleBulkStop}
+                  disabled={isSubmitting}
+                >
+                  <Square className="mr-2 h-4 w-4" />
+                  Stop ({stoppableCountInSelection})
+                </Button>
+              )}
+              {deletableCountInSelection > 0 && (
                 <Button
                   size="sm"
                   variant="destructive"
@@ -546,7 +553,7 @@ export default function OutboundCampaignsPage() {
                   disabled={isSubmitting}
                 >
                   <Trash2 className="mr-2 h-4 w-4" />
-                  Delete ({draftCountInSelection})
+                  Delete ({deletableCountInSelection})
                 </Button>
               )}
             </div>
@@ -705,7 +712,7 @@ export default function OutboundCampaignsPage() {
                                 Stop Campaign
                               </DropdownMenuItem>
                             )}
-                            {campaign.status === "draft" && (
+                            {["draft", "stopped", "completed"].includes(campaign.status) && (
                               <>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem
@@ -785,10 +792,10 @@ export default function OutboundCampaignsPage() {
       <AlertDialog open={showBulkDeleteDialog} onOpenChange={setShowBulkDeleteDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete {draftCountInSelection} Draft Campaign(s)</AlertDialogTitle>
+            <AlertDialogTitle>Delete {deletableCountInSelection} Campaign(s)</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete {draftCountInSelection} draft campaign(s)?
-              This action cannot be undone. Only draft campaigns can be deleted.
+              Are you sure you want to delete {deletableCountInSelection} campaign(s)?
+              This action cannot be undone. All contacts, calls, and configuration will be permanently removed.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
