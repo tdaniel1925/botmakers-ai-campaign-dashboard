@@ -14,6 +14,8 @@ import {
   Copy,
   ExternalLink,
   Settings,
+  Eye,
+  BarChart3,
 } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -329,7 +331,14 @@ export default function CampaignsPage() {
               <TableBody>
                 {campaigns.map((campaign) => (
                   <TableRow key={campaign.id}>
-                    <TableCell className="font-medium">{campaign.name}</TableCell>
+                    <TableCell className="font-medium">
+                      <Link
+                        href={`/admin/campaigns/${campaign.id}`}
+                        className="hover:underline text-primary"
+                      >
+                        {campaign.name}
+                      </Link>
+                    </TableCell>
                     <TableCell>{campaign.organization?.name || '-'}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
@@ -361,6 +370,12 @@ export default function CampaignsPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem asChild>
+                            <Link href={`/admin/campaigns/${campaign.id}`}>
+                              <BarChart3 className="mr-2 h-4 w-4" />
+                              View Details
+                            </Link>
+                          </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => openEditDialog(campaign)}>
                             <Pencil className="mr-2 h-4 w-4" />
                             Edit
