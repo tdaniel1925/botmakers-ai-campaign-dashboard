@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import {
   Building2,
@@ -11,6 +12,7 @@ import {
   Archive,
   RotateCcw,
   Loader2,
+  Eye,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -44,6 +46,7 @@ import { Textarea } from '@/components/ui/textarea';
 import type { Organization } from '@/db/schema';
 
 export default function ClientsPage() {
+  const router = useRouter();
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -52,6 +55,7 @@ export default function ClientsPage() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [selectedOrg, setSelectedOrg] = useState<Organization | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isImpersonating, setIsImpersonating] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -198,6 +202,31 @@ export default function ClientsPage() {
     setIsEditOpen(true);
   };
 
+  const handleImpersonate = async (org: Organization) => {
+    setIsImpersonating(true);
+    try {
+      const response = await fetch('/api/admin/impersonate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ organizationId: org.id }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to start impersonation');
+      }
+
+      toast.success(`Now viewing as ${org.name}`);
+      router.push(result.redirectTo || '/dashboard');
+      router.refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to impersonate');
+    } finally {
+      setIsImpersonating(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -291,6 +320,18 @@ export default function ClientsPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          {org.isActive && (
+                            <>
+                              <DropdownMenuItem
+                                onClick={() => handleImpersonate(org)}
+                                disabled={isImpersonating}
+                              >
+                                <Eye className="mr-2 h-4 w-4" />
+                                View as Client
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                            </>
+                          )}
                           <DropdownMenuItem onClick={() => openEditDialog(org)}>
                             <Pencil className="mr-2 h-4 w-4" />
                             Edit

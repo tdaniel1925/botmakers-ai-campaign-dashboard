@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import {
   Users,
@@ -74,6 +75,7 @@ interface EmailPreview {
 }
 
 export default function UsersPage() {
+  const router = useRouter();
   const [users, setUsers] = useState<UserWithOrg[]>([]);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -87,6 +89,7 @@ export default function UsersPage() {
   const [selectedUser, setSelectedUser] = useState<UserWithOrg | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [tempPassword, setTempPassword] = useState<string | null>(null);
+  const [isImpersonating, setIsImpersonating] = useState(false);
 
   // Multi-step create state
   const [createStep, setCreateStep] = useState<CreateStep>('details');
@@ -371,6 +374,36 @@ export default function UsersPage() {
     });
   };
 
+  const handleImpersonate = async (user: UserWithOrg) => {
+    if (user.role === 'admin') {
+      toast.error('Cannot impersonate admin users');
+      return;
+    }
+
+    setIsImpersonating(true);
+    try {
+      const response = await fetch('/api/admin/impersonate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to start impersonation');
+      }
+
+      toast.success(`Now viewing as ${user.fullName || user.email}`);
+      router.push(result.redirectTo || '/dashboard');
+      router.refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to impersonate');
+    } finally {
+      setIsImpersonating(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -526,6 +559,18 @@ export default function UsersPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          {user.role === 'client_user' && user.isActive && (
+                            <>
+                              <DropdownMenuItem
+                                onClick={() => handleImpersonate(user)}
+                                disabled={isImpersonating}
+                              >
+                                <Eye className="mr-2 h-4 w-4" />
+                                View as Client
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                            </>
+                          )}
                           <DropdownMenuItem onClick={() => openEditDialog(user)}>
                             <Pencil className="mr-2 h-4 w-4" />
                             Edit
