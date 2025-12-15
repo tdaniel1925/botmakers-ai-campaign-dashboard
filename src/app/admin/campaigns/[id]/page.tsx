@@ -700,7 +700,7 @@ export default function CampaignDetailPage({ params }: PageProps) {
                             {formatDateTime(webhook.createdAt)}
                           </span>
                         </div>
-                        {expandedWebhook === webhook.id && webhook.rawPayload && (
+                        {expandedWebhook === webhook.id && webhook.rawPayload != null && (
                           <div className="border-t bg-muted/30 p-3">
                             <div className="flex items-center justify-between mb-2">
                               <span className="text-xs font-medium">Raw Payload</span>
