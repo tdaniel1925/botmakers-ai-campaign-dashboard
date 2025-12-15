@@ -26,7 +26,7 @@ export function DevClientViewButton() {
       onClick={handleClick}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      className="fixed bottom-6 right-6 z-50 shadow-lg rounded-full h-14 transition-all duration-200"
+      className="fixed bottom-6 right-6 z-[9999] shadow-xl rounded-full h-14 transition-all duration-200 bg-blue-600 hover:bg-blue-700 text-white border-2 border-blue-400"
       style={{
         width: isHovered ? 'auto' : '56px',
         paddingLeft: isHovered ? '16px' : '0',
