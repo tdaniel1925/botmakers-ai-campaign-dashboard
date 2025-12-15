@@ -5,12 +5,15 @@ import { useRouter } from 'next/navigation';
 import { Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
+// Set to false to hide this button in production deployments
+const SHOW_DEV_BUTTON = true;
+
 export function DevClientViewButton() {
   const router = useRouter();
   const [isHovered, setIsHovered] = useState(false);
 
-  // Only show in development
-  if (process.env.NODE_ENV === 'production') {
+  // Toggle this to hide in production
+  if (!SHOW_DEV_BUTTON) {
     return null;
   }
 
