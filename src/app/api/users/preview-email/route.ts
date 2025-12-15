@@ -7,6 +7,7 @@ import { generateTemporaryPassword } from '@/services/email-service';
 
 const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || 'BotMakers Portal';
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+const LOGO_URL = process.env.NEXT_PUBLIC_LOGO_URL || '/logo.png';
 
 // POST /api/users/preview-email - Generate email preview for new user
 export async function POST(request: NextRequest) {
@@ -54,7 +55,8 @@ export async function POST(request: NextRequest) {
         .replace(/{{email}}/g, email)
         .replace(/{{password}}/g, password)
         .replace(/{{login_url}}/g, loginUrl)
-        .replace(/{{app_name}}/g, APP_NAME);
+        .replace(/{{app_name}}/g, APP_NAME)
+        .replace(/{{logo_url}}/g, LOGO_URL);
     } else {
       // Default template
       subject = `Welcome to ${APP_NAME} - Your Login Credentials`;

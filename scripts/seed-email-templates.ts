@@ -4,6 +4,13 @@ import { eq, and } from 'drizzle-orm';
 
 const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || 'VoiceMetrics Portal';
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+const LOGO_URL = `${APP_URL}/voicemetrics2.png`;
+
+// Common header with logo on white background
+const emailHeader = `
+    <div style="background: #ffffff; padding: 30px; border-radius: 10px 10px 0 0; text-align: center; border: 1px solid #e0e0e0; border-bottom: none;">
+      <img src="{{logo_url}}" alt="{{app_name}}" style="max-width: 200px; max-height: 60px; height: auto;" />
+    </div>`;
 
 const templates = [
   // Credentials Email (for new user creation)
@@ -19,9 +26,13 @@ const templates = [
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Welcome to {{app_name}}</title>
   </head>
-  <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 10px 10px 0 0; text-align: center;">
-      <h1 style="color: white; margin: 0; font-size: 28px;">Welcome to {{app_name}}</h1>
+  <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+    <div style="background: #ffffff; padding: 30px; border-radius: 10px 10px 0 0; text-align: center; border: 1px solid #e0e0e0; border-bottom: none;">
+      <img src="{{logo_url}}" alt="{{app_name}}" style="max-width: 200px; max-height: 60px; height: auto;" />
+    </div>
+
+    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; text-align: center;">
+      <h1 style="color: white; margin: 0; font-size: 24px;">Welcome to {{app_name}}</h1>
     </div>
 
     <div style="background: #ffffff; padding: 30px; border: 1px solid #e0e0e0; border-top: none; border-radius: 0 0 10px 10px;">
@@ -67,9 +78,13 @@ const templates = [
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Welcome to {{app_name}}</title>
   </head>
-  <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-    <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 30px; border-radius: 10px 10px 0 0; text-align: center;">
-      <h1 style="color: white; margin: 0; font-size: 28px;">Welcome to {{app_name}}!</h1>
+  <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+    <div style="background: #ffffff; padding: 30px; border-radius: 10px 10px 0 0; text-align: center; border: 1px solid #e0e0e0; border-bottom: none;">
+      <img src="{{logo_url}}" alt="{{app_name}}" style="max-width: 200px; max-height: 60px; height: auto;" />
+    </div>
+
+    <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 20px; text-align: center;">
+      <h1 style="color: white; margin: 0; font-size: 24px;">Welcome to {{app_name}}!</h1>
     </div>
 
     <div style="background: #ffffff; padding: 30px; border: 1px solid #e0e0e0; border-top: none; border-radius: 0 0 10px 10px;">
@@ -111,9 +126,13 @@ const templates = [
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Password Reset</title>
   </head>
-  <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-    <div style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); padding: 30px; border-radius: 10px 10px 0 0; text-align: center;">
-      <h1 style="color: white; margin: 0; font-size: 28px;">Password Reset</h1>
+  <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+    <div style="background: #ffffff; padding: 30px; border-radius: 10px 10px 0 0; text-align: center; border: 1px solid #e0e0e0; border-bottom: none;">
+      <img src="{{logo_url}}" alt="{{app_name}}" style="max-width: 200px; max-height: 60px; height: auto;" />
+    </div>
+
+    <div style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); padding: 20px; text-align: center;">
+      <h1 style="color: white; margin: 0; font-size: 24px;">Password Reset</h1>
     </div>
 
     <div style="background: #ffffff; padding: 30px; border: 1px solid #e0e0e0; border-top: none; border-radius: 0 0 10px 10px;">
@@ -155,9 +174,13 @@ const templates = [
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Your Report</title>
   </head>
-  <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-    <div style="background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); padding: 30px; border-radius: 10px 10px 0 0; text-align: center;">
-      <h1 style="color: white; margin: 0; font-size: 28px;">Your {{report_type}} Report</h1>
+  <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+    <div style="background: #ffffff; padding: 30px; border-radius: 10px 10px 0 0; text-align: center; border: 1px solid #e0e0e0; border-bottom: none;">
+      <img src="{{logo_url}}" alt="{{app_name}}" style="max-width: 200px; max-height: 60px; height: auto;" />
+    </div>
+
+    <div style="background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); padding: 20px; text-align: center;">
+      <h1 style="color: white; margin: 0; font-size: 24px;">Your {{report_type}} Report</h1>
     </div>
 
     <div style="background: #ffffff; padding: 30px; border: 1px solid #e0e0e0; border-top: none; border-radius: 0 0 10px 10px;">
@@ -199,9 +222,13 @@ const templates = [
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>News from {{app_name}}</title>
   </head>
-  <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-    <div style="background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%); padding: 30px; border-radius: 10px 10px 0 0; text-align: center;">
-      <h1 style="color: white; margin: 0; font-size: 28px;">{{app_name}} News</h1>
+  <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+    <div style="background: #ffffff; padding: 30px; border-radius: 10px 10px 0 0; text-align: center; border: 1px solid #e0e0e0; border-bottom: none;">
+      <img src="{{logo_url}}" alt="{{app_name}}" style="max-width: 200px; max-height: 60px; height: auto;" />
+    </div>
+
+    <div style="background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%); padding: 20px; text-align: center;">
+      <h1 style="color: white; margin: 0; font-size: 24px;">{{app_name}} News</h1>
     </div>
 
     <div style="background: #ffffff; padding: 30px; border: 1px solid #e0e0e0; border-top: none; border-radius: 0 0 10px 10px;">

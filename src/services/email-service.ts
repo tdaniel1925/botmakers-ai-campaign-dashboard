@@ -8,6 +8,7 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM_EMAIL = process.env.FROM_EMAIL || 'noreply@botmakers.com';
 const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || 'BotMakers Portal';
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+const LOGO_URL = process.env.NEXT_PUBLIC_LOGO_URL || '/logo.png';
 
 interface SendEmailParams {
   to: string;
@@ -81,7 +82,8 @@ export async function sendCredentialsEmail(
       .replace(/{{email}}/g, email)
       .replace(/{{password}}/g, temporaryPassword)
       .replace(/{{login_url}}/g, loginUrl)
-      .replace(/{{app_name}}/g, APP_NAME);
+      .replace(/{{app_name}}/g, APP_NAME)
+      .replace(/{{logo_url}}/g, LOGO_URL);
   } else {
     // Default template
     subject = `Welcome to ${APP_NAME} - Your Login Credentials`;
