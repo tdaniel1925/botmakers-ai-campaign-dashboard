@@ -116,6 +116,23 @@ export async function isClientUser(): Promise<boolean> {
 // SALES USER AUTHENTICATION
 // ============================================
 
+// Type for users who can access the sales portal
+export interface SalesAuthUser {
+  id: string;
+  email: string;
+  fullName: string;
+  phone: string | null;
+  commissionRate: number;
+  isActive: boolean;
+  mustChangePassword: boolean;
+  hasSeenWelcome: boolean;
+  bio: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  // Additional fields for access type
+  accessType: 'sales_user' | 'admin' | 'user_with_access';
+}
+
 export async function getSalesUser(): Promise<SalesUser | null> {
   const authUser = await getUser();
   if (!authUser) return null;
@@ -129,25 +146,73 @@ export async function getSalesUser(): Promise<SalesUser | null> {
   return salesUser || null;
 }
 
-export async function requireSalesAuth(): Promise<SalesUser> {
+export async function requireSalesAuth(): Promise<SalesAuthUser> {
   const authUser = await requireAuth();
 
+  // First check if user is a dedicated sales user
   const [salesUser] = await db
     .select()
     .from(salesUsers)
     .where(eq(salesUsers.id, authUser.id))
     .limit(1);
 
-  if (!salesUser) {
-    // Not a sales user, redirect to appropriate login
-    redirect('/sales/login?error=not_sales_user');
+  if (salesUser) {
+    if (!salesUser.isActive) {
+      redirect('/sales/login?error=account_disabled');
+    }
+    return {
+      ...salesUser,
+      accessType: 'sales_user',
+    };
   }
 
-  if (!salesUser.isActive) {
-    redirect('/sales/login?error=account_disabled');
+  // Check if user is an admin or has sales access
+  const [dbUser] = await db
+    .select()
+    .from(users)
+    .where(eq(users.id, authUser.id))
+    .limit(1);
+
+  if (dbUser) {
+    // Admins can always view the sales portal
+    if (dbUser.role === 'admin') {
+      return {
+        id: dbUser.id,
+        email: dbUser.email,
+        fullName: dbUser.fullName || 'Admin',
+        phone: null,
+        commissionRate: 0,
+        isActive: true,
+        mustChangePassword: false,
+        hasSeenWelcome: true, // Admins don't need welcome
+        bio: null,
+        createdAt: dbUser.createdAt,
+        updatedAt: dbUser.updatedAt,
+        accessType: 'admin',
+      };
+    }
+
+    // Users with hasSalesAccess can access the portal
+    if (dbUser.hasSalesAccess && dbUser.isActive) {
+      return {
+        id: dbUser.id,
+        email: dbUser.email,
+        fullName: dbUser.fullName || dbUser.email.split('@')[0],
+        phone: null,
+        commissionRate: 18, // Default commission rate
+        isActive: true,
+        mustChangePassword: dbUser.mustChangePassword,
+        hasSeenWelcome: true, // Users with access are considered onboarded
+        bio: null,
+        createdAt: dbUser.createdAt,
+        updatedAt: dbUser.updatedAt,
+        accessType: 'user_with_access',
+      };
+    }
   }
 
-  return salesUser;
+  // Not authorized for sales portal
+  redirect('/sales/login?error=not_sales_user');
 }
 
 export async function isSalesUser(): Promise<boolean> {

@@ -112,6 +112,20 @@ export async function POST(request: NextRequest) {
     const { email, fullName, phone, password, commissionRate } = validation.data;
     const { sendEmail = true } = body; // Optional: whether to send welcome email (defaults to true)
 
+    // Check if email already exists in sales_users table
+    const [existingSalesUser] = await db
+      .select()
+      .from(salesUsers)
+      .where(eq(salesUsers.email, email))
+      .limit(1);
+
+    if (existingSalesUser) {
+      return NextResponse.json(
+        { error: 'A sales user with this email already exists' },
+        { status: 400 }
+      );
+    }
+
     // Create auth user in Supabase
     const supabase = await createClient();
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
@@ -121,7 +135,15 @@ export async function POST(request: NextRequest) {
     });
 
     if (authError) {
-      return NextResponse.json({ error: authError.message }, { status: 400 });
+      log.error('Supabase auth error', { error: authError.message, code: authError.code });
+      // Provide more user-friendly error messages
+      let errorMessage = authError.message;
+      if (authError.message.includes('already registered') || authError.message.includes('already exists')) {
+        errorMessage = 'This email is already registered in the system';
+      } else if (authError.message.includes('not allowed') || authError.message.includes('not permitted')) {
+        errorMessage = 'Unable to create user. Please check Supabase admin permissions.';
+      }
+      return NextResponse.json({ error: errorMessage }, { status: 400 });
     }
 
     if (!authData.user) {
