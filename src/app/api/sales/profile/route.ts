@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const salesUser = await requireSalesAuth();
-    log.info('Fetching profile', { userId: salesUser.id });
+    log.info('Fetching profile', { userId: salesUser.id, accessType: salesUser.accessType });
 
     // Rate limiting
     const rateLimit = withRateLimit(salesUser.id, 'sales-profile-get', RATE_LIMITS.standard);
@@ -20,7 +20,30 @@ export async function GET(request: NextRequest) {
       return rateLimit.response;
     }
 
-    // Get profile with stats
+    // For admins/users_with_access, return profile with zeroed stats
+    // They don't have their own leads/commissions - they view the portal as observers
+    if (salesUser.accessType !== 'sales_user') {
+      log.info('Admin/observer profile fetched', { userId: salesUser.id, accessType: salesUser.accessType });
+      const response = NextResponse.json({
+        profile: salesUser,
+        stats: {
+          totalLeads: 0,
+          wonLeads: 0,
+          conversionRate: 0,
+          totalEarnings: 0,
+          paidAmount: 0,
+        },
+        isObserver: true, // Flag to indicate this user is viewing as an observer
+      });
+
+      Object.entries(rateLimit.headers).forEach(([key, value]) => {
+        response.headers.set(key, value);
+      });
+
+      return response;
+    }
+
+    // Get profile with stats for actual sales users
     const [stats] = await db
       .select({
         totalLeads: sql<number>`count(*)::int`,
@@ -72,7 +95,16 @@ export async function PUT(request: NextRequest) {
 
   try {
     const salesUser = await requireSalesAuth();
-    log.info('Updating profile', { userId: salesUser.id });
+    log.info('Updating profile', { userId: salesUser.id, accessType: salesUser.accessType });
+
+    // Admins and users_with_access cannot update their "sales profile" - they don't have one
+    if (salesUser.accessType !== 'sales_user') {
+      log.info('Profile update rejected - user is not a sales_user', { accessType: salesUser.accessType });
+      return NextResponse.json(
+        { error: 'Profile updates are only available for sales team members' },
+        { status: 403 }
+      );
+    }
 
     // Rate limiting for write operations
     const rateLimit = withRateLimit(salesUser.id, 'sales-profile-put', RATE_LIMITS.write);

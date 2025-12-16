@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const salesUser = await requireSalesAuth();
-    log.info('Dismissing welcome message', { userId: salesUser.id });
+    log.info('Dismissing welcome message', { userId: salesUser.id, accessType: salesUser.accessType });
 
     // Rate limiting
     const rateLimit = withRateLimit(salesUser.id, 'sales-dismiss-welcome', RATE_LIMITS.write);
@@ -20,7 +20,14 @@ export async function POST(request: NextRequest) {
       return rateLimit.response;
     }
 
-    // Update hasSeenWelcome flag
+    // Admins/users_with_access don't have records in salesUsers table
+    // They have hasSeenWelcome=true by default, so just return success
+    if (salesUser.accessType !== 'sales_user') {
+      log.info('Welcome dismiss skipped - user is not a sales_user', { accessType: salesUser.accessType });
+      return NextResponse.json({ success: true });
+    }
+
+    // Update hasSeenWelcome flag for actual sales users
     await db
       .update(salesUsers)
       .set({

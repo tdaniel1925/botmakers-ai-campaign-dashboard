@@ -12,7 +12,8 @@ export async function GET() {
 
   try {
     const salesUser = await requireSalesAuth();
-    log.info('Fetching dashboard', { userId: salesUser.id });
+    const isObserver = salesUser.accessType !== 'sales_user';
+    log.info('Fetching dashboard', { userId: salesUser.id, accessType: salesUser.accessType, isObserver });
 
     // Rate limiting
     const rateLimit = withRateLimit(salesUser.id, 'sales-dashboard-get', RATE_LIMITS.standard);
@@ -25,15 +26,29 @@ export async function GET() {
     startOfMonth.setDate(1);
     startOfMonth.setHours(0, 0, 0, 0);
 
+    const now = new Date();
+    const nextWeek = new Date();
+    nextWeek.setDate(nextWeek.getDate() + 7);
+
+    // For admins/observers, show aggregate data from ALL sales users
+    // For sales_user, show only their own data
+    const userFilter = isObserver ? undefined : eq(leads.salesUserId, salesUser.id);
+    const commissionUserFilter = isObserver ? undefined : eq(commissions.salesUserId, salesUser.id);
+
     // Get lead stats
-    const [leadStats] = await db
+    const leadStatsQuery = db
       .select({
         totalLeads: sql<number>`count(*)`,
         newLeadsThisMonth: sql<number>`count(*) filter (where ${leads.createdAt} >= ${startOfMonth})`,
         wonLeads: sql<number>`count(*) filter (where ${leads.status} = 'won')`,
       })
-      .from(leads)
-      .where(eq(leads.salesUserId, salesUser.id));
+      .from(leads);
+
+    if (userFilter) {
+      leadStatsQuery.where(userFilter);
+    }
+
+    const [leadStats] = await leadStatsQuery;
 
     // Calculate conversion rate
     const conversionRate = leadStats.totalLeads > 0
@@ -41,37 +56,40 @@ export async function GET() {
       : 0;
 
     // Get commission stats
-    const [commissionStats] = await db
+    const commissionStatsQuery = db
       .select({
         pendingCommissions: sql<number>`coalesce(sum(${commissions.commissionAmount}) filter (where ${commissions.status} = 'pending'), 0)`,
         paidCommissions: sql<number>`coalesce(sum(${commissions.commissionAmount}) filter (where ${commissions.status} = 'paid'), 0)`,
         totalEarnings: sql<number>`coalesce(sum(${commissions.commissionAmount}) filter (where ${commissions.status} in ('approved', 'paid')), 0)`,
       })
-      .from(commissions)
-      .where(eq(commissions.salesUserId, salesUser.id));
+      .from(commissions);
+
+    if (commissionUserFilter) {
+      commissionStatsQuery.where(commissionUserFilter);
+    }
+
+    const [commissionStats] = await commissionStatsQuery;
 
     // Get upcoming follow-ups count
-    const now = new Date();
-    const nextWeek = new Date();
-    nextWeek.setDate(nextWeek.getDate() + 7);
+    const followUpConditions = [
+      isNotNull(leads.nextFollowUpAt),
+      gte(leads.nextFollowUpAt, now),
+      lte(leads.nextFollowUpAt, nextWeek)
+    ];
+    if (!isObserver) {
+      followUpConditions.unshift(eq(leads.salesUserId, salesUser.id));
+    }
 
     const [followUpCount] = await db
       .select({
         count: sql<number>`count(*)`,
       })
       .from(leads)
-      .where(
-        and(
-          eq(leads.salesUserId, salesUser.id),
-          isNotNull(leads.nextFollowUpAt),
-          gte(leads.nextFollowUpAt, now),
-          lte(leads.nextFollowUpAt, nextWeek)
-        )
-      );
+      .where(and(...followUpConditions));
 
     // Get recent leads with stage info
     const recentLeads = await db.query.leads.findMany({
-      where: eq(leads.salesUserId, salesUser.id),
+      where: isObserver ? undefined : eq(leads.salesUserId, salesUser.id),
       with: {
         stage: true,
       },
@@ -80,19 +98,23 @@ export async function GET() {
     });
 
     // Get upcoming follow-ups
+    const upcomingConditions = [
+      isNotNull(leads.nextFollowUpAt),
+      gte(leads.nextFollowUpAt, now)
+    ];
+    if (!isObserver) {
+      upcomingConditions.unshift(eq(leads.salesUserId, salesUser.id));
+    }
+
     const upcomingFollowUps = await db.query.leads.findMany({
-      where: and(
-        eq(leads.salesUserId, salesUser.id),
-        isNotNull(leads.nextFollowUpAt),
-        gte(leads.nextFollowUpAt, now)
-      ),
+      where: and(...upcomingConditions),
       orderBy: [leads.nextFollowUpAt],
       limit: 5,
     });
 
     // Get recent commissions
     const recentCommissions = await db.query.commissions.findMany({
-      where: eq(commissions.salesUserId, salesUser.id),
+      where: isObserver ? undefined : eq(commissions.salesUserId, salesUser.id),
       with: {
         lead: {
           columns: {
@@ -105,7 +127,7 @@ export async function GET() {
       limit: 5,
     });
 
-    log.info('Dashboard fetched', { userId: salesUser.id });
+    log.info('Dashboard fetched', { userId: salesUser.id, isObserver });
 
     const response = NextResponse.json({
       stats: {
@@ -121,6 +143,7 @@ export async function GET() {
       recentLeads,
       upcomingFollowUps,
       recentCommissions,
+      isObserver, // Flag to let frontend know this is an observer view
     });
 
     Object.entries(rateLimit.headers).forEach(([key, value]) => {

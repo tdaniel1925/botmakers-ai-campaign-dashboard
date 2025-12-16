@@ -11,7 +11,8 @@ export async function GET(request: NextRequest) {
 
   try {
     const salesUser = await requireSalesAuth();
-    log.info('Fetching commissions', { userId: salesUser.id });
+    const isObserver = salesUser.accessType !== 'sales_user';
+    log.info('Fetching commissions', { userId: salesUser.id, accessType: salesUser.accessType, isObserver });
 
     // Rate limiting
     const rateLimit = withRateLimit(salesUser.id, 'sales-commissions-get', RATE_LIMITS.standard);
@@ -28,8 +29,12 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '20')));
     const offset = (page - 1) * limit;
 
-    // Build conditions
-    const conditions = [eq(commissions.salesUserId, salesUser.id)];
+    // Build conditions - admins see all commissions, sales users see only their own
+    const conditions: ReturnType<typeof eq>[] = [];
+
+    if (!isObserver) {
+      conditions.push(eq(commissions.salesUserId, salesUser.id));
+    }
 
     if (status && status !== 'all') {
       conditions.push(eq(commissions.status, status as 'pending' | 'approved' | 'paid' | 'cancelled'));
@@ -42,6 +47,8 @@ export async function GET(request: NextRequest) {
     if (endDate) {
       conditions.push(lte(commissions.createdAt, new Date(endDate)));
     }
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
     // Get commissions with lead info
     const commissionsData = await db
@@ -63,7 +70,7 @@ export async function GET(request: NextRequest) {
       })
       .from(commissions)
       .leftJoin(leads, eq(commissions.leadId, leads.id))
-      .where(and(...conditions))
+      .where(whereClause)
       .orderBy(desc(commissions.createdAt))
       .limit(limit)
       .offset(offset);
@@ -72,10 +79,11 @@ export async function GET(request: NextRequest) {
     const [{ count }] = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(commissions)
-      .where(and(...conditions));
+      .where(whereClause);
 
-    // Get summary stats
-    const [stats] = await db
+    // Get summary stats (all commissions for observers, own commissions for sales users)
+    const statsWhereClause = isObserver ? undefined : eq(commissions.salesUserId, salesUser.id);
+    const statsQuery = db
       .select({
         totalPending: sql<number>`coalesce(sum(case when status = 'pending' then commission_amount else 0 end), 0)::int`,
         totalApproved: sql<number>`coalesce(sum(case when status = 'approved' then commission_amount else 0 end), 0)::int`,
@@ -84,10 +92,15 @@ export async function GET(request: NextRequest) {
         totalSales: sql<number>`coalesce(sum(case when status != 'cancelled' then sale_amount else 0 end), 0)::int`,
         commissionCount: sql<number>`count(*)::int`,
       })
-      .from(commissions)
-      .where(eq(commissions.salesUserId, salesUser.id));
+      .from(commissions);
 
-    log.info('Commissions fetched', { userId: salesUser.id, count: commissionsData.length });
+    if (statsWhereClause) {
+      statsQuery.where(statsWhereClause);
+    }
+
+    const [stats] = await statsQuery;
+
+    log.info('Commissions fetched', { userId: salesUser.id, count: commissionsData.length, isObserver });
 
     const response = NextResponse.json({
       commissions: commissionsData,
@@ -98,6 +111,7 @@ export async function GET(request: NextRequest) {
         total: count,
         totalPages: Math.ceil(count / limit),
       },
+      isObserver,
     });
 
     Object.entries(rateLimit.headers).forEach(([key, value]) => {

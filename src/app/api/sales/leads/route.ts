@@ -17,13 +17,14 @@ function sanitizeSearchInput(input: string): string {
     .slice(0, 200); // Limit length
 }
 
-// GET /api/sales/leads - Get leads for current sales user
+// GET /api/sales/leads - Get leads for current sales user (or all leads for admins)
 export async function GET(request: NextRequest) {
   const log = createApiLogger('/api/sales/leads');
 
   try {
     const salesUser = await requireSalesAuth();
-    log.info('Fetching leads', { userId: salesUser.id });
+    const isObserver = salesUser.accessType !== 'sales_user';
+    log.info('Fetching leads', { userId: salesUser.id, accessType: salesUser.accessType, isObserver });
 
     // Rate limiting
     const rateLimit = withRateLimit(salesUser.id, 'sales-leads-get', RATE_LIMITS.standard);
@@ -43,8 +44,12 @@ export async function GET(request: NextRequest) {
 
     const offset = (page - 1) * limit;
 
-    // Build conditions
-    const conditions = [eq(leads.salesUserId, salesUser.id)];
+    // Build conditions - admins see all leads, sales users see only their own
+    const conditions: ReturnType<typeof eq>[] = [];
+
+    if (!isObserver) {
+      conditions.push(eq(leads.salesUserId, salesUser.id));
+    }
 
     if (search) {
       conditions.push(
@@ -66,7 +71,7 @@ export async function GET(request: NextRequest) {
       conditions.push(eq(leads.stageId, stageId));
     }
 
-    const whereClause = and(...conditions);
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
     // Get leads with stage info
     const [leadsList, totalResult] = await Promise.all([
@@ -89,6 +94,7 @@ export async function GET(request: NextRequest) {
       userId: salesUser.id,
       count: leadsList.length,
       total: totalResult[0].count,
+      isObserver,
     });
 
     const response = NextResponse.json({
@@ -99,6 +105,7 @@ export async function GET(request: NextRequest) {
         total: Number(totalResult[0].count),
         totalPages: Math.ceil(Number(totalResult[0].count) / limit),
       },
+      isObserver,
     });
 
     // Add rate limit headers
@@ -122,7 +129,16 @@ export async function POST(request: NextRequest) {
 
   try {
     const salesUser = await requireSalesAuth();
-    log.info('Creating lead', { userId: salesUser.id });
+    log.info('Creating lead', { userId: salesUser.id, accessType: salesUser.accessType });
+
+    // Admins and users_with_access cannot create leads - they're observers
+    if (salesUser.accessType !== 'sales_user') {
+      log.info('Lead creation rejected - user is not a sales_user', { accessType: salesUser.accessType });
+      return NextResponse.json(
+        { error: 'Only sales team members can create leads' },
+        { status: 403 }
+      );
+    }
 
     // Rate limiting for write operations
     const rateLimit = withRateLimit(salesUser.id, 'sales-leads-post', RATE_LIMITS.write);
