@@ -14,6 +14,11 @@ import {
   Trash2,
   DollarSign,
   Target,
+  Eye,
+  Send,
+  Save,
+  ArrowLeft,
+  ArrowRight,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -58,6 +63,16 @@ interface SalesUser {
   commissionStats: { total: number; pending: number };
 }
 
+type CreateStep = 'details' | 'preview';
+
+interface EmailPreview {
+  subject: string;
+  html: string;
+  to: string;
+  from: string;
+  temporaryPassword: string;
+}
+
 export default function SalesTeamPage() {
   const [salesUsers, setSalesUsers] = useState<SalesUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -74,6 +89,9 @@ export default function SalesTeamPage() {
     password: '',
     commissionRate: 18,
   });
+  const [createStep, setCreateStep] = useState<CreateStep>('details');
+  const [emailPreview, setEmailPreview] = useState<EmailPreview | null>(null);
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
   const [editForm, setEditForm] = useState({
     fullName: '',
     phone: '',
@@ -99,9 +117,52 @@ export default function SalesTeamPage() {
     }
   };
 
-  const handleCreate = async () => {
+  const fetchEmailPreview = async () => {
     if (!createForm.email || !createForm.fullName || !createForm.password) {
       toast.error('Please fill in all required fields');
+      return false;
+    }
+
+    setIsLoadingPreview(true);
+    try {
+      const response = await fetch('/api/admin/sales-team/preview-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: createForm.email,
+          fullName: createForm.fullName,
+          password: createForm.password,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to generate preview');
+      }
+
+      setEmailPreview(result);
+      return true;
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to generate preview');
+      return false;
+    } finally {
+      setIsLoadingPreview(false);
+    }
+  };
+
+  const handleNextStep = async () => {
+    if (createStep === 'details') {
+      const success = await fetchEmailPreview();
+      if (success) {
+        setCreateStep('preview');
+      }
+    }
+  };
+
+  const handleCreate = async (sendEmail: boolean) => {
+    if (!emailPreview) {
+      toast.error('Please preview the email first');
       return;
     }
 
@@ -110,7 +171,11 @@ export default function SalesTeamPage() {
       const response = await fetch('/api/admin/sales-team', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(createForm),
+        body: JSON.stringify({
+          ...createForm,
+          password: emailPreview.temporaryPassword,
+          sendEmail,
+        }),
       });
 
       if (!response.ok) {
@@ -118,21 +183,31 @@ export default function SalesTeamPage() {
         throw new Error(error.error || 'Failed to create');
       }
 
-      toast.success('Sales user created successfully');
-      setIsCreateDialogOpen(false);
-      setCreateForm({
-        email: '',
-        fullName: '',
-        phone: '',
-        password: '',
-        commissionRate: 18,
-      });
+      if (sendEmail) {
+        toast.success('Sales user created and welcome email sent');
+      } else {
+        toast.success('Sales user created (email not sent)');
+      }
+      closeCreateDialog();
       fetchSalesTeam();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to create sales user');
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const closeCreateDialog = () => {
+    setIsCreateDialogOpen(false);
+    setCreateStep('details');
+    setEmailPreview(null);
+    setCreateForm({
+      email: '',
+      fullName: '',
+      phone: '',
+      password: '',
+      commissionRate: 18,
+    });
   };
 
   const handleEdit = async () => {
@@ -378,93 +453,218 @@ export default function SalesTeamPage() {
         </CardContent>
       </Card>
 
-      {/* Create Dialog */}
-      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-        <DialogContent>
+      {/* Create Dialog - Multi-step */}
+      <Dialog open={isCreateDialogOpen} onOpenChange={(open) => !open && closeCreateDialog()}>
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Add Sales User</DialogTitle>
+            <DialogTitle>
+              {createStep === 'details' ? 'Add Sales User' : 'Preview Welcome Email'}
+            </DialogTitle>
             <DialogDescription>
-              Create a new sales team member account
+              {createStep === 'details'
+                ? 'Create a new sales team member account'
+                : 'Review the email that will be sent to the new sales user.'}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="create-email">Email *</Label>
-                <Input
-                  id="create-email"
-                  type="email"
-                  value={createForm.email}
-                  onChange={(e) =>
-                    setCreateForm({ ...createForm, email: e.target.value })
-                  }
-                />
+
+          {/* Step indicator */}
+          <div className="flex items-center justify-center gap-4 py-2">
+            <div className={`flex items-center gap-2 ${createStep === 'details' ? 'text-primary' : 'text-muted-foreground'}`}>
+              <div className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium ${
+                createStep === 'details' ? 'bg-primary text-primary-foreground' : 'bg-muted'
+              }`}>
+                1
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="create-name">Full Name *</Label>
-                <Input
-                  id="create-name"
-                  value={createForm.fullName}
-                  onChange={(e) =>
-                    setCreateForm({ ...createForm, fullName: e.target.value })
-                  }
-                />
-              </div>
+              <span className="text-sm font-medium">Details</span>
             </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="create-password">Password *</Label>
-                <Input
-                  id="create-password"
-                  type="password"
-                  value={createForm.password}
-                  onChange={(e) =>
-                    setCreateForm({ ...createForm, password: e.target.value })
-                  }
-                />
+            <div className="h-px w-8 bg-border" />
+            <div className={`flex items-center gap-2 ${createStep === 'preview' ? 'text-primary' : 'text-muted-foreground'}`}>
+              <div className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium ${
+                createStep === 'preview' ? 'bg-primary text-primary-foreground' : 'bg-muted'
+              }`}>
+                2
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="create-phone">Phone</Label>
-                <Input
-                  id="create-phone"
-                  value={createForm.phone}
-                  onChange={(e) =>
-                    setCreateForm({ ...createForm, phone: e.target.value })
-                  }
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="create-rate">Commission Rate (%)</Label>
-              <Input
-                id="create-rate"
-                type="number"
-                min="0"
-                max="100"
-                value={createForm.commissionRate}
-                onChange={(e) =>
-                  setCreateForm({
-                    ...createForm,
-                    commissionRate: parseInt(e.target.value) || 18,
-                  })
-                }
-              />
+              <span className="text-sm font-medium">Preview & Send</span>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleCreate} disabled={isSaving}>
-              {isSaving ? (
+
+          {createStep === 'details' ? (
+            /* Step 1: User Details */
+            <div className="space-y-4 py-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="create-email">Email *</Label>
+                  <Input
+                    id="create-email"
+                    type="email"
+                    value={createForm.email}
+                    onChange={(e) =>
+                      setCreateForm({ ...createForm, email: e.target.value })
+                    }
+                    placeholder="sales@example.com"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="create-name">Full Name *</Label>
+                  <Input
+                    id="create-name"
+                    value={createForm.fullName}
+                    onChange={(e) =>
+                      setCreateForm({ ...createForm, fullName: e.target.value })
+                    }
+                    placeholder="John Doe"
+                  />
+                </div>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="create-password">Password *</Label>
+                  <Input
+                    id="create-password"
+                    type="password"
+                    value={createForm.password}
+                    onChange={(e) =>
+                      setCreateForm({ ...createForm, password: e.target.value })
+                    }
+                    placeholder="Min 8 characters"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="create-phone">Phone</Label>
+                  <Input
+                    id="create-phone"
+                    value={createForm.phone}
+                    onChange={(e) =>
+                      setCreateForm({ ...createForm, phone: e.target.value })
+                    }
+                    placeholder="(555) 123-4567"
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="create-rate">Commission Rate (%)</Label>
+                <Input
+                  id="create-rate"
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={createForm.commissionRate}
+                  onChange={(e) =>
+                    setCreateForm({
+                      ...createForm,
+                      commissionRate: parseInt(e.target.value) || 18,
+                    })
+                  }
+                />
+              </div>
+            </div>
+          ) : (
+            /* Step 2: Email Preview */
+            <div className="space-y-4 py-4">
+              {emailPreview ? (
                 <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Creating...
+                  {/* Password display for admin */}
+                  <div className="rounded-lg border border-green-200 bg-green-50 p-4">
+                    <p className="text-sm font-medium text-green-800 mb-2">
+                      Generated Password:
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 rounded bg-white px-3 py-2 font-mono text-sm border">
+                        {emailPreview.temporaryPassword}
+                      </code>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          navigator.clipboard.writeText(emailPreview.temporaryPassword);
+                          toast.success('Password copied to clipboard');
+                        }}
+                      >
+                        Copy
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border bg-muted/50 p-4 space-y-2">
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="font-medium text-muted-foreground">To:</span>
+                      <span>{emailPreview.to}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="font-medium text-muted-foreground">Subject:</span>
+                      <span>{emailPreview.subject}</span>
+                    </div>
+                  </div>
+                  <div className="rounded-lg border overflow-hidden">
+                    <div className="bg-muted px-4 py-2 border-b flex items-center gap-2">
+                      <Eye className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm font-medium">Email Preview</span>
+                    </div>
+                    <div className="p-4 bg-white max-h-[300px] overflow-y-auto">
+                      <div
+                        className="prose prose-sm max-w-none"
+                        dangerouslySetInnerHTML={{ __html: emailPreview.html }}
+                      />
+                    </div>
+                  </div>
                 </>
               ) : (
-                'Create User'
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
               )}
-            </Button>
+            </div>
+          )}
+
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            {createStep === 'details' ? (
+              <>
+                <Button variant="outline" onClick={closeCreateDialog}>
+                  Cancel
+                </Button>
+                <Button onClick={handleNextStep} disabled={isLoadingPreview}>
+                  {isLoadingPreview ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Loading Preview...
+                    </>
+                  ) : (
+                    <>
+                      Preview Email
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </>
+                  )}
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button variant="outline" onClick={() => setCreateStep('details')}>
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Back
+                </Button>
+                <div className="flex-1" />
+                <Button
+                  variant="secondary"
+                  onClick={() => handleCreate(false)}
+                  disabled={isSaving}
+                >
+                  {isSaving ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="mr-2 h-4 w-4" />
+                  )}
+                  Create Only
+                </Button>
+                <Button onClick={() => handleCreate(true)} disabled={isSaving}>
+                  {isSaving ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="mr-2 h-4 w-4" />
+                  )}
+                  Create & Send Email
+                </Button>
+              </>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

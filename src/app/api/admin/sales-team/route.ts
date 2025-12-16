@@ -110,6 +110,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { email, fullName, phone, password, commissionRate } = validation.data;
+    const { sendEmail = true } = body; // Optional: whether to send welcome email (defaults to true)
 
     // Create auth user in Supabase
     const supabase = await createClient();
@@ -142,16 +143,22 @@ export async function POST(request: NextRequest) {
       })
       .returning();
 
-    // Send welcome email with credentials
-    const emailResult = await sendSalesWelcomeEmail(email, password, fullName);
-    if (!emailResult.success) {
-      log.warn('Failed to send welcome email', { email, error: emailResult.error });
+    // Send welcome email with credentials if requested
+    let emailSent = false;
+    if (sendEmail) {
+      const emailResult = await sendSalesWelcomeEmail(email, password, fullName);
+      if (!emailResult.success) {
+        log.warn('Failed to send welcome email', { email, error: emailResult.error });
+      } else {
+        log.info('Welcome email sent', { email });
+        emailSent = true;
+      }
     } else {
-      log.info('Welcome email sent', { email });
+      log.info('Skipping welcome email (not requested)', { email });
     }
 
     log.info('Sales user created', { newUserId: salesUser.id, email });
-    return NextResponse.json({ ...salesUser, emailSent: emailResult.success }, { status: 201 });
+    return NextResponse.json({ ...salesUser, emailSent }, { status: 201 });
   } catch (error) {
     log.error('Failed to create sales user', { error: error instanceof Error ? error.message : 'Unknown error' });
     return NextResponse.json(
