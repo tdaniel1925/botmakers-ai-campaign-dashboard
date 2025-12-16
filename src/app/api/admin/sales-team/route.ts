@@ -3,7 +3,7 @@ import { requireAdmin } from '@/lib/auth';
 import { db } from '@/db';
 import { salesUsers, leads, commissions } from '@/db/schema';
 import { eq, desc, sql } from 'drizzle-orm';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { withRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { createApiLogger } from '@/lib/logger';
 import { createSalesUserSchema, validateRequest } from '@/lib/validations/admin';
@@ -126,8 +126,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create auth user in Supabase
-    const supabase = await createClient();
+    // Create auth user in Supabase using admin client (requires service role key)
+    const supabase = createAdminClient();
     const { data: authData, error: authError } = await supabase.auth.admin.createUser({
       email,
       password,
