@@ -23,6 +23,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { formatDateTime, formatCurrency } from '@/lib/utils';
+import { WelcomeMessage } from '@/components/sales/welcome-message';
 
 interface DashboardStats {
   totalLeads: number;
@@ -67,15 +68,24 @@ interface RecentCommission {
   lead: { firstName: string; lastName: string } | null;
 }
 
+interface UserProfile {
+  fullName: string;
+  hasSeenWelcome: boolean;
+  mustChangePassword: boolean;
+}
+
 export default function SalesDashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [recentLeads, setRecentLeads] = useState<RecentLead[]>([]);
   const [upcomingFollowUps, setUpcomingFollowUps] = useState<UpcomingFollowUp[]>([]);
   const [recentCommissions, setRecentCommissions] = useState<RecentCommission[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [showWelcome, setShowWelcome] = useState(false);
 
   useEffect(() => {
     fetchDashboardData();
+    fetchUserProfile();
   }, []);
 
   const fetchDashboardData = async () => {
@@ -91,6 +101,25 @@ export default function SalesDashboard() {
       toast.error('Failed to load dashboard data');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchUserProfile = async () => {
+    try {
+      const response = await fetch('/api/sales/profile');
+      if (!response.ok) throw new Error('Failed to fetch profile');
+      const data = await response.json();
+      setUserProfile({
+        fullName: data.profile.fullName,
+        hasSeenWelcome: data.profile.hasSeenWelcome,
+        mustChangePassword: data.profile.mustChangePassword,
+      });
+      // Show welcome if user hasn't seen it yet
+      if (!data.profile.hasSeenWelcome) {
+        setShowWelcome(true);
+      }
+    } catch (error) {
+      console.error('Failed to fetch user profile');
     }
   };
 
@@ -135,12 +164,20 @@ export default function SalesDashboard() {
 
   return (
     <div className="space-y-6">
+      {/* Welcome Message for New Users */}
+      {showWelcome && userProfile && (
+        <WelcomeMessage
+          userName={userProfile.fullName}
+          onDismiss={() => setShowWelcome(false)}
+        />
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Sales Dashboard</h1>
           <p className="text-muted-foreground">
-            Welcome back! Here&apos;s your sales overview.
+            Welcome back{userProfile ? `, ${userProfile.fullName.split(' ')[0]}` : ''}! Here&apos;s your sales overview.
           </p>
         </div>
         <Link href="/sales/leads/new">

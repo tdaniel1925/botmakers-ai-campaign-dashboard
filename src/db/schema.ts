@@ -52,6 +52,7 @@ export const users = pgTable('users', {
   organizationId: uuid('organization_id').references(() => organizations.id, { onDelete: 'set null' }),
   isActive: boolean('is_active').default(true).notNull(),
   mustChangePassword: boolean('must_change_password').default(false).notNull(),
+  hasSalesAccess: boolean('has_sales_access').default(false).notNull(), // Multi-role: user can also have sales portal access
   reportFrequency: reportFrequencyEnum('report_frequency'),
   reportScope: reportScopeEnum('report_scope'),
   timezone: text('timezone').default('America/Chicago'),
@@ -217,6 +218,8 @@ export const salesUsers = pgTable('sales_users', {
   bio: text('bio'),
   commissionRate: integer('commission_rate').default(18).notNull(), // Default 18%
   isActive: boolean('is_active').default(true).notNull(),
+  mustChangePassword: boolean('must_change_password').default(true).notNull(), // Force password change on first login
+  hasSeenWelcome: boolean('has_seen_welcome').default(false).notNull(), // Track if user dismissed welcome message
   notes: text('notes'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),

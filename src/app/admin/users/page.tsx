@@ -58,6 +58,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import type { User as UserType, Organization } from '@/db/schema';
 
 type UserWithOrg = UserType & {
@@ -102,6 +103,7 @@ export default function UsersPage() {
     fullName: '',
     role: 'client_user' as 'admin' | 'client_user',
     organizationId: '',
+    hasSalesAccess: false,
   });
 
   const fetchUsers = useCallback(async () => {
@@ -211,6 +213,7 @@ export default function UsersPage() {
           fullName: formData.fullName || null,
           role: formData.role,
           organizationId: formData.role === 'client_user' ? formData.organizationId : null,
+          hasSalesAccess: formData.hasSalesAccess,
           sendCredentials: sendEmail,
           password: emailPreview.temporaryPassword,
         }),
@@ -253,6 +256,7 @@ export default function UsersPage() {
           fullName: formData.fullName || null,
           role: formData.role,
           organizationId: formData.role === 'client_user' ? formData.organizationId : null,
+          hasSalesAccess: formData.hasSalesAccess,
         }),
       });
 
@@ -351,6 +355,7 @@ export default function UsersPage() {
       fullName: user.fullName || '',
       role: user.role,
       organizationId: user.organizationId || '',
+      hasSalesAccess: user.hasSalesAccess || false,
     });
     setIsEditOpen(true);
   };
@@ -371,6 +376,7 @@ export default function UsersPage() {
       fullName: '',
       role: 'client_user',
       organizationId: '',
+      hasSalesAccess: false,
     });
   };
 
@@ -419,6 +425,7 @@ export default function UsersPage() {
             fullName: '',
             role: 'client_user',
             organizationId: '',
+            hasSalesAccess: false,
           });
           setTempPassword(null);
           setCreateStep('details');
@@ -522,9 +529,16 @@ export default function UsersPage() {
                     </TableCell>
                     <TableCell>{user.email}</TableCell>
                     <TableCell>
-                      <Badge variant={user.role === 'admin' ? 'default' : 'secondary'}>
-                        {user.role === 'admin' ? 'Admin' : 'Client'}
-                      </Badge>
+                      <div className="flex flex-wrap gap-1">
+                        <Badge variant={user.role === 'admin' ? 'default' : 'secondary'}>
+                          {user.role === 'admin' ? 'Admin' : 'Client'}
+                        </Badge>
+                        {user.hasSalesAccess && (
+                          <Badge variant="outline" className="text-emerald-600 border-emerald-600">
+                            Sales
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       {user.organization ? (
@@ -697,6 +711,30 @@ export default function UsersPage() {
                   </Select>
                 </div>
               )}
+
+              {/* Additional Roles Section */}
+              <div className="rounded-lg border p-4 space-y-3">
+                <Label className="text-sm font-medium">Additional Access</Label>
+                <p className="text-xs text-muted-foreground">
+                  Grant additional portal access beyond the primary role.
+                </p>
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="hasSalesAccess"
+                    checked={formData.hasSalesAccess}
+                    onCheckedChange={(checked) => setFormData({ ...formData, hasSalesAccess: checked === true })}
+                  />
+                  <label
+                    htmlFor="hasSalesAccess"
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                  >
+                    Sales Portal Access
+                  </label>
+                </div>
+                <p className="text-xs text-muted-foreground pl-6">
+                  User can access the sales portal to manage leads and earn commissions.
+                </p>
+              </div>
             </div>
           ) : (
             /* Step 2: Email Preview */
@@ -867,6 +905,30 @@ export default function UsersPage() {
                 </Select>
               </div>
             )}
+
+            {/* Additional Roles Section */}
+            <div className="rounded-lg border p-4 space-y-3">
+              <Label className="text-sm font-medium">Additional Access</Label>
+              <p className="text-xs text-muted-foreground">
+                Grant additional portal access beyond the primary role.
+              </p>
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="edit-hasSalesAccess"
+                  checked={formData.hasSalesAccess}
+                  onCheckedChange={(checked) => setFormData({ ...formData, hasSalesAccess: checked === true })}
+                />
+                <label
+                  htmlFor="edit-hasSalesAccess"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                >
+                  Sales Portal Access
+                </label>
+              </div>
+              <p className="text-xs text-muted-foreground pl-6">
+                User can access the sales portal to manage leads and earn commissions.
+              </p>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsEditOpen(false)}>

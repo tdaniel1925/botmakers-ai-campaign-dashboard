@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/server';
 import { withRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { createApiLogger } from '@/lib/logger';
 import { createSalesUserSchema, validateRequest } from '@/lib/validations/admin';
+import { sendSalesWelcomeEmail } from '@/services/email-service';
 
 export async function GET(request: NextRequest) {
   const log = createApiLogger('/api/admin/sales-team');
@@ -136,11 +137,21 @@ export async function POST(request: NextRequest) {
         phone: phone || null,
         commissionRate: commissionRate || 18,
         isActive: true,
+        mustChangePassword: true,
+        hasSeenWelcome: false,
       })
       .returning();
 
+    // Send welcome email with credentials
+    const emailResult = await sendSalesWelcomeEmail(email, password, fullName);
+    if (!emailResult.success) {
+      log.warn('Failed to send welcome email', { email, error: emailResult.error });
+    } else {
+      log.info('Welcome email sent', { email });
+    }
+
     log.info('Sales user created', { newUserId: salesUser.id, email });
-    return NextResponse.json(salesUser, { status: 201 });
+    return NextResponse.json({ ...salesUser, emailSent: emailResult.success }, { status: 201 });
   } catch (error) {
     log.error('Failed to create sales user', { error: error instanceof Error ? error.message : 'Unknown error' });
     return NextResponse.json(

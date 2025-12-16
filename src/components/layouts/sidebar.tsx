@@ -24,6 +24,7 @@ import {
   Package,
   TrendingUp,
   Briefcase,
+  Eye,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
@@ -141,6 +142,23 @@ export function Sidebar({ userRole, onSignOut }: SidebarProps) {
 
       {/* Bottom section */}
       <div className="border-t p-2">
+        {/* View Sales Portal button - Admin only */}
+        {userRole === 'admin' && (
+          <Link href="/sales" target="_blank">
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cn(
+                'w-full justify-start text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50',
+                collapsed && 'justify-center'
+              )}
+            >
+              <Eye className="h-4 w-4" />
+              {!collapsed && <span className="ml-3">View Sales Portal</span>}
+            </Button>
+          </Link>
+        )}
+
         <Button
           variant="ghost"
           size="sm"

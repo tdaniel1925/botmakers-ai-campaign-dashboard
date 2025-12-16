@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
     const admin = await requireAdmin();
     const body = await request.json();
 
-    const { email, fullName, role, organizationId, sendCredentials = true, password } = body;
+    const { email, fullName, role, organizationId, hasSalesAccess = false, sendCredentials = true, password } = body;
 
     // Validate required fields
     if (!email) {
@@ -124,6 +124,7 @@ export async function POST(request: NextRequest) {
         fullName: fullName || null,
         role: role || 'client_user',
         organizationId: organizationId || null,
+        hasSalesAccess: Boolean(hasSalesAccess),
         mustChangePassword: true,
         isActive: true,
       })
@@ -139,6 +140,7 @@ export async function POST(request: NextRequest) {
         email,
         role: role || 'client_user',
         organizationId,
+        hasSalesAccess: Boolean(hasSalesAccess),
       },
     });
 

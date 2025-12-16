@@ -15,6 +15,13 @@
       "when": 1765898072016,
       "tag": "0001_youthful_overlord",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1765899516297,
+      "tag": "0002_add-user-sales-access",
+      "breakpoints": true
     }
   ]
 }

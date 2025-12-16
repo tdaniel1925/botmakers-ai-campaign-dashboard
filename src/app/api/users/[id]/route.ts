@@ -55,7 +55,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    const { fullName, role, organizationId, isActive, reportFrequency, reportScope, timezone } = body;
+    const { fullName, role, organizationId, hasSalesAccess, isActive, reportFrequency, reportScope, timezone } = body;
 
     // Validate organization if being changed to client_user
     if (role === 'client_user' && organizationId === undefined && !existingUser.organizationId) {
@@ -86,6 +86,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     if (fullName !== undefined) updateData.fullName = fullName;
     if (role !== undefined) updateData.role = role;
     if (organizationId !== undefined) updateData.organizationId = organizationId;
+    if (hasSalesAccess !== undefined) updateData.hasSalesAccess = hasSalesAccess;
     if (isActive !== undefined) updateData.isActive = isActive;
     if (reportFrequency !== undefined) updateData.reportFrequency = reportFrequency;
     if (reportScope !== undefined) updateData.reportScope = reportScope;
@@ -110,6 +111,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
           fullName: existingUser.fullName,
           role: existingUser.role,
           organizationId: existingUser.organizationId,
+          hasSalesAccess: existingUser.hasSalesAccess,
           isActive: existingUser.isActive,
         },
       },
