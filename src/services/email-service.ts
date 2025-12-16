@@ -5,10 +5,15 @@ import { eq, and } from 'drizzle-orm';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-const FROM_EMAIL = process.env.FROM_EMAIL || 'noreply@botmakers.com';
+const FROM_EMAIL_RAW = process.env.FROM_EMAIL || process.env.EMAIL_FROM || 'noreply@botmakers.agency';
 const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || 'BotMakers Portal';
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
 const LOGO_URL = process.env.NEXT_PUBLIC_LOGO_URL || '/logo.png';
+
+// Handle FROM_EMAIL that may already include "Name <email>" format
+const FROM_EMAIL = FROM_EMAIL_RAW.includes('<')
+  ? FROM_EMAIL_RAW
+  : `${APP_NAME} <${FROM_EMAIL_RAW}>`;
 
 interface SendEmailParams {
   to: string;
@@ -26,7 +31,7 @@ export async function sendEmail(params: SendEmailParams): Promise<{ success: boo
     }
 
     const { error } = await resend.emails.send({
-      from: `${APP_NAME} <${FROM_EMAIL}>`,
+      from: FROM_EMAIL,
       to: params.to,
       subject: params.subject,
       html: params.html,
