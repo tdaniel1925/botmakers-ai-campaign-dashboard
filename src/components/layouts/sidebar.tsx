@@ -17,6 +17,13 @@ import {
   ChevronLeft,
   ChevronRight,
   BarChart3,
+  UserPlus,
+  DollarSign,
+  FolderOpen,
+  Target,
+  Package,
+  TrendingUp,
+  Briefcase,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
@@ -28,7 +35,7 @@ interface NavItem {
 }
 
 interface SidebarProps {
-  userRole: 'admin' | 'client_user';
+  userRole: 'admin' | 'client_user' | 'sales';
   onSignOut: () => void;
 }
 
@@ -38,6 +45,10 @@ const adminNavItems: NavItem[] = [
   { title: 'Campaigns', href: '/admin/campaigns', icon: Megaphone },
   { title: 'Users', href: '/admin/users', icon: Users },
   { title: 'Interactions', href: '/admin/interactions', icon: MessageSquare },
+  { title: 'Sales Team', href: '/admin/sales-team', icon: UserPlus },
+  { title: 'All Leads', href: '/admin/leads', icon: Target },
+  { title: 'Commissions', href: '/admin/commissions', icon: DollarSign },
+  { title: 'Resources', href: '/admin/resources', icon: FolderOpen },
   { title: 'Email Templates', href: '/admin/email-templates', icon: Mail },
   { title: 'Audit Log', href: '/admin/audit-logs', icon: FileText },
   { title: 'Settings', href: '/admin/settings', icon: Settings },
@@ -54,11 +65,30 @@ const clientNavItems: NavItem[] = [
   { title: 'Help', href: '/dashboard/help', icon: HelpCircle },
 ];
 
+const salesNavItems: NavItem[] = [
+  { title: 'Dashboard', href: '/sales', icon: LayoutDashboard },
+  { title: 'My Leads', href: '/sales/leads', icon: UserPlus },
+  { title: 'Pipeline', href: '/sales/pipeline', icon: Target },
+  { title: 'Commissions', href: '/sales/commissions', icon: DollarSign },
+  { title: 'Campaigns', href: '/sales/campaigns', icon: Megaphone },
+  { title: 'Resources', href: '/sales/resources', icon: FolderOpen },
+  { title: 'Products', href: '/sales/products', icon: Package },
+  { title: 'Performance', href: '/sales/performance', icon: TrendingUp },
+  { title: 'Profile', href: '/sales/profile', icon: Briefcase },
+  { title: 'Help', href: '/sales/help', icon: HelpCircle },
+];
+
 export function Sidebar({ userRole, onSignOut }: SidebarProps) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
 
-  const navItems = userRole === 'admin' ? adminNavItems : clientNavItems;
+  const navItems = userRole === 'admin'
+    ? adminNavItems
+    : userRole === 'sales'
+    ? salesNavItems
+    : clientNavItems;
+
+  const homeHref = userRole === 'admin' ? '/admin' : userRole === 'sales' ? '/sales' : '/dashboard';
 
   return (
     <aside
@@ -69,7 +99,7 @@ export function Sidebar({ userRole, onSignOut }: SidebarProps) {
     >
       {/* Logo */}
       <div className="flex h-14 items-center border-b px-4">
-        <Link href={userRole === 'admin' ? '/admin' : '/dashboard'} className="flex items-center gap-2">
+        <Link href={homeHref} className="flex items-center gap-2">
           {collapsed ? (
             <img
               src="/voicemetrics2.png"
