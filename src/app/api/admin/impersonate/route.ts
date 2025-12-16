@@ -4,21 +4,37 @@ import { users, organizations, auditLogs } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { requireAdmin } from '@/lib/auth';
 import { cookies } from 'next/headers';
+import { withRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
+import { createApiLogger } from '@/lib/logger';
+import { impersonateSchema, validateRequest } from '@/lib/validations/admin';
 
 // POST /api/admin/impersonate - Start impersonating a user or organization
 export async function POST(request: NextRequest) {
+  const log = createApiLogger('/api/admin/impersonate');
   try {
     const admin = await requireAdmin();
-    const body = await request.json();
-    const { userId, organizationId } = body;
+    log.info('Impersonation request', { adminId: admin.id });
 
-    // Must provide either userId or organizationId
-    if (!userId && !organizationId) {
+    // Rate limiting - stricter for sensitive operations
+    const rateLimit = withRateLimit(admin.id, 'admin-impersonate-post', RATE_LIMITS.auth);
+    if (!rateLimit.allowed) {
+      log.warn('Rate limit exceeded for impersonation', { adminId: admin.id });
+      return rateLimit.response;
+    }
+
+    const body = await request.json();
+
+    // Validate input with Zod
+    const validation = validateRequest(impersonateSchema, body);
+    if (!validation.success) {
+      log.warn('Validation failed', { details: validation.details });
       return NextResponse.json(
-        { error: 'User ID or Organization ID is required' },
+        { error: validation.error, details: validation.details },
         { status: 400 }
       );
     }
+
+    const { userId, organizationId } = validation.data;
 
     let targetUser = null;
     let targetOrg = null;
@@ -125,6 +141,11 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    log.info('Impersonation started', {
+      adminId: admin.id,
+      targetUserId: targetUser.id,
+      targetOrgId: targetOrg.id
+    });
     return NextResponse.json({
       success: true,
       impersonating: {
@@ -137,7 +158,7 @@ export async function POST(request: NextRequest) {
       redirectTo: '/dashboard',
     });
   } catch (error) {
-    console.error('[Impersonate API] POST error:', error);
+    log.error('Failed to start impersonation', { error: error instanceof Error ? error.message : 'Unknown error' });
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to start impersonation' },
       { status: 500 }
@@ -147,6 +168,7 @@ export async function POST(request: NextRequest) {
 
 // DELETE /api/admin/impersonate - Stop impersonating
 export async function DELETE(request: NextRequest) {
+  const log = createApiLogger('/api/admin/impersonate');
   try {
     const cookieStore = await cookies();
     const impersonationCookie = cookieStore.get('impersonation');
@@ -172,12 +194,13 @@ export async function DELETE(request: NextRequest) {
     // Clear the impersonation cookie
     cookieStore.delete('impersonation');
 
+    log.info('Impersonation ended', { adminId: impersonationData.originalAdminId });
     return NextResponse.json({
       success: true,
       redirectTo: '/admin',
     });
   } catch (error) {
-    console.error('[Impersonate API] DELETE error:', error);
+    log.error('Failed to stop impersonation', { error: error instanceof Error ? error.message : 'Unknown error' });
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed to stop impersonation' },
       { status: 500 }
@@ -187,6 +210,7 @@ export async function DELETE(request: NextRequest) {
 
 // GET /api/admin/impersonate - Check impersonation status
 export async function GET(request: NextRequest) {
+  const log = createApiLogger('/api/admin/impersonate');
   try {
     const cookieStore = await cookies();
     const impersonationCookie = cookieStore.get('impersonation');
@@ -202,7 +226,7 @@ export async function GET(request: NextRequest) {
       data: impersonationData,
     });
   } catch (error) {
-    console.error('[Impersonate API] GET error:', error);
+    log.error('Failed to check impersonation status', { error: error instanceof Error ? error.message : 'Unknown error' });
     return NextResponse.json({ impersonating: false });
   }
 }
