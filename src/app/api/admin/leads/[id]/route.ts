@@ -219,36 +219,16 @@ export async function PUT(
         metadata: { newStatus: status, oldStatus: existingLead.status },
       });
 
-      // If status changed to 'won', create a commission record
+      // If status changed to 'won', notify admin that commission can be created
       if (status === 'won' && existingLead.estimatedValue) {
-        // Get sales user's commission rate
-        const [salesUser] = await db
-          .select({ commissionRate: salesUsers.commissionRate })
-          .from(salesUsers)
-          .where(eq(salesUsers.id, existingLead.salesUserId))
-          .limit(1);
-
-        const commissionRate = salesUser?.commissionRate || 18;
-        const saleAmount = existingLead.estimatedValue;
-        const commissionAmount = Math.round((saleAmount * commissionRate) / 100);
-
-        await db.insert(commissions).values({
-          salesUserId: existingLead.salesUserId,
-          leadId: id,
-          saleAmount,
-          commissionRate,
-          commissionAmount,
-          status: 'pending',
-        });
-
         await db.insert(leadActivities).values({
           leadId: id,
           userId: admin.id,
           userType: 'admin',
-          activityType: 'commission_created',
-          title: 'Commission created',
-          description: `Commission of ${commissionRate}% created for this sale`,
-          metadata: { commissionRate, commissionAmount, saleAmount },
+          activityType: 'note',
+          title: 'Lead marked as won - Commission pending',
+          description: 'This lead is eligible for commission. Go to Commissions to create and approve the commission.',
+          metadata: { estimatedValue: existingLead.estimatedValue },
         });
       }
     }

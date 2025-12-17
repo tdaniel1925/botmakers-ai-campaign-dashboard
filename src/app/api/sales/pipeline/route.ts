@@ -1,12 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireSalesAuth } from '@/lib/auth';
 import { db } from '@/db';
-import { leads, leadStages } from '@/db/schema';
+import { leads, leadStages, salesUsers } from '@/db/schema';
 import { eq, and, sql, desc, asc } from 'drizzle-orm';
+import { SQL } from 'drizzle-orm';
 
 export async function GET(request: NextRequest) {
   try {
     const salesUser = await requireSalesAuth();
+    const isObserver = salesUser.accessType !== 'sales_user';
+
+    // Observers can optionally filter by a specific sales user
+    const { searchParams } = new URL(request.url);
+    const filterSalesUserId = searchParams.get('salesUserId');
+
+    // Determine the user filter condition
+    let userFilter: SQL | undefined;
+    if (isObserver) {
+      // Observer: optionally filter by specific sales user, or show all
+      if (filterSalesUserId) {
+        userFilter = eq(leads.salesUserId, filterSalesUserId);
+      }
+      // If no filter, userFilter stays undefined (show all)
+    } else {
+      // Sales user: always filter to their own leads
+      userFilter = eq(leads.salesUserId, salesUser.id);
+    }
 
     // Get all stages ordered by order
     const stages = await db
@@ -15,8 +34,25 @@ export async function GET(request: NextRequest) {
       .where(eq(leadStages.isActive, true))
       .orderBy(asc(leadStages.order));
 
+    // Get list of sales users for filter dropdown (observers only)
+    let salesUsersList: { id: string; name: string }[] = [];
+    if (isObserver) {
+      const users = await db
+        .select({
+          id: salesUsers.id,
+          fullName: salesUsers.fullName,
+        })
+        .from(salesUsers)
+        .where(eq(salesUsers.isActive, true))
+        .orderBy(salesUsers.fullName);
+      salesUsersList = users.map(u => ({
+        id: u.id,
+        name: u.fullName,
+      }));
+    }
+
     // Get leads grouped by stage
-    const leadsData = await db
+    const leadsQuery = db
       .select({
         id: leads.id,
         leadNumber: leads.leadNumber,
@@ -30,21 +66,26 @@ export async function GET(request: NextRequest) {
         estimatedValue: leads.estimatedValue,
         nextFollowUpAt: leads.nextFollowUpAt,
         createdAt: leads.createdAt,
+        salesUserId: leads.salesUserId,
       })
-      .from(leads)
-      .where(eq(leads.salesUserId, salesUser.id))
-      .orderBy(desc(leads.createdAt));
+      .from(leads);
+
+    const leadsData = userFilter
+      ? await leadsQuery.where(userFilter).orderBy(desc(leads.createdAt))
+      : await leadsQuery.orderBy(desc(leads.createdAt));
 
     // Calculate stage totals
-    const stageTotals = await db
+    const stageTotalsQuery = db
       .select({
         stageId: leads.stageId,
         count: sql<number>`count(*)::int`,
         totalValue: sql<number>`coalesce(sum(estimated_value), 0)::int`,
       })
-      .from(leads)
-      .where(eq(leads.salesUserId, salesUser.id))
-      .groupBy(leads.stageId);
+      .from(leads);
+
+    const stageTotals = userFilter
+      ? await stageTotalsQuery.where(userFilter).groupBy(leads.stageId)
+      : await stageTotalsQuery.groupBy(leads.stageId);
 
     const stageStats = stageTotals.reduce((acc, s) => {
       acc[s.stageId || 'unassigned'] = { count: s.count, totalValue: s.totalValue };
@@ -72,6 +113,9 @@ export async function GET(request: NextRequest) {
       stageStats,
       totalLeads: leadsData.length,
       totalValue: leadsData.reduce((sum, l) => sum + (l.estimatedValue || 0), 0),
+      isObserver,
+      salesUsers: salesUsersList,
+      filterSalesUserId: filterSalesUserId || null,
     });
   } catch (error) {
     console.error('Failed to fetch pipeline:', error);

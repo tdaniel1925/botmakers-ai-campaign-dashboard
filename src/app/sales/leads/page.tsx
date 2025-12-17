@@ -384,7 +384,7 @@ export default function LeadsPage() {
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={(e) => {
                               e.stopPropagation();
-                              router.push(`/sales/leads/${lead.id}/edit`);
+                              router.push(`/sales/leads/${lead.id}`);
                             }}>
                               <Edit className="mr-2 h-4 w-4" />
                               Edit Lead

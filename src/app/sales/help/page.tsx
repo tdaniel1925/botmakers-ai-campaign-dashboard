@@ -28,7 +28,7 @@ const faqs = [
   {
     question: 'How do commissions work?',
     answer:
-      'You earn an 18% commission on every sale from your referred leads. When a lead converts to a paying customer, the commission is marked as "pending" and will be approved by an administrator before being paid out.',
+      'You earn a commission on every sale from your referred leads based on your commission rate (visible in your Profile page). When a lead converts to a paying customer, an administrator will review and create a commission record. You can track the status of all your commissions on the Commissions page.',
   },
   {
     question: 'Can I move leads through the pipeline?',
@@ -53,7 +53,7 @@ const faqs = [
   {
     question: 'What happens when a lead converts?',
     answer:
-      'When an administrator marks your lead as "won", a commission record is automatically created based on the sale amount and your commission rate. You can track the status of all your commissions on the Commissions page.',
+      'When an administrator marks your lead as "won", they will review and create a commission record based on the sale amount and your commission rate. You can track the status of all your commissions on the Commissions page.',
   },
   {
     question: 'How do I update my profile?',

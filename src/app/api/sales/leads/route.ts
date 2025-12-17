@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
-import { leads, leadActivities, leadStages } from '@/db/schema';
+import { leads, leadActivities, leadStages, salesUsers } from '@/db/schema';
 import { eq, and, sql, desc, ilike, or } from 'drizzle-orm';
 import { requireSalesAuth } from '@/lib/auth';
 import { createLeadSchema, validateRequest } from '@/lib/validations/sales';
@@ -41,14 +41,35 @@ export async function GET(request: NextRequest) {
     const search = sanitizeSearchInput(rawSearch);
     const status = searchParams.get('status') || '';
     const stageId = searchParams.get('stageId') || '';
+    const filterSalesUserId = searchParams.get('salesUserId') || '';
 
     const offset = (page - 1) * limit;
 
-    // Build conditions - admins see all leads, sales users see only their own
+    // Get list of sales users for filter dropdown (observers only)
+    let salesUsersList: { id: string; name: string }[] = [];
+    if (isObserver) {
+      const users = await db
+        .select({
+          id: salesUsers.id,
+          fullName: salesUsers.fullName,
+        })
+        .from(salesUsers)
+        .where(eq(salesUsers.isActive, true))
+        .orderBy(salesUsers.fullName);
+      salesUsersList = users.map(u => ({
+        id: u.id,
+        name: u.fullName,
+      }));
+    }
+
+    // Build conditions - admins see all leads (or filtered), sales users see only their own
     const conditions: ReturnType<typeof eq>[] = [];
 
     if (!isObserver) {
       conditions.push(eq(leads.salesUserId, salesUser.id));
+    } else if (filterSalesUserId && filterSalesUserId.match(/^[0-9a-f-]{36}$/i)) {
+      // Observer filtering by specific sales user
+      conditions.push(eq(leads.salesUserId, filterSalesUserId));
     }
 
     if (search) {
@@ -106,6 +127,8 @@ export async function GET(request: NextRequest) {
         totalPages: Math.ceil(Number(totalResult[0].count) / limit),
       },
       isObserver,
+      salesUsers: salesUsersList,
+      filterSalesUserId: filterSalesUserId || null,
     });
 
     // Add rate limit headers

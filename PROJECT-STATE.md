@@ -2,7 +2,7 @@
 project: VoiceMetrics AI Calling Dashboard
 type: business
 created: 2025-12-16
-updated: 2025-12-16
+updated: 2025-12-17
 phase: 5-QUALITY
 progress: 100%
 mode: standard
@@ -12,11 +12,14 @@ mode: standard
 - Database: Drizzle ORM with PostgreSQL/Supabase (2025-12-16)
 - Auth: Supabase Auth with role-based access (admin, client_user, sales) (2025-12-16)
 - Sales Portal: Separate salesUsers table from regular users (2025-12-16)
-- Commission Rate: 18% flat rate per sale (2025-12-16)
+- Commission Rate: Dynamic per sales user (default 18%) (2025-12-17)
 - Lead Pipeline: Sales can input leads, only admins can move through stages (2025-12-16)
 - Rate Limiting: In-memory store (for production, migrate to Redis) (2025-12-16)
 - Validation: Zod schemas for all API inputs (2025-12-16)
 - Testing: Vitest for unit tests (2025-12-16)
+- Commission Creation: Require admin review (no auto-creation on won) (2025-12-17)
+- Observer Access: Option C - aggregate data + filter by sales user (2025-12-17)
+- Lead Deletion: Sales users can delete their own leads (2025-12-17)
 
 ## Completed
 - [x] Core dashboard infrastructure (admin, client portals)
@@ -52,10 +55,17 @@ mode: standard
 - [x] Structured logger utility
 - [x] ARIA labels for accessibility
 - [x] Vitest testing framework setup
-- [x] Unit tests for validation schemas (15 tests passing)
+- [x] Unit tests for validation schemas (47 tests passing)
 - [x] Sales API routes hardened (leads, profile, commissions, dashboard, resources, campaigns)
 - [x] Admin API routes hardened (sales-team, leads, impersonate, resources, commissions)
 - [x] Admin validation schemas (`/src/lib/validations/admin.ts`)
+- [x] CSV export formula injection protection
+- [x] Observer access with optional sales user filter (dashboard, leads, pipeline, performance, commissions)
+- [x] Lead deletion endpoint (sales users only, own leads)
+- [x] Commission admin review workflow (POST endpoint, no auto-create)
+- [x] Dynamic commission rate display (fetched from API/profile)
+- [x] Edit lead navigation fix (redirects to detail page)
+- [x] Admin validation tests (`/src/lib/validations/admin.test.ts`)
 
 ## Audit Results (2025-12-16)
 **Score: 43/55 → 55/55 after fixes (100%)**

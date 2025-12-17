@@ -67,6 +67,15 @@ export const createCategorySchema = z.object({
 });
 
 // Commission validation
+export const createCommissionSchema = z.object({
+  leadId: z.string().uuid('Invalid lead ID'),
+  salesUserId: z.string().uuid('Invalid sales user ID'),
+  saleAmount: z.coerce.number().int().min(0, 'Sale amount must be positive'),
+  commissionRate: z.coerce.number().min(0).max(100, 'Commission rate must be between 0 and 100'),
+  status: z.enum(['pending', 'approved', 'paid']).default('pending'),
+  notes: z.string().max(2000, 'Notes too long').optional().nullable(),
+});
+
 export const updateCommissionSchema = z.object({
   status: z.enum(['pending', 'approved', 'paid', 'cancelled']).optional(),
   notes: z.string().max(2000, 'Notes too long').optional().nullable(),
@@ -104,4 +113,5 @@ export type ImpersonateInput = z.infer<typeof impersonateSchema>;
 export type CreateResourceInput = z.infer<typeof createResourceSchema>;
 export type UpdateResourceInput = z.infer<typeof updateResourceSchema>;
 export type CreateCategoryInput = z.infer<typeof createCategorySchema>;
+export type CreateCommissionInput = z.infer<typeof createCommissionSchema>;
 export type UpdateCommissionInput = z.infer<typeof updateCommissionSchema>;

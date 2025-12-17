@@ -29,9 +29,11 @@ interface Product {
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [userCommissionRate, setUserCommissionRate] = useState<number>(18);
 
   useEffect(() => {
     fetchProducts();
+    fetchUserProfile();
   }, []);
 
   const fetchProducts = async () => {
@@ -45,6 +47,20 @@ export default function ProductsPage() {
       toast.error('Failed to load products');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchUserProfile = async () => {
+    try {
+      const response = await fetch('/api/sales/profile');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.commissionRate) {
+          setUserCommissionRate(data.commissionRate);
+        }
+      }
+    } catch {
+      // Silently fail - use default rate
     }
   };
 
@@ -76,7 +92,7 @@ export default function ProductsPage() {
             <div>
               <p className="font-semibold text-green-900">Commission Structure</p>
               <p className="text-sm text-green-700">
-                You earn 18% commission on every sale. Some products may have special bonus rates.
+                You earn {userCommissionRate}% commission on every sale. Some products may have special bonus rates.
               </p>
             </div>
           </div>
@@ -110,7 +126,7 @@ export default function ProductsPage() {
                       </CardDescription>
                     )}
                   </div>
-                  {product.commissionRate > 18 && (
+                  {product.commissionRate > userCommissionRate && (
                     <Badge className="bg-amber-500 hover:bg-amber-600">
                       <Sparkles className="h-3 w-3 mr-1" />
                       Bonus

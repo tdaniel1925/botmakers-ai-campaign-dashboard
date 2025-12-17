@@ -71,6 +71,7 @@ export default function CommissionsPage() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [userCommissionRate, setUserCommissionRate] = useState<number>(18);
 
   useEffect(() => {
     fetchCommissions();
@@ -92,6 +93,9 @@ export default function CommissionsPage() {
       setCommissions(data.commissions);
       setStats(data.stats);
       setPagination(data.pagination);
+      if (data.userCommissionRate) {
+        setUserCommissionRate(data.userCommissionRate);
+      }
     } catch (error) {
       toast.error('Failed to load commissions');
     } finally {
@@ -393,9 +397,9 @@ export default function CommissionsPage() {
               <DollarSign className="h-6 w-6 text-blue-600" />
             </div>
             <div>
-              <p className="font-semibold text-blue-900">Your Commission Rate: 18%</p>
+              <p className="font-semibold text-blue-900">Your Commission Rate: {userCommissionRate}%</p>
               <p className="text-sm text-blue-700">
-                You earn 18% commission on every sale from your referred leads
+                You earn {userCommissionRate}% commission on every sale from your referred leads
               </p>
             </div>
           </div>

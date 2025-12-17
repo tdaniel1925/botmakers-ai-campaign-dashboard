@@ -15,6 +15,7 @@ export async function GET(
 
   try {
     const salesUser = await requireSalesAuth();
+    const isObserver = salesUser.accessType !== 'sales_user';
     const { id: leadId } = await params;
 
     // Validate UUID format
@@ -22,7 +23,7 @@ export async function GET(
       return NextResponse.json({ error: 'Invalid lead ID' }, { status: 400 });
     }
 
-    log.info('Fetching activities', { userId: salesUser.id, leadId });
+    log.info('Fetching activities', { userId: salesUser.id, leadId, isObserver });
 
     // Rate limiting
     const rateLimit = withRateLimit(salesUser.id, 'sales-activities-get', RATE_LIMITS.standard);
@@ -30,11 +31,15 @@ export async function GET(
       return rateLimit.response;
     }
 
-    // Verify lead belongs to this sales user
+    // Observers (admins) can view any lead's activities, sales users can only view their own
+    const whereCondition = isObserver
+      ? eq(leads.id, leadId)
+      : and(eq(leads.id, leadId), eq(leads.salesUserId, salesUser.id));
+
     const [lead] = await db
       .select()
       .from(leads)
-      .where(and(eq(leads.id, leadId), eq(leads.salesUserId, salesUser.id)))
+      .where(whereCondition)
       .limit(1);
 
     if (!lead) {
@@ -74,6 +79,15 @@ export async function POST(
   try {
     const salesUser = await requireSalesAuth();
     const { id: leadId } = await params;
+
+    // Only sales_user can create activities - observers cannot
+    if (salesUser.accessType !== 'sales_user') {
+      log.info('Activity creation rejected - user is observer', { userId: salesUser.id, accessType: salesUser.accessType });
+      return NextResponse.json(
+        { error: 'Only sales team members can create activities' },
+        { status: 403 }
+      );
+    }
 
     // Validate UUID format
     if (!leadId.match(/^[0-9a-f-]{36}$/i)) {

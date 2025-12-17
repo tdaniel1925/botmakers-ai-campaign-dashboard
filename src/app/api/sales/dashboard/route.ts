@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { leads, commissions, salesUsers, leadStages } from '@/db/schema';
 import { eq, and, sql, gte, desc, isNotNull, lte } from 'drizzle-orm';
@@ -7,7 +7,7 @@ import { withRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { createApiLogger } from '@/lib/logger';
 
 // GET /api/sales/dashboard - Get sales dashboard data
-export async function GET() {
+export async function GET(request: NextRequest) {
   const log = createApiLogger('/api/sales/dashboard');
 
   try {
@@ -21,6 +21,27 @@ export async function GET() {
       return rateLimit.response;
     }
 
+    // Observers can optionally filter by a specific sales user
+    const { searchParams } = new URL(request.url);
+    const filterSalesUserId = searchParams.get('salesUserId');
+
+    // Get list of sales users for filter dropdown (observers only)
+    let salesUsersList: { id: string; name: string }[] = [];
+    if (isObserver) {
+      const users = await db
+        .select({
+          id: salesUsers.id,
+          fullName: salesUsers.fullName,
+        })
+        .from(salesUsers)
+        .where(eq(salesUsers.isActive, true))
+        .orderBy(salesUsers.fullName);
+      salesUsersList = users.map(u => ({
+        id: u.id,
+        name: u.fullName,
+      }));
+    }
+
     // Get date for "this month"
     const startOfMonth = new Date();
     startOfMonth.setDate(1);
@@ -30,10 +51,21 @@ export async function GET() {
     const nextWeek = new Date();
     nextWeek.setDate(nextWeek.getDate() + 7);
 
-    // For admins/observers, show aggregate data from ALL sales users
-    // For sales_user, show only their own data
-    const userFilter = isObserver ? undefined : eq(leads.salesUserId, salesUser.id);
-    const commissionUserFilter = isObserver ? undefined : eq(commissions.salesUserId, salesUser.id);
+    // Determine the user filter
+    let userFilter;
+    let commissionUserFilter;
+    if (isObserver) {
+      // Observer: optionally filter by specific sales user, or show all
+      if (filterSalesUserId) {
+        userFilter = eq(leads.salesUserId, filterSalesUserId);
+        commissionUserFilter = eq(commissions.salesUserId, filterSalesUserId);
+      }
+      // If no filter, both stay undefined (show all)
+    } else {
+      // Sales user: always filter to their own data
+      userFilter = eq(leads.salesUserId, salesUser.id);
+      commissionUserFilter = eq(commissions.salesUserId, salesUser.id);
+    }
 
     // Get lead stats
     const leadStatsQuery = db
@@ -76,8 +108,8 @@ export async function GET() {
       gte(leads.nextFollowUpAt, now),
       lte(leads.nextFollowUpAt, nextWeek)
     ];
-    if (!isObserver) {
-      followUpConditions.unshift(eq(leads.salesUserId, salesUser.id));
+    if (userFilter) {
+      followUpConditions.unshift(userFilter);
     }
 
     const [followUpCount] = await db
@@ -89,7 +121,7 @@ export async function GET() {
 
     // Get recent leads with stage info
     const recentLeads = await db.query.leads.findMany({
-      where: isObserver ? undefined : eq(leads.salesUserId, salesUser.id),
+      where: userFilter,
       with: {
         stage: true,
       },
@@ -102,8 +134,8 @@ export async function GET() {
       isNotNull(leads.nextFollowUpAt),
       gte(leads.nextFollowUpAt, now)
     ];
-    if (!isObserver) {
-      upcomingConditions.unshift(eq(leads.salesUserId, salesUser.id));
+    if (userFilter) {
+      upcomingConditions.unshift(userFilter);
     }
 
     const upcomingFollowUps = await db.query.leads.findMany({
@@ -114,7 +146,7 @@ export async function GET() {
 
     // Get recent commissions
     const recentCommissions = await db.query.commissions.findMany({
-      where: isObserver ? undefined : eq(commissions.salesUserId, salesUser.id),
+      where: commissionUserFilter,
       with: {
         lead: {
           columns: {
@@ -144,6 +176,8 @@ export async function GET() {
       upcomingFollowUps,
       recentCommissions,
       isObserver, // Flag to let frontend know this is an observer view
+      salesUsers: salesUsersList,
+      filterSalesUserId: filterSalesUserId || null,
     });
 
     Object.entries(rateLimit.headers).forEach(([key, value]) => {

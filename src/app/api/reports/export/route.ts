@@ -5,6 +5,19 @@ import { eq, and, gte, lte, inArray, desc } from 'drizzle-orm';
 import { requireFullAuth } from '@/lib/auth';
 import { formatDateTime, formatDuration, formatPhoneNumber } from '@/lib/utils';
 
+// Escape CSV cell to prevent formula injection
+// Excel/Sheets interpret cells starting with =, +, -, @, tab, CR as formulas
+function escapeCsvCell(value: string): string {
+  if (!value) return '';
+  // Escape quotes by doubling them
+  let escaped = value.replace(/"/g, '""');
+  // If cell starts with formula characters, prefix with single quote
+  if (/^[=+\-@\t\r]/.test(escaped)) {
+    escaped = "'" + escaped;
+  }
+  return escaped;
+}
+
 // GET /api/reports/export - Export interactions as CSV
 export async function GET(request: NextRequest) {
   try {
@@ -92,18 +105,18 @@ export async function GET(request: NextRequest) {
       ];
 
       const rows = data.map((interaction) => [
-        interaction.id,
-        formatDateTime(interaction.createdAt),
-        interaction.campaign.organization?.name || '',
-        interaction.campaign.name,
-        interaction.sourceType,
-        interaction.sourcePlatform || '',
-        interaction.phoneNumber || '',
-        interaction.callStatus || 'pending',
-        interaction.durationSeconds?.toString() || '',
-        interaction.aiSummary?.replace(/"/g, '""') || '',
-        interaction.flagged ? 'Yes' : 'No',
-        interaction.tags?.join(', ') || '',
+        escapeCsvCell(interaction.id),
+        escapeCsvCell(formatDateTime(interaction.createdAt)),
+        escapeCsvCell(interaction.campaign.organization?.name || ''),
+        escapeCsvCell(interaction.campaign.name),
+        escapeCsvCell(interaction.sourceType),
+        escapeCsvCell(interaction.sourcePlatform || ''),
+        escapeCsvCell(interaction.phoneNumber || ''),
+        escapeCsvCell(interaction.callStatus || 'pending'),
+        escapeCsvCell(interaction.durationSeconds?.toString() || ''),
+        escapeCsvCell(interaction.aiSummary || ''),
+        escapeCsvCell(interaction.flagged ? 'Yes' : 'No'),
+        escapeCsvCell(interaction.tags?.join(', ') || ''),
       ]);
 
       const csvContent = [

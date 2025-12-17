@@ -112,6 +112,7 @@ export async function GET(request: NextRequest) {
         totalPages: Math.ceil(count / limit),
       },
       isObserver,
+      userCommissionRate: salesUser.commissionRate,
     });
 
     Object.entries(rateLimit.headers).forEach(([key, value]) => {
