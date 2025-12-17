@@ -20,6 +20,9 @@ mode: standard
 - Commission Creation: Require admin review (no auto-creation on won) (2025-12-17)
 - Observer Access: Option C - aggregate data + filter by sales user (2025-12-17)
 - Lead Deletion: Sales users can delete their own leads (2025-12-17)
+- Outbound Campaigns: VAPI integration with 7-step wizard (2025-12-17)
+- Contact Timezone: Auto-detect from US area codes via libphonenumber-js (2025-12-17)
+- Call Execution: Vercel Cron for background call processing (2025-12-17)
 
 ## Completed
 - [x] Core dashboard infrastructure (admin, client portals)
@@ -66,6 +69,16 @@ mode: standard
 - [x] Dynamic commission rate display (fetched from API/profile)
 - [x] Edit lead navigation fix (redirects to detail page)
 - [x] Admin validation tests (`/src/lib/validations/admin.test.ts`)
+- [x] Outbound Campaigns - Database schema (4 tables)
+- [x] Outbound Campaigns - VAPI service integration
+- [x] Outbound Campaigns - Contact upload with timezone detection
+- [x] Outbound Campaigns - API routes (campaigns, contacts, schedules, call-logs)
+- [x] Outbound Campaigns - 7-step wizard UI with draft saving
+- [x] Outbound Campaigns - Campaign detail page with call logs
+- [x] Outbound Campaigns - Call execution engine (Vercel Cron)
+- [x] Outbound Campaigns - Client dashboard view
+- [x] Outbound Campaigns - E2E tests (16 tests passing)
+- [x] Outbound Campaigns - VAPI webhook handler
 
 ## Audit Results (2025-12-16)
 **Score: 43/55 → 55/55 after fixes (100%)**
@@ -89,7 +102,7 @@ mode: standard
 
 ## Remaining (Future Enhancements)
 - [ ] Performance optimization
-- [ ] E2E tests with Playwright
+- [x] E2E tests with Playwright (108 tests passing)
 - [ ] Documentation
 - [ ] Production rate limiting (migrate to Redis)
 
@@ -103,6 +116,9 @@ mode: standard
 - [x] Configured: Tailwind CSS + shadcn/ui
 - [x] Configured: Zod (validation)
 - [x] Configured: Vitest (testing)
+- [x] Configured: Playwright (E2E testing)
+- [x] Configured: VAPI (outbound calling)
+- [x] Configured: libphonenumber-js (phone/timezone)
 - [ ] Needed: File storage for resources (S3/R2)
 - [ ] Needed: Email service for notifications
 - [ ] Needed: Redis for production rate limiting

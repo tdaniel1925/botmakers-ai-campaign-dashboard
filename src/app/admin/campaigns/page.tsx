@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import {
   Megaphone,
@@ -16,6 +17,8 @@ import {
   Settings,
   Eye,
   BarChart3,
+  PhoneIncoming,
+  PhoneOutgoing,
 } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -62,12 +65,14 @@ interface CampaignWithOrg extends Campaign {
 }
 
 export default function CampaignsPage() {
+  const router = useRouter();
   const [campaigns, setCampaigns] = useState<CampaignWithOrg[]>([]);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filterOrgId, setFilterOrgId] = useState<string>('all');
   const [showArchived, setShowArchived] = useState(false);
+  const [isTypeSelectOpen, setIsTypeSelectOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [selectedCampaign, setSelectedCampaign] = useState<CampaignWithOrg | null>(null);
@@ -253,10 +258,7 @@ export default function CampaignsPage() {
             Manage campaigns and their webhook endpoints
           </p>
         </div>
-        <Button onClick={() => {
-          setFormData({ organizationId: '', name: '', description: '', twilioPhoneNumber: '' });
-          setIsCreateOpen(true);
-        }}>
+        <Button onClick={() => setIsTypeSelectOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
           Create Campaign
         </Button>
@@ -311,7 +313,7 @@ export default function CampaignsPage() {
               <p className="text-muted-foreground mb-4">
                 Create your first campaign to start receiving webhooks.
               </p>
-              <Button onClick={() => setIsCreateOpen(true)}>
+              <Button onClick={() => setIsTypeSelectOpen(true)}>
                 <Plus className="mr-2 h-4 w-4" />
                 Create Campaign
               </Button>
@@ -416,13 +418,62 @@ export default function CampaignsPage() {
         </CardContent>
       </Card>
 
-      {/* Create Dialog */}
-      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-        <DialogContent>
+      {/* Campaign Type Selection Dialog */}
+      <Dialog open={isTypeSelectOpen} onOpenChange={setIsTypeSelectOpen}>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Create Campaign</DialogTitle>
             <DialogDescription>
-              Create a new campaign with a unique webhook endpoint.
+              Select the type of campaign you want to create.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-4 py-4">
+            <button
+              onClick={() => {
+                setIsTypeSelectOpen(false);
+                setFormData({ organizationId: '', name: '', description: '', twilioPhoneNumber: '' });
+                setIsCreateOpen(true);
+              }}
+              className="flex flex-col items-center gap-3 p-6 rounded-lg border-2 border-muted hover:border-primary hover:bg-primary/5 transition-colors"
+            >
+              <div className="p-3 rounded-full bg-blue-100 text-blue-600">
+                <PhoneIncoming className="h-8 w-8" />
+              </div>
+              <div className="text-center">
+                <h3 className="font-semibold">Inbound</h3>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Receive calls via webhook from VAPI or other platforms
+                </p>
+              </div>
+            </button>
+            <button
+              onClick={() => {
+                setIsTypeSelectOpen(false);
+                router.push('/admin/outbound-campaigns/new');
+              }}
+              className="flex flex-col items-center gap-3 p-6 rounded-lg border-2 border-muted hover:border-primary hover:bg-primary/5 transition-colors"
+            >
+              <div className="p-3 rounded-full bg-green-100 text-green-600">
+                <PhoneOutgoing className="h-8 w-8" />
+              </div>
+              <div className="text-center">
+                <h3 className="font-semibold">Outbound</h3>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Make automated calls to contacts via VAPI
+                </p>
+              </div>
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Inbound Campaign Dialog */}
+      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create Inbound Campaign</DialogTitle>
+            <DialogDescription>
+              Create a new inbound campaign with a unique webhook endpoint.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">

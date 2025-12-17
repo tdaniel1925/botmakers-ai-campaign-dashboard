@@ -8,7 +8,11 @@
     "start": "next start -p 2050",
     "lint": "next lint",
     "test": "vitest",
-    "test:run": "vitest run"
+    "test:run": "vitest run",
+    "test:unit": "vitest run",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -34,9 +38,11 @@
     "crypto-js": "^4.2.0",
     "date-fns": "^4.1.0",
     "drizzle-orm": "^0.45.1",
+    "libphonenumber-js": "^1.12.31",
     "lucide-react": "^0.561.0",
     "next": "^15.0.5",
     "openai": "^6.10.0",
+    "papaparse": "^5.5.3",
     "postgres": "^3.4.7",
     "react": "18.3.1",
     "react-dom": "18.3.1",
@@ -48,13 +54,16 @@
     "tailwindcss-animate": "^1.0.7",
     "twilio": "^5.10.7",
     "uuid": "^13.0.0",
+    "xlsx": "^0.18.5",
     "zod": "^4.1.13"
   },
   "devDependencies": {
+    "@playwright/test": "^1.57.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.1",
     "@types/crypto-js": "^4.2.2",
     "@types/node": "^22.9.1",
+    "@types/papaparse": "^5.5.2",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@types/uuid": "^10.0.0",

@@ -28,6 +28,11 @@ export const leadStatusEnum = pgEnum('lead_status', ['new', 'contacted', 'qualif
 export const commissionStatusEnum = pgEnum('commission_status', ['pending', 'approved', 'paid', 'cancelled']);
 export const resourceTypeEnum = pgEnum('resource_type', ['pdf', 'image', 'video', 'document', 'link', 'other']);
 
+// Outbound Campaign Enums
+export const outboundCampaignStatusEnum = pgEnum('outbound_campaign_status', ['draft', 'scheduled', 'running', 'paused', 'completed', 'cancelled']);
+export const outboundContactStatusEnum = pgEnum('outbound_contact_status', ['pending', 'queued', 'calling', 'completed', 'no_answer', 'failed', 'busy', 'voicemail', 'dnc', 'skipped']);
+export const outboundCallResultEnum = pgEnum('outbound_call_result', ['answered', 'no_answer', 'busy', 'failed', 'voicemail', 'canceled']);
+
 // Organizations (Clients)
 export const organizations = pgTable('organizations', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -565,6 +570,180 @@ export const nurtureEnrollmentsRelations = relations(nurtureEnrollments, ({ one 
   }),
 }));
 
+// ============================================
+// OUTBOUND CAMPAIGN TABLES
+// ============================================
+
+// Outbound Campaigns
+export const outboundCampaigns = pgTable('outbound_campaigns', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  description: text('description'),
+  webhookUuid: uuid('webhook_uuid').defaultRandom().notNull(),
+  status: outboundCampaignStatusEnum('status').default('draft').notNull(),
+  // VAPI Configuration (not stored permanently - entered per session)
+  vapiAssistantId: text('vapi_assistant_id'),
+  vapiAssistantName: text('vapi_assistant_name'),
+  vapiPhoneNumberId: text('vapi_phone_number_id'),
+  vapiPhoneNumber: text('vapi_phone_number'),
+  // Twilio Configuration (for SMS triggers)
+  twilioPhoneNumber: text('twilio_phone_number'),
+  twilioOverride: boolean('twilio_override').default(false).notNull(),
+  twilioAccountSid: text('twilio_account_sid'),
+  twilioAuthToken: text('twilio_auth_token'),
+  // Call Settings
+  maxConcurrentCalls: integer('max_concurrent_calls').default(10).notNull(),
+  maxRetries: integer('max_retries').default(3).notNull(),
+  retryDelayHours: integer('retry_delay_hours').default(4).notNull(),
+  // AI Extraction (same as inbound)
+  aiExtractionHints: jsonb('ai_extraction_hints').default({}).$type<Record<string, string>>(),
+  // Stats (cached for performance)
+  totalContacts: integer('total_contacts').default(0).notNull(),
+  contactsCalled: integer('contacts_called').default(0).notNull(),
+  contactsAnswered: integer('contacts_answered').default(0).notNull(),
+  contactsFailed: integer('contacts_failed').default(0).notNull(),
+  // Wizard Progress
+  currentStep: integer('current_step').default(1).notNull(),
+  isWizardComplete: boolean('is_wizard_complete').default(false).notNull(),
+  // Timing
+  scheduledStartAt: timestamp('scheduled_start_at', { withTimezone: true }),
+  actualStartAt: timestamp('actual_start_at', { withTimezone: true }),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index('outbound_campaigns_org_idx').on(table.organizationId),
+  statusIdx: index('outbound_campaigns_status_idx').on(table.status),
+  webhookIdx: uniqueIndex('outbound_campaigns_webhook_idx').on(table.webhookUuid),
+}));
+
+// Outbound Campaign Schedules (calling windows)
+export const outboundSchedules = pgTable('outbound_schedules', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  campaignId: uuid('campaign_id').notNull().references(() => outboundCampaigns.id, { onDelete: 'cascade' }),
+  dayOfWeek: integer('day_of_week').notNull(), // 0=Sunday, 6=Saturday
+  startTime: text('start_time').notNull(), // "09:00" in local time
+  endTime: text('end_time').notNull(), // "20:00" in local time
+  timezone: text('timezone').default('America/New_York').notNull(),
+  isActive: boolean('is_active').default(true).notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  campaignIdx: index('outbound_schedules_campaign_idx').on(table.campaignId),
+  dayIdx: index('outbound_schedules_day_idx').on(table.dayOfWeek),
+}));
+
+// Outbound Contacts (people to call)
+export const outboundContacts = pgTable('outbound_contacts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  campaignId: uuid('campaign_id').notNull().references(() => outboundCampaigns.id, { onDelete: 'cascade' }),
+  // Contact Info
+  phoneNumber: text('phone_number').notNull(),
+  firstName: text('first_name').notNull(),
+  lastName: text('last_name'),
+  email: text('email'),
+  company: text('company'),
+  // Timezone (auto-detected from area code)
+  timezone: text('timezone'),
+  areaCode: text('area_code'),
+  // Call Status
+  status: outboundContactStatusEnum('status').default('pending').notNull(),
+  attemptCount: integer('attempt_count').default(0).notNull(),
+  lastAttemptAt: timestamp('last_attempt_at', { withTimezone: true }),
+  nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true }),
+  // Result
+  callResult: outboundCallResultEnum('call_result'),
+  callDurationSeconds: integer('call_duration_seconds'),
+  // Custom Fields (from CSV upload)
+  customFields: jsonb('custom_fields').default({}).$type<Record<string, string>>(),
+  // SMS Triggers
+  smsTriggersfred: jsonb('sms_triggers_fired').default([]).$type<string[]>(),
+  // Timestamps
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  campaignIdx: index('outbound_contacts_campaign_idx').on(table.campaignId),
+  statusIdx: index('outbound_contacts_status_idx').on(table.status),
+  phoneIdx: index('outbound_contacts_phone_idx').on(table.phoneNumber),
+  campaignPhoneIdx: uniqueIndex('outbound_contacts_campaign_phone_idx').on(table.campaignId, table.phoneNumber),
+  nextAttemptIdx: index('outbound_contacts_next_attempt_idx').on(table.nextAttemptAt),
+}));
+
+// Outbound Call Logs (individual call records)
+export const outboundCallLogs = pgTable('outbound_call_logs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  campaignId: uuid('campaign_id').notNull().references(() => outboundCampaigns.id, { onDelete: 'cascade' }),
+  contactId: uuid('contact_id').notNull().references(() => outboundContacts.id, { onDelete: 'cascade' }),
+  // VAPI Call Info
+  vapiCallId: text('vapi_call_id'),
+  // Call Details
+  attemptNumber: integer('attempt_number').notNull(),
+  callResult: outboundCallResultEnum('call_result'),
+  durationSeconds: integer('duration_seconds'),
+  // Transcript & Analysis
+  transcript: text('transcript'),
+  transcriptFormatted: jsonb('transcript_formatted').$type<Array<{ role: string; content: string }>>(),
+  recordingUrl: text('recording_url'),
+  aiSummary: text('ai_summary'),
+  aiExtractedData: jsonb('ai_extracted_data').$type<Record<string, unknown>>(),
+  // Raw VAPI Payload
+  rawPayload: jsonb('raw_payload').$type<Record<string, unknown>>(),
+  // SMS Sent
+  smsSent: boolean('sms_sent').default(false).notNull(),
+  smsTriggerId: uuid('sms_trigger_id').references(() => smsTriggers.id, { onDelete: 'set null' }),
+  // Timing
+  startedAt: timestamp('started_at', { withTimezone: true }),
+  endedAt: timestamp('ended_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  campaignIdx: index('outbound_call_logs_campaign_idx').on(table.campaignId),
+  contactIdx: index('outbound_call_logs_contact_idx').on(table.contactId),
+  vapiCallIdx: index('outbound_call_logs_vapi_call_idx').on(table.vapiCallId),
+  createdAtIdx: index('outbound_call_logs_created_at_idx').on(table.createdAt),
+}));
+
+// Outbound Campaign Relations
+export const outboundCampaignsRelations = relations(outboundCampaigns, ({ one, many }) => ({
+  organization: one(organizations, {
+    fields: [outboundCampaigns.organizationId],
+    references: [organizations.id],
+  }),
+  schedules: many(outboundSchedules),
+  contacts: many(outboundContacts),
+  callLogs: many(outboundCallLogs),
+  smsTriggers: many(smsTriggers),
+}));
+
+export const outboundSchedulesRelations = relations(outboundSchedules, ({ one }) => ({
+  campaign: one(outboundCampaigns, {
+    fields: [outboundSchedules.campaignId],
+    references: [outboundCampaigns.id],
+  }),
+}));
+
+export const outboundContactsRelations = relations(outboundContacts, ({ one, many }) => ({
+  campaign: one(outboundCampaigns, {
+    fields: [outboundContacts.campaignId],
+    references: [outboundCampaigns.id],
+  }),
+  callLogs: many(outboundCallLogs),
+}));
+
+export const outboundCallLogsRelations = relations(outboundCallLogs, ({ one }) => ({
+  campaign: one(outboundCampaigns, {
+    fields: [outboundCallLogs.campaignId],
+    references: [outboundCampaigns.id],
+  }),
+  contact: one(outboundContacts, {
+    fields: [outboundCallLogs.contactId],
+    references: [outboundContacts.id],
+  }),
+  smsTrigger: one(smsTriggers, {
+    fields: [outboundCallLogs.smsTriggerId],
+    references: [smsTriggers.id],
+  }),
+}));
+
 // Export types
 export type Organization = typeof organizations.$inferSelect;
 export type NewOrganization = typeof organizations.$inferInsert;
@@ -606,3 +785,13 @@ export type NurtureEnrollment = typeof nurtureEnrollments.$inferSelect;
 export type NewNurtureEnrollment = typeof nurtureEnrollments.$inferInsert;
 export type Product = typeof products.$inferSelect;
 export type NewProduct = typeof products.$inferInsert;
+
+// Outbound Campaign Types
+export type OutboundCampaign = typeof outboundCampaigns.$inferSelect;
+export type NewOutboundCampaign = typeof outboundCampaigns.$inferInsert;
+export type OutboundSchedule = typeof outboundSchedules.$inferSelect;
+export type NewOutboundSchedule = typeof outboundSchedules.$inferInsert;
+export type OutboundContact = typeof outboundContacts.$inferSelect;
+export type NewOutboundContact = typeof outboundContacts.$inferInsert;
+export type OutboundCallLog = typeof outboundCallLogs.$inferSelect;
+export type NewOutboundCallLog = typeof outboundCallLogs.$inferInsert;

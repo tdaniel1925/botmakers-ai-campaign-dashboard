@@ -22,6 +22,13 @@
       "when": 1765899516297,
       "tag": "0002_add-user-sales-access",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1765956948221,
+      "tag": "0003_absurd_wiccan",
+      "breakpoints": true
     }
   ]
 }
