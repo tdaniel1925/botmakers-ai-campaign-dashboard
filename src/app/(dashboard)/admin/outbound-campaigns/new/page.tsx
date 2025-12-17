@@ -174,7 +174,8 @@ function WizardContent() {
       const response = await fetch('/api/organizations');
       if (response.ok) {
         const data = await response.json();
-        setOrganizations(data.organizations || []);
+        // API returns { data: [...], meta: {...} }
+        setOrganizations(data.data || []);
       }
     } catch (error) {
       console.error('Error fetching organizations:', error);
