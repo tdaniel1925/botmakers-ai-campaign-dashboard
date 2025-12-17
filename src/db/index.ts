@@ -4,11 +4,13 @@ import * as schema from './schema';
 
 const connectionString = process.env.DATABASE_URL!;
 
-// Connection pool for server-side
+// For serverless environments (Vercel), use minimal connections
+// The connection string should use Supabase's pooler (port 6543) with ?pgbouncer=true
 const client = postgres(connectionString, {
-  max: 10,
+  max: 1, // Serverless: use 1 connection per function instance
   idle_timeout: 20,
   connect_timeout: 10,
+  prepare: false, // Required for pgbouncer/transaction mode
 });
 
 export const db = drizzle(client, { schema });
