@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm run dev:*)",
+      "Bash(npx drizzle-kit:*)",
+      "Bash(npx tsx:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(git remote add:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(taskkill:*)",
+      "Bash(cmd /c \"taskkill /PID 582264 /F /T\")",
+      "Bash(cmd /c \"netstat -ano | findstr :2050\")",
+      "Bash(cmd /c \"rmdir /s /q .next 2>nul & echo Cache cleared\")",
+      "Bash(cmd /c \"for /f \"\"tokens=5\"\" %a in (''netstat -aon ^| findstr :2050 ^| findstr LISTENING'') do taskkill /F /PID %a\")",
+      "Bash(timeout /t 2 /nobreak)",
+      "Bash(rd /s /q \"c:\\dev\\AI_Calling _Dashboard\\.next\")",
+      "Bash(cmd /c \"rd /s /q \"\"c:\\dev\\AI_Calling _Dashboard\\.next\"\" 2>nul\")",
+      "Bash(cmd /c \"netstat -ano | findstr :2050 | findstr LISTENING\")",
+      "Bash(dir:*)",
+      "Bash(cmd /c \"rd /s /q .next 2>nul\")"
+    ]
+  }
+}

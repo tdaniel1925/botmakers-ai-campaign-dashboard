@@ -1,17 +1,14 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
-// Public routes that don't require authentication
-const publicRoutes = ['/', '/login', '/signup', '/forgot-password', '/reset-password', '/auth/callback'];
-
-// Routes that require admin role
-const adminRoutes = ['/admin'];
-
-// Routes that require client_user role
-const clientRoutes = ['/dashboard'];
+// Public routes that don't require authentication (excluding root which is handled specially)
+const publicRoutes = ['/login', '/signup', '/forgot-password', '/reset-password', '/auth/callback', '/sales/login'];
 
 // Webhook routes - no auth required (public endpoints)
 const webhookRoutes = ['/api/webhook'];
+
+// Sales routes (handled by sales auth)
+const salesRoutes = ['/sales'];
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({
@@ -46,6 +43,7 @@ export async function middleware(request: NextRequest) {
     }
   );
 
+  // Refresh session - this keeps session alive and updates cookies
   const { data: { user } } = await supabase.auth.getUser();
   const path = request.nextUrl.pathname;
 
@@ -54,12 +52,29 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
+  // Handle root path - redirect based on auth status (prevents redirect loop from page.tsx)
+  if (path === '/') {
+    if (user) {
+      return NextResponse.redirect(new URL('/dashboard', request.url));
+    }
+    return NextResponse.redirect(new URL('/login', request.url));
+  }
+
   // Allow public routes
   if (publicRoutes.some(route => path === route || path.startsWith(route + '/'))) {
-    // Redirect logged-in users away from auth pages
+    // Redirect logged-in users away from main auth pages to dashboard
     if (user && (path === '/login' || path === '/signup')) {
       return NextResponse.redirect(new URL('/dashboard', request.url));
     }
+    return response;
+  }
+
+  // Sales routes (except /sales/login which is public)
+  if (path.startsWith('/sales') && path !== '/sales/login') {
+    if (!user) {
+      return NextResponse.redirect(new URL('/sales/login', request.url));
+    }
+    // Let page components handle sales-specific auth
     return response;
   }
 
@@ -71,9 +86,6 @@ export async function middleware(request: NextRequest) {
   }
 
   // For authenticated users, let the page handle role-based access
-  // This is because we need to check the database for the user's role
-  // The page components will handle redirects based on role
-
   return response;
 }
 
@@ -85,7 +97,8 @@ export const config = {
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
      * - public folder
+     * - api routes (except webhooks which are handled above)
      */
-    '/((?!_next/static|_next/image|favicon.ico|public).*)',
+    '/((?!_next/static|_next/image|favicon.ico|public|api/(?!webhook)).*)',
   ],
 };

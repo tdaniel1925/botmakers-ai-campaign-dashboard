@@ -203,7 +203,7 @@ export async function sendSalesWelcomeEmail(
       </head>
       <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 30px; border-radius: 10px 10px 0 0; text-align: center;">
-          <h1 style="color: white; margin: 0; font-size: 28px;">Welcome to the Team! 🎉</h1>
+          <h1 style="color: white; margin: 0; font-size: 28px;">Welcome to the Team!</h1>
           <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0;">You've been invited to join ${APP_NAME}</p>
         </div>
 
@@ -219,7 +219,7 @@ export async function sendSalesWelcomeEmail(
           </div>
 
           <div style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 8px; padding: 15px; margin: 20px 0;">
-            <p style="margin: 0; color: #92400e;"><strong>⚠️ Important:</strong> You'll need to change your password when you first log in.</p>
+            <p style="margin: 0; color: #92400e;"><strong>Important:</strong> You'll need to change your password when you first log in.</p>
           </div>
 
           <h3 style="color: #374151; margin-top: 25px;">What You Can Do in Your Sales Portal:</h3>
